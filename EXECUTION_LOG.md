@@ -10,8 +10,8 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 |---|---|---|---|---|
 | **§36** | Starting Task: Architecture Artifacts, ADRs, Scaffolding | ✅ Completed | Architecture docs, ADRs, OpenAPI spec, ERDs, repo layout | 2026-09-20 |
 | **Phase 1** | Foundation: Multi-tenancy, RBAC, Encryption, Core & API Skeletons | ✅ Completed | Isolation tests, auth tests, encryption tests, setup wizard | 2026-09-20 |
-| **Phase 2** | Domains & DNS: Verification, DKIM, SPF, DMARC | ⏳ Next | DNS stub tests, key rotation tests | - |
-| **Phase 3** | Message Model, Queue & SMTP Ingestion | ⏳ Pending | Queue tests, open relay tests, SMTP auth | - |
+| **Phase 2** | Domains & DNS: Verification, DKIM, SPF, DMARC | ✅ Completed | DNS stub tests, key rotation, uniqueness, degraded flow | 2026-09-20 |
+| **Phase 3** | Message Model, Queue & SMTP Ingestion | ⏳ Next | Queue tests, open relay tests, SMTP auth | - |
 | **Phase 4** | API Sending: Batch, Idempotency, Limits, Templates minimal | ⏳ Pending | Idempotency tests, rate limit tests | - |
 | **Phase 5** | Delivery Engine: Worker, MX Resolution, Suppression, Transports | ⏳ Pending | Delivery tests, retry tests, suppression | - |
 | **Phase 6** | Async Bounces, Complaints, Unsubscribe Intake | ⏳ Pending | DSN/ARF parser tests, feedback loops | - |
@@ -85,4 +85,36 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
   - `console`: Production build succeeded (`npm run build`).
 
 ---
+
+### Phase 2: Domains & DNS
+- **Status:** Completed (2026-09-20)
+- **Implementations:**
+  - `core/domain`: Added `Domain`, `DomainDelegation`, `DKIMKey`, `DNSRecord`, and `MessageStream` entities.
+  - `core/crypto/dkim`: RSA 2048-bit DKIM key pair generation with PKCS#8 PEM private key and base64 DER public key; strict refusal of keys under 2048 bits (§10.5).
+  - `core/dns`: Multi-resolver DNS engine with `StubResolver` and `SystemResolver` verifying ownership TXT, DKIM, SPF, DMARC, and CNAME records; degraded state progression with 72h grace period (§10.1).
+  - `core/repository`:
+    - Domain CRUD with global uniqueness validation (preventing cross-tenant domain hijacking without delegation).
+    - Local domain handling (`home.lan`) skipping public DNS and auto-verifying.
+    - DKIM key lifecycle management (`pending` -> `active` -> `retiring` -> `retired`).
+    - Message stream creation and retrieval with default `transactional` and `broadcast` streams.
+  - `migrations`: `000002_domains_and_dns.up.sql` and `down.sql`.
+  - `api`:
+    - `POST /v1/domains`: Adds domain, generates ownership token, generates RSA 2048 DKIM key wrapped in tenant DEK, produces full set of DNS records.
+    - `GET /v1/domains` & `GET /v1/domains/{id}`: Retrieves domain details and DNS records.
+    - `POST /v1/domains/{id}/verify`: Executes multi-record DNS check, updates verification status and handles degraded flow.
+    - `POST /v1/domains/{id}/dkim/rotate`: Initiates DKIM selector rotation.
+    - `GET /v1/streams` & `POST /v1/streams`: Manages message streams.
+  - `console`:
+    - Interactive Domains & DNS management UI with status indicators (`verified`, `pending`, `degraded`).
+    - DNS records table with copyable values and "Verify DNS Now" trigger.
+    - Message streams overview (`transactional` priority p1 vs `broadcast` RFC 8058 one-click).
+- **Verification & Test Results:**
+  - `core/crypto`: `TestDKIMKeyGeneration` PASS (RSA 2048 valid, 1024 refused).
+  - `core/dns`: `TestDNSEngineAndVerification` PASS (DNS verification, recovery, degraded, and suspended states).
+  - `api`: `TestDomainsAndDNSLifecycle` PASS (add domain -> records shown -> verify against stub DNS -> health displayed -> degraded flow -> DKIM rotation -> stream creation -> local domain auto-verify).
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
 

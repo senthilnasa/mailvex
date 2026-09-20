@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -174,6 +175,9 @@ func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now().UTC(),
 	}
 	_ = a.repo.AddTenantMembership(r.Context(), mem)
+
+	// Create default message streams (§8.3, §10.6)
+	a.createDefaultStreams(r.Context(), tenantID)
 
 	// 6. Create System Tenant for platform internal mail
 	sysTenantID := "tenant_system"
@@ -356,6 +360,9 @@ func (a *API) CreateTenantHandler(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now().UTC(),
 	})
 
+	// Create default message streams (§8.3, §10.6)
+	a.createDefaultStreams(r.Context(), tenantID)
+
 	// Audit log
 	_ = a.audit.Log(r.Context(), &domain.AuditLog{
 		TenantID:     &tenantID,
@@ -369,6 +376,25 @@ func (a *API) CreateTenantHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(tenant)
+}
+
+func (a *API) createDefaultStreams(ctx context.Context, tenantID string) {
+	_ = a.repo.CreateStream(ctx, &domain.MessageStream{
+		ID:        crypto.NewULID(crypto.PrefixStream),
+		TenantID:  tenantID,
+		Name:      "transactional",
+		Type:      "transactional",
+		IsDefault: true,
+		CreatedAt: time.Now().UTC(),
+	})
+	_ = a.repo.CreateStream(ctx, &domain.MessageStream{
+		ID:        crypto.NewULID(crypto.PrefixStream),
+		TenantID:  tenantID,
+		Name:      "broadcast",
+		Type:      "broadcast",
+		IsDefault: false,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
 // ListAuditLogsHandler retrieves audit logs scoped by active tenant or platform

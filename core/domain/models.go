@@ -93,3 +93,61 @@ type SystemSetting struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type Domain struct {
+	ID             string     `json:"id"`
+	TenantID       string     `json:"tenant_id"`
+	Name           string     `json:"name"`
+	Type           string     `json:"type"` // "public" or "local"
+	Status         string     `json:"status"` // "pending", "verifying", "verified", "degraded", "suspended", "disabled"
+	OwnershipToken string     `json:"ownership_token"`
+	DegradedAt     *time.Time `json:"degraded_at,omitempty"`
+	VerifiedAt     *time.Time `json:"verified_at,omitempty"`
+	LastCheckedAt  *time.Time `json:"last_checked_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type DomainDelegation struct {
+	ID                  string    `json:"id"`
+	ParentDomainID      string    `json:"parent_domain_id"`
+	DelegatedToTenantID string    `json:"delegated_to_tenant_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+type DKIMKey struct {
+	ID                  string     `json:"id"`
+	DomainID            string     `json:"domain_id"`
+	TenantID            string     `json:"tenant_id"`
+	Selector            string     `json:"selector"`
+	Algorithm           string     `json:"algorithm"` // rsa2048
+	EncryptedPrivateKey string     `json:"-"` // sensitive
+	PublicKey           string     `json:"public_key"`
+	Status              string     `json:"status"` // pending, active, retiring, retired
+	CreatedAt           time.Time  `json:"created_at"`
+	ActivatedAt         *time.Time `json:"activated_at,omitempty"`
+	RetiredAt           *time.Time `json:"retired_at,omitempty"`
+}
+
+type DNSRecord struct {
+	ID            string     `json:"id"`
+	DomainID      string     `json:"domain_id"`
+	RecordType    string     `json:"record_type"` // TXT, CNAME, MX
+	Name          string     `json:"name"`
+	ExpectedValue string     `json:"expected_value"`
+	ObservedValue *string    `json:"observed_value,omitempty"`
+	Status        string     `json:"status"` // pending, pass, warning, fail
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+type MessageStream struct {
+	ID        string    `json:"id"`
+	TenantID  string    `json:"tenant_id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"` // "transactional" or "broadcast"
+	IsDefault bool      `json:"is_default"`
+	CreatedAt time.Time `json:"created_at"`
+}
+

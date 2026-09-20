@@ -8,6 +8,7 @@ import (
 	"github.com/mailvex/mailvex/api/middleware"
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
+	"github.com/mailvex/mailvex/core/dns"
 	"github.com/mailvex/mailvex/core/repository"
 )
 
@@ -18,6 +19,7 @@ type Server struct {
 	repo       repository.Repository
 	audit      *audit.Service
 	encryption *crypto.EnvelopeEncryption
+	dnsEngine  *dns.Engine
 	logger     *slog.Logger
 }
 
@@ -27,11 +29,16 @@ func NewServer(repo repository.Repository, auditService *audit.Service, enc *cry
 		repo:       repo,
 		audit:      auditService,
 		encryption: enc,
+		dnsEngine:  dns.NewEngine(dns.NewSystemResolver()),
 		logger:     logger,
 	}
 
 	s.setupRoutes()
 	return s
+}
+
+func (s *Server) SetDNSEngine(engine *dns.Engine) {
+	s.dnsEngine = engine
 }
 
 func (s *Server) setupRoutes() {
@@ -57,6 +64,33 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "tenants.write")(http.HandlerFunc(apiHandler.CreateTenantHandler)),
 	))
 	s.mux.Handle("GET /v1/audit-logs", authMiddleware(http.HandlerFunc(apiHandler.ListAuditLogsHandler)))
+
+	// Phase 2: Domains & DNS Handlers
+	s.mux.Handle("GET /v1/domains", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.ListDomainsHandler)),
+	))
+	s.mux.Handle("POST /v1/domains", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.write")(http.HandlerFunc(apiHandler.CreateDomainHandler)),
+	))
+	s.mux.Handle("GET /v1/domains/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.GetDomainHandler)),
+	))
+	s.mux.Handle("POST /v1/domains/{id}/verify", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.verify")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			apiHandler.VerifyDomainHandler(w, r, s.dnsEngine)
+		})),
+	))
+	s.mux.Handle("POST /v1/domains/{id}/dkim/rotate", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.dkim.rotate")(http.HandlerFunc(apiHandler.RotateDKIMHandler)),
+	))
+
+	// Phase 2: Message Streams Handlers
+	s.mux.Handle("GET /v1/streams", authMiddleware(
+		middleware.RequirePermission(s.repo, "streams.read")(http.HandlerFunc(apiHandler.ListStreamsHandler)),
+	))
+	s.mux.Handle("POST /v1/streams", authMiddleware(
+		middleware.RequirePermission(s.repo, "streams.write")(http.HandlerFunc(apiHandler.CreateStreamHandler)),
+	))
 
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
