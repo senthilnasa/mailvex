@@ -337,6 +337,43 @@ paths:
         '201':
           description: Address suppressed
 
+  /suppressions/{id}:
+    delete:
+      summary: Delete suppression
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Suppression removed
+
+  /u/{token}:
+    get:
+      summary: Hosted unsubscribe confirmation page
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: HTML unsubscribe page
+    post:
+      summary: RFC 8058 One-Click unsubscribe endpoint
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Unsubscribed successfully
+
   /audit-logs:
     get:
       summary: List audit log entries

@@ -138,6 +138,37 @@ type Repository interface {
 	GetMessageEvents(ctx context.Context, tenantID, messageID string) ([]*domain.MessageEvent, error)
 	ListMessagesPaginated(ctx context.Context, tenantID string, filter domain.MessageFilter) ([]*domain.Message, string, bool, error)
 	UpdateMessageStatus(ctx context.Context, tenantID, messageID, status string) error
+
+	// Phase 5: Suppressions
+	AddSuppression(ctx context.Context, supp *domain.Suppression) error
+	CheckSuppression(ctx context.Context, tenantID, streamID, address string) (bool, string, error)
+	ListSuppressions(ctx context.Context, tenantID string, limit int) ([]*domain.Suppression, error)
+	DeleteSuppression(ctx context.Context, tenantID, id string) error
+
+	// Phase 5: IP Pools, Addresses, Relays
+	CreateIPPool(ctx context.Context, pool *domain.IPPool) error
+	ListIPPools(ctx context.Context, tenantID string) ([]*domain.IPPool, error)
+	GetIPPool(ctx context.Context, poolID string) (*domain.IPPool, error)
+	AddIPAddress(ctx context.Context, ip *domain.IPAddress) error
+	ListIPAddresses(ctx context.Context, poolID string) ([]*domain.IPAddress, error)
+	ListIPAddressesByNode(ctx context.Context, nodeID string) ([]*domain.IPAddress, error)
+	CreateRelay(ctx context.Context, relay *domain.Relay) error
+	ListRelays(ctx context.Context, tenantID string) ([]*domain.Relay, error)
+	GetRelay(ctx context.Context, relayID string) (*domain.Relay, error)
+
+	// Phase 5: Rules & DLQ
+	ListBounceRules(ctx context.Context) ([]*domain.BounceRule, error)
+	SaveBounceRule(ctx context.Context, rule *domain.BounceRule) error
+	ListProviderMXRules(ctx context.Context) ([]*domain.ProviderMXRule, error)
+	SaveProviderMXRule(ctx context.Context, rule *domain.ProviderMXRule) error
+	RecordDeadLetter(ctx context.Context, dlq *domain.DeadLetterMessage) error
+	ListDeadLetterMessages(ctx context.Context, tenantID string, limit int) ([]*domain.DeadLetterMessage, error)
+
+	// Phase 5: Recipient Delivery & Attempts
+	UpdateRecipientDelivery(ctx context.Context, recipientID string, status string, attempts int, lastSMTPCode, lastResponse *string, deliveredAt, bouncedAt *time.Time, nextAttemptAt *time.Time, suppressedReason *string) error
+	RecordDeliveryAttempt(ctx context.Context, attempt *domain.DeliveryAttempt) error
+	GetRecipient(ctx context.Context, recipientID string) (*domain.MessageRecipient, error)
+	AddMessageEvent(ctx context.Context, evt *domain.MessageEvent) error
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -176,6 +207,16 @@ type MemoryRepository struct {
 	templates        map[string]*domain.Template
 	templateVersions map[string][]*domain.TemplateVersion
 	idempotency      map[string]*domain.IdempotencyRecord
+
+	// Phase 5 collections
+	suppressions     map[string]*domain.Suppression
+	ipPools          map[string]*domain.IPPool
+	ipAddresses      map[string]*domain.IPAddress
+	relays           map[string]*domain.Relay
+	bounceRules      []*domain.BounceRule
+	providerMXRules  []*domain.ProviderMXRule
+	deadLetters      []*domain.DeadLetterMessage
+	deliveryAttempts []*domain.DeliveryAttempt
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -207,7 +248,49 @@ func NewMemoryRepository() *MemoryRepository {
 		templates:        make(map[string]*domain.Template),
 		templateVersions: make(map[string][]*domain.TemplateVersion),
 		idempotency:      make(map[string]*domain.IdempotencyRecord),
+		suppressions:     make(map[string]*domain.Suppression),
+		ipPools:          make(map[string]*domain.IPPool),
+		ipAddresses:      make(map[string]*domain.IPAddress),
+		relays:           make(map[string]*domain.Relay),
+		bounceRules:      make([]*domain.BounceRule, 0),
+		providerMXRules:  make([]*domain.ProviderMXRule, 0),
+		deadLetters:      make([]*domain.DeadLetterMessage, 0),
+		deliveryAttempts: make([]*domain.DeliveryAttempt, 0),
 	}
+
+	// Seed default IP pool
+	repo.ipPools["pool_default"] = &domain.IPPool{
+		ID:        "pool_default",
+		Name:      "default",
+		Strategy:  "round_robin",
+		IsDefault: true,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	// Seed Provider MX rules
+	repo.providerMXRules = append(repo.providerMXRules,
+		&domain.ProviderMXRule{ID: "pmx_google", Pattern: "*.google.com", Provider: "google", MaxConnections: 5, MessagesPerConnection: 100, RateLimitPerMin: 600, CreatedAt: time.Now().UTC()},
+		&domain.ProviderMXRule{ID: "pmx_googlemail", Pattern: "*.googlemail.com", Provider: "google", MaxConnections: 5, MessagesPerConnection: 100, RateLimitPerMin: 600, CreatedAt: time.Now().UTC()},
+		&domain.ProviderMXRule{ID: "pmx_microsoft", Pattern: "*.mail.protection.outlook.com", Provider: "microsoft", MaxConnections: 5, MessagesPerConnection: 100, RateLimitPerMin: 600, CreatedAt: time.Now().UTC()},
+		&domain.ProviderMXRule{ID: "pmx_yahoo", Pattern: "*.yahoodns.net", Provider: "yahoo", MaxConnections: 4, MessagesPerConnection: 50, RateLimitPerMin: 300, CreatedAt: time.Now().UTC()},
+		&domain.ProviderMXRule{ID: "pmx_apple", Pattern: "*.icloud.com", Provider: "apple", MaxConnections: 3, MessagesPerConnection: 50, RateLimitPerMin: 300, CreatedAt: time.Now().UTC()},
+	)
+
+	// Seed default Bounce rules
+	code511 := "5.1.1"
+	code512 := "5.1.2"
+	code422 := "4.2.2"
+	code4728 := "4.7.28"
+	code571 := "5.7.1"
+	code5726 := "5.7.26"
+	repo.bounceRules = append(repo.bounceRules,
+		&domain.BounceRule{ID: "br_user_unknown", Pattern: "user unknown|mailbox not found|no such user|recipient address rejected", EnhancedCode: &code511, Classification: "hard_bounce", Action: "suppress_immediate", CreatedAt: time.Now().UTC()},
+		&domain.BounceRule{ID: "br_bad_domain", Pattern: "domain not found|host or domain name not found|unrouteable address", EnhancedCode: &code512, Classification: "hard_bounce", Action: "suppress_immediate", CreatedAt: time.Now().UTC()},
+		&domain.BounceRule{ID: "br_mailbox_full", Pattern: "mailbox full|quota exceeded|over quota", EnhancedCode: &code422, Classification: "soft_bounce", Action: "retry", CreatedAt: time.Now().UTC()},
+		&domain.BounceRule{ID: "br_rate_limited", Pattern: "rate limit|too many connections|too many messages|throttled", EnhancedCode: &code4728, Classification: "rate_limited", Action: "retry", CreatedAt: time.Now().UTC()},
+		&domain.BounceRule{ID: "br_spam_block", Pattern: "blocked using spamhaus|blocked by spam|spam detected|reputation", EnhancedCode: &code571, Classification: "spam_rejection", Action: "dead_letter", CreatedAt: time.Now().UTC()},
+		&domain.BounceRule{ID: "br_auth_failure", Pattern: "dkim check failed|spf check failed|dmarc policy", EnhancedCode: &code5726, Classification: "auth_rejection", Action: "dead_letter", CreatedAt: time.Now().UTC()},
+	)
 	repo.seedDefaults()
 	return repo
 }
@@ -1389,4 +1472,309 @@ func (m *MemoryRepository) ListMessagesPaginated(ctx context.Context, tenantID s
 
 	return paged, nextCursor, hasMore, nil
 }
+
+// Phase 5: Suppressions
+func (r *MemoryRepository) AddSuppression(ctx context.Context, supp *domain.Suppression) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.suppressions[supp.ID] = supp
+	return nil
+}
+
+func (r *MemoryRepository) CheckSuppression(ctx context.Context, tenantID, streamID, address string) (bool, string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	normAddr := strings.TrimSpace(strings.ToLower(address))
+	parts := strings.Split(normAddr, "@")
+	dom := ""
+	if len(parts) == 2 {
+		dom = parts[1]
+	}
+
+	now := time.Now().UTC()
+	for _, s := range r.suppressions {
+		if s.TenantID != tenantID {
+			continue
+		}
+		if s.ExpiresAt != nil && now.After(*s.ExpiresAt) {
+			continue
+		}
+
+		// Domain block
+		if s.Type == "domain_block" && dom != "" && strings.EqualFold(s.AddressDomain, dom) {
+			reason := "domain_block"
+			if s.Reason != nil && *s.Reason != "" {
+				reason = *s.Reason
+			}
+			return true, reason, nil
+		}
+
+		// Exact address match
+		if strings.EqualFold(s.Address, normAddr) {
+			if s.Type == "hard_bounce" || s.Type == "complaint" || s.Type == "manual" {
+				reason := s.Type
+				if s.Reason != nil && *s.Reason != "" {
+					reason = *s.Reason
+				}
+				return true, reason, nil
+			}
+			if s.Type == "unsubscribe" {
+				if s.StreamID == nil || *s.StreamID == "" || streamID == "" || *s.StreamID == streamID {
+					reason := "unsubscribe"
+					if s.Reason != nil && *s.Reason != "" {
+						reason = *s.Reason
+					}
+					return true, reason, nil
+				}
+			}
+		}
+	}
+	return false, "", nil
+}
+
+func (r *MemoryRepository) ListSuppressions(ctx context.Context, tenantID string, limit int) ([]*domain.Suppression, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.Suppression
+	for _, s := range r.suppressions {
+		if s.TenantID == tenantID {
+			res = append(res, s)
+			if len(res) >= limit {
+				break
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) DeleteSuppression(ctx context.Context, tenantID, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	s, exists := r.suppressions[id]
+	if !exists || s.TenantID != tenantID {
+		return errors.New("suppression not found")
+	}
+	delete(r.suppressions, id)
+	return nil
+}
+
+// Phase 5: IP Pools & Addresses
+func (r *MemoryRepository) CreateIPPool(ctx context.Context, pool *domain.IPPool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ipPools[pool.ID] = pool
+	return nil
+}
+
+func (r *MemoryRepository) ListIPPools(ctx context.Context, tenantID string) ([]*domain.IPPool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var res []*domain.IPPool
+	for _, p := range r.ipPools {
+		if p.TenantID == nil || *p.TenantID == tenantID {
+			res = append(res, p)
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) GetIPPool(ctx context.Context, poolID string) (*domain.IPPool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, exists := r.ipPools[poolID]
+	if !exists {
+		return nil, errors.New("ip pool not found")
+	}
+	return p, nil
+}
+
+func (r *MemoryRepository) AddIPAddress(ctx context.Context, ip *domain.IPAddress) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ipAddresses[ip.ID] = ip
+	return nil
+}
+
+func (r *MemoryRepository) ListIPAddresses(ctx context.Context, poolID string) ([]*domain.IPAddress, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var res []*domain.IPAddress
+	for _, ip := range r.ipAddresses {
+		if ip.PoolID == poolID {
+			res = append(res, ip)
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) ListIPAddressesByNode(ctx context.Context, nodeID string) ([]*domain.IPAddress, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var res []*domain.IPAddress
+	for _, ip := range r.ipAddresses {
+		if ip.NodeID == nodeID {
+			res = append(res, ip)
+		}
+	}
+	return res, nil
+}
+
+// Phase 5: Relays
+func (r *MemoryRepository) CreateRelay(ctx context.Context, relay *domain.Relay) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.relays[relay.ID] = relay
+	return nil
+}
+
+func (r *MemoryRepository) ListRelays(ctx context.Context, tenantID string) ([]*domain.Relay, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var res []*domain.Relay
+	for _, rel := range r.relays {
+		if rel.TenantID == nil || *rel.TenantID == tenantID {
+			res = append(res, rel)
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) GetRelay(ctx context.Context, relayID string) (*domain.Relay, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rel, exists := r.relays[relayID]
+	if !exists {
+		return nil, errors.New("relay not found")
+	}
+	return rel, nil
+}
+
+// Phase 5: Rules & DLQ
+func (r *MemoryRepository) ListBounceRules(ctx context.Context) ([]*domain.BounceRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.bounceRules, nil
+}
+
+func (r *MemoryRepository) SaveBounceRule(ctx context.Context, rule *domain.BounceRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.bounceRules = append(r.bounceRules, rule)
+	return nil
+}
+
+func (r *MemoryRepository) ListProviderMXRules(ctx context.Context) ([]*domain.ProviderMXRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.providerMXRules, nil
+}
+
+func (r *MemoryRepository) SaveProviderMXRule(ctx context.Context, rule *domain.ProviderMXRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.providerMXRules = append(r.providerMXRules, rule)
+	return nil
+}
+
+func (r *MemoryRepository) RecordDeadLetter(ctx context.Context, dlq *domain.DeadLetterMessage) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deadLetters = append(r.deadLetters, dlq)
+	return nil
+}
+
+func (r *MemoryRepository) ListDeadLetterMessages(ctx context.Context, tenantID string, limit int) ([]*domain.DeadLetterMessage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.DeadLetterMessage
+	for _, dl := range r.deadLetters {
+		if dl.TenantID == tenantID {
+			res = append(res, dl)
+			if len(res) >= limit {
+				break
+			}
+		}
+	}
+	return res, nil
+}
+
+// Phase 5: Recipient Delivery & Attempts
+func (r *MemoryRepository) UpdateRecipientDelivery(ctx context.Context, recipientID string, status string, attempts int, lastSMTPCode, lastResponse *string, deliveredAt, bouncedAt *time.Time, nextAttemptAt *time.Time, suppressedReason *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, rcpts := range r.recipients {
+		for _, rcpt := range rcpts {
+			if rcpt.ID == recipientID {
+				rcpt.Status = status
+				rcpt.Attempts = attempts
+				if lastSMTPCode != nil {
+					rcpt.LastSMTPCode = lastSMTPCode
+				}
+				if lastResponse != nil {
+					rcpt.LastResponse = lastResponse
+				}
+				if deliveredAt != nil {
+					rcpt.DeliveredAt = deliveredAt
+				}
+				if bouncedAt != nil {
+					rcpt.BouncedAt = bouncedAt
+				}
+				if nextAttemptAt != nil {
+					rcpt.NextAttemptAt = nextAttemptAt
+				}
+				if suppressedReason != nil {
+					rcpt.SuppressedReason = suppressedReason
+				}
+				return nil
+			}
+		}
+	}
+	return errors.New("recipient not found")
+}
+
+func (r *MemoryRepository) RecordDeliveryAttempt(ctx context.Context, attempt *domain.DeliveryAttempt) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deliveryAttempts = append(r.deliveryAttempts, attempt)
+	return nil
+}
+
+func (r *MemoryRepository) GetRecipient(ctx context.Context, recipientID string) (*domain.MessageRecipient, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, rcpts := range r.recipients {
+		for _, rcpt := range rcpts {
+			if rcpt.ID == recipientID {
+				return rcpt, nil
+			}
+		}
+	}
+	return nil, errors.New("recipient not found")
+}
+
+func (r *MemoryRepository) AddMessageEvent(ctx context.Context, evt *domain.MessageEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events[evt.MessageID] = append(r.events[evt.MessageID], evt)
+	return nil
+}
+
 

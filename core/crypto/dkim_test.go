@@ -25,3 +25,26 @@ func TestDKIMKeyGeneration(t *testing.T) {
 		t.Fatalf("expected substantial base64 public key, got length: %d", len(keyPair.PublicKeyB64))
 	}
 }
+
+func TestSignDKIM(t *testing.T) {
+	keyPair, err := GenerateDKIMKey(2048)
+	if err != nil {
+		t.Fatalf("failed to generate DKIM key: %v", err)
+	}
+
+	rawEmail := []byte("From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Hello World\r\nDate: Mon, 01 Jan 2026 00:00:00 +0000\r\nMessage-ID: <msg123@example.com>\r\n\r\nThis is the email body.\r\n")
+
+	signed, err := SignDKIM(rawEmail, "example.com", "default", keyPair.PrivateKeyPEM)
+	if err != nil {
+		t.Fatalf("failed to sign email with DKIM: %v", err)
+	}
+
+	signedStr := string(signed)
+	if !strings.HasPrefix(signedStr, "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=default;") {
+		t.Fatalf("expected DKIM-Signature header, got: %s", signedStr[:100])
+	}
+	if !strings.Contains(signedStr, "bh=") || !strings.Contains(signedStr, "b=") {
+		t.Fatalf("expected bh= and b= tags in signature, got: %s", signedStr[:150])
+	}
+}
+

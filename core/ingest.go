@@ -190,22 +190,33 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		mac.Write([]byte(rcptID))
 		verpToken := hex.EncodeToString(mac.Sum(nil))[:16]
 
-		recipients = append(recipients, &domain.MessageRecipient{
-			ID:            rcptID,
-			MessageID:     msgID,
-			TenantID:      req.TenantID,
-			Address:       addr,
-			AddressDomain: rcptDomain,
-			MXGroup:       "custom",
-			Type:          "to",
-			Status:        "queued",
-			VERPToken:     &verpToken,
-			CreatedAt:     time.Now().UTC(),
-		})
+		status := "queued"
+		var suppressedReason *string
+		isSuppressed, reason, _ := eng.repo.CheckSuppression(ctx, req.TenantID, streamID, addr)
+		if isSuppressed {
+			status = "suppressed"
+			suppressedReason = &reason
+		}
+
+		rcpt := &domain.MessageRecipient{
+			ID:               rcptID,
+			MessageID:        msgID,
+			TenantID:         req.TenantID,
+			Address:          addr,
+			AddressDomain:    rcptDomain,
+			MXGroup:          "custom",
+			Type:             "to",
+			Status:           status,
+			SuppressedReason: suppressedReason,
+			VERPToken:        &verpToken,
+			CreatedAt:        time.Now().UTC(),
+		}
+		recipients = append(recipients, rcpt)
 	}
 
-	// 7. Initial message.accepted event
-	evt := &domain.MessageEvent{
+	// 7. Initial message events
+	var events []*domain.MessageEvent
+	events = append(events, &domain.MessageEvent{
 		ID:         crypto.NewULID(crypto.PrefixEvent),
 		TenantID:   req.TenantID,
 		MessageID:  msgID,
@@ -213,6 +224,26 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		Data:       `{"stream":"` + streamName + `","recipients_count":` + fmt.Sprintf("%d", len(recipients)) + `}`,
 		OccurredAt: time.Now().UTC(),
 		CreatedAt:  time.Now().UTC(),
+	})
+
+	for _, rcpt := range recipients {
+		if rcpt.Status == "suppressed" {
+			rcptIDCopy := rcpt.ID
+			reasonStr := "unknown"
+			if rcpt.SuppressedReason != nil {
+				reasonStr = *rcpt.SuppressedReason
+			}
+			events = append(events, &domain.MessageEvent{
+				ID:          crypto.NewULID(crypto.PrefixEvent),
+				TenantID:    req.TenantID,
+				MessageID:   msgID,
+				RecipientID: &rcptIDCopy,
+				Type:        "message.suppressed",
+				Data:        `{"reason":"` + reasonStr + `","address":"` + rcpt.Address + `"}`,
+				OccurredAt:  time.Now().UTC(),
+				CreatedAt:   time.Now().UTC(),
+			})
+		}
 	}
 
 	// 8. Outbox item
@@ -245,7 +276,7 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 	}
 
 	// 10. Atomic database transaction
-	if err := eng.repo.SaveMessage(ctx, msg, recipients, []*domain.MessageEvent{evt}, outboxItem); err != nil {
+	if err := eng.repo.SaveMessage(ctx, msg, recipients, events, outboxItem); err != nil {
 		return nil, fmt.Errorf("failed to commit message transaction: %w", err)
 	}
 

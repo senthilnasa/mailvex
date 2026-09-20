@@ -67,12 +67,22 @@ interface TemplateItem {
   created_at: string
 }
 
+interface SuppressionItem {
+  id: string
+  address: string
+  address_domain: string
+  type: string
+  reason?: string
+  source: string
+  created_at: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -110,6 +120,12 @@ export default function App() {
   const [previewVars, setPreviewVars] = useState('{\n  "name": "Alex"\n}')
   const [renderedPreview, setRenderedPreview] = useState<any | null>(null)
 
+  // Phase 5: Suppressions state
+  const [suppressionsList, setSuppressionsList] = useState<SuppressionItem[]>([])
+  const [newSuppAddress, setNewSuppAddress] = useState('')
+  const [newSuppType, setNewSuppType] = useState('manual')
+  const [newSuppReason, setNewSuppReason] = useState('')
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -139,6 +155,7 @@ export default function App() {
       loadAPIKeys()
       loadMessages()
       loadTemplates()
+      loadSuppressions()
     }
   }, [activeTenant, currentTab])
 
@@ -203,6 +220,60 @@ export default function App() {
       const data = await res.json()
       if (res.ok) {
         setTemplatesList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadSuppressions = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/suppressions', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSuppressionsList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleCreateSuppression = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newSuppAddress) return
+    try {
+      const res = await fetch('/v1/suppressions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          address: newSuppAddress,
+          type: newSuppType,
+          reason: newSuppReason || undefined,
+        }),
+      })
+      if (res.ok) {
+        setNewSuppAddress('')
+        setNewSuppReason('')
+        loadSuppressions()
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Failed to create suppression')
+      }
+    } catch {}
+  }
+
+  const handleDeleteSuppression = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/suppressions/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadSuppressions()
       }
     } catch {}
   }
@@ -784,6 +855,16 @@ export default function App() {
           >
             Templates
           </button>
+          <button
+            onClick={() => setCurrentTab('suppressions')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'suppressions'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Suppressions
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -796,6 +877,10 @@ export default function App() {
                   {currentTab === 'dashboard' && (activeTenant?.name || 'Dashboard')}
                   {currentTab === 'domains' && 'Domains & DNS Configuration'}
                   {currentTab === 'streams' && 'Message Streams'}
+                  {currentTab === 'apikeys' && 'API Keys'}
+                  {currentTab === 'messages' && 'Message Logs & Inspector'}
+                  {currentTab === 'templates' && 'Templates'}
+                  {currentTab === 'suppressions' && 'Suppression List & Safeguards'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -1464,6 +1549,131 @@ export default function App() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB: SUPPRESSIONS */}
+            {currentTab === 'suppressions' && (
+              <div className="space-y-6 mt-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Add Manual Suppression</h3>
+                  <form onSubmit={handleCreateSuppression} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Email or Domain</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. user@example.com or bad-domain.com"
+                          value={newSuppAddress}
+                          onChange={(e) => setNewSuppAddress(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Suppression Type</label>
+                        <select
+                          value={newSuppType}
+                          onChange={(e) => setNewSuppType(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                        >
+                          <option value="manual">Manual Block</option>
+                          <option value="hard_bounce">Hard Bounce</option>
+                          <option value="complaint">Spam Complaint</option>
+                          <option value="unsubscribe">Unsubscribe</option>
+                          <option value="domain_block">Domain Block</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Reason (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Recipient requested exclusion"
+                          value={newSuppReason}
+                          onChange={(e) => setNewSuppReason(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Add to Suppression List
+                    </button>
+                  </form>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
+                    <span>Suppressed Recipients ({suppressionsList.length})</span>
+                    <button
+                      onClick={loadSuppressions}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-950 text-xs text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-6 py-3">Address / Domain</th>
+                          <th className="px-6 py-3">Type</th>
+                          <th className="px-6 py-3">Reason</th>
+                          <th className="px-6 py-3">Source</th>
+                          <th className="px-6 py-3">Created</th>
+                          <th className="px-6 py-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {suppressionsList.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                              No addresses currently suppressed.
+                            </td>
+                          </tr>
+                        ) : (
+                          suppressionsList.map((s) => (
+                            <tr key={s.id} className="hover:bg-slate-800/40">
+                              <td className="px-6 py-4 font-mono font-medium text-white">{s.address}</td>
+                              <td className="px-6 py-4">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    s.type === 'hard_bounce'
+                                      ? 'bg-red-950 text-red-400 border border-red-800'
+                                      : s.type === 'complaint'
+                                      ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                      : s.type === 'unsubscribe'
+                                      ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                                      : s.type === 'domain_block'
+                                      ? 'bg-yellow-950 text-yellow-400 border border-yellow-800'
+                                      : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                  }`}
+                                >
+                                  {s.type}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">{s.reason || '—'}</td>
+                              <td className="px-6 py-4 text-xs text-slate-400 font-mono">{s.source}</td>
+                              <td className="px-6 py-4 text-xs text-slate-500">
+                                {new Date(s.created_at).toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <button
+                                  onClick={() => handleDeleteSuppression(s.id)}
+                                  className="text-xs text-red-400 hover:text-red-300 font-medium"
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
           </div>

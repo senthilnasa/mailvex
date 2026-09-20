@@ -345,4 +345,95 @@ type MessageFilter struct {
 	Until     *time.Time `json:"until"`
 }
 
+type Suppression struct {
+	ID            string     `json:"id"`
+	TenantID      string     `json:"tenant_id"`
+	StreamID      *string    `json:"stream_id,omitempty"`
+	Address       string     `json:"address"`
+	AddressDomain string     `json:"address_domain"`
+	Type          string     `json:"type"` // hard_bounce, complaint, unsubscribe, manual, domain_block, role_account
+	Reason        *string    `json:"reason,omitempty"`
+	Source        string     `json:"source"` // smtp, dsn, fbl, one_click, api, import, admin
+	SourceRef     *string    `json:"source_ref,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	CreatedBy     *string    `json:"created_by,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+type IPPool struct {
+	ID        string    `json:"id"`
+	TenantID  *string   `json:"tenant_id,omitempty"`
+	Name      string    `json:"name"`
+	Strategy  string    `json:"strategy"` // fixed, round_robin, least_used, weighted
+	IsDefault bool      `json:"is_default"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type IPAddress struct {
+	ID             string    `json:"id"`
+	PoolID         string    `json:"pool_id"`
+	IP             string    `json:"ip"`
+	Subnet         *string   `json:"subnet,omitempty"`
+	EHLOHostname   string    `json:"ehlo_hostname"`
+	PTRRecord      *string   `json:"ptr_record,omitempty"`
+	Status         string    `json:"status"` // active, warming, quarantine, disabled
+	WarmupDay      int       `json:"warmup_day"`
+	MaxDailyVolume int       `json:"max_daily_volume"`
+	SentToday      int       `json:"sent_today"`
+	NodeID         string    `json:"node_id"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type Relay struct {
+	ID                 string    `json:"id"`
+	TenantID           *string   `json:"tenant_id,omitempty"`
+	Name               string    `json:"name"`
+	Host               string    `json:"host"`
+	Port               int       `json:"port"`
+	TLSMode            string    `json:"tls_mode"` // starttls, tls, none
+	AuthUser           *string   `json:"auth_user,omitempty"`
+	AuthPassEncrypted  *string   `json:"auth_pass_encrypted,omitempty"`
+	FromRewritePolicy  string    `json:"from_rewrite_policy"` // preserve, replace
+	FromRewriteAddress *string   `json:"from_rewrite_address,omitempty"`
+	IsActive           bool      `json:"is_active"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type BounceRule struct {
+	ID             string    `json:"id"`
+	Pattern        string    `json:"pattern"`
+	EnhancedCode   *string   `json:"enhanced_code,omitempty"`
+	Provider       *string   `json:"provider,omitempty"`
+	Classification string    `json:"classification"`
+	Action         string    `json:"action"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type ProviderMXRule struct {
+	ID                    string    `json:"id"`
+	Pattern               string    `json:"pattern"`
+	Provider              string    `json:"provider"`
+	MaxConnections        int       `json:"max_connections"`
+	MessagesPerConnection int       `json:"messages_per_connection"`
+	RateLimitPerMin       int       `json:"rate_limit_per_min"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+type DeadLetterMessage struct {
+	ID               string    `json:"id"`
+	TenantID         string    `json:"tenant_id"`
+	MessageID        string    `json:"message_id"`
+	RecipientID      string    `json:"recipient_id"`
+	Destination      string    `json:"destination"`
+	Reason           string    `json:"reason"`
+	LastSMTPCode     *string   `json:"last_smtp_code,omitempty"`
+	LastEnhancedCode *string   `json:"last_enhanced_code,omitempty"`
+	LastResponse     *string   `json:"last_response,omitempty"`
+	Attempts         int       `json:"attempts"`
+	SourceIP         *string   `json:"source_ip,omitempty"`
+	NodeID           *string   `json:"node_id,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+
 

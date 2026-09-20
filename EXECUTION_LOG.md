@@ -174,5 +174,51 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
-### Phase 5: Outbound Delivery Engine
-- **Status:** In Progress
+### Phase 5: Outbound Delivery Engine (Mailvex Worker)
+- **Status:** Completed (2026-09-20)
+- **Implementations:**
+  - `core/domain`: Added `Suppression`, `IPPool`, `IPAddress`, `Relay`, `BounceRule`, `ProviderMXRule`, and `DeadLetterMessage` models.
+  - `core/crypto/dkim`: Implemented RFC 6376 `SignDKIM` with relaxed/relaxed header and body canonicalization, body hash (`bh=`), and RSA-SHA256 signature (`b=`).
+  - `core/repository`:
+    - Suppressions repository with O(1) checks for exact address, domain blocks, and stream-scoped unsubscribes.
+    - IP pool and bound IP allocation with warmup cap enforcement.
+    - Upstream smart-host relays CRUD with From-rewrite policy support.
+    - Dynamic bounce rule tables and MX provider rules.
+    - Dead-letter message (DLQ) logging and recipient delivery tracking updates.
+  - `core/ingest`: Updated unified ingestion to check suppressions up-front (§13.1, §18) and emit initial `message.suppressed` events.
+  - `worker/router`: Router selecting transport (`direct_mx` vs `relay`), resolving IP pools (`tenant -> stream -> domain -> default`), and selecting active IP bound to current node.
+  - `worker/mx`: In-memory caching MX resolver with RFC 7505 Null MX detection (rejecting email to unrouteable domains) and RFC 5321 fallback to domain A/AAAA record; provider classification (`google`, `microsoft`, `yahoo`, `apple`, `custom`).
+  - `worker/classifier`: Response classification engine mapping SMTP status and enhanced codes to standard bounce taxonomy (`hard_bounce`, `soft_bounce`, `rate_limited`, `spam_rejection`, `auth_rejection`, `policy_rejection`, `mailbox_unavailable`, `domain_unavailable`, `unknown`).
+  - `worker/hygiene`: Sanitizes headers (strips internal `X-Mailvex-*` and private `Received` lines), generates missing `Message-ID`, `Date`, `MIME-Version`, injects `Feedback-ID: <tenant>:<stream>:<campaign>:mailvex`, injects `X-Mailvex-Tenant-Id: <hash>`, generates VERP `Return-Path: <bounce+<token>@<domain>>`, and injects `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` on broadcast streams.
+  - `worker/transport`:
+    - `DirectMXTransport`: Speaks SMTP directly to remote MX host, negotiates opportunistic/required STARTTLS, handles MAIL FROM (VERP), RCPT TO, and DKIM-signed DATA.
+    - `RelayTransport`: Connects to upstream smart-host relay with PLAIN/LOGIN authentication and `From` header rewriting (`FromRewritePolicy = "replace"`) preserving original sender in `Reply-To` and `X-Original-From`.
+  - `worker/retry`: Retry scheduler with exponential backoff (1m, 5m, 15m, 30m, 1h, 2h, 6h, 12h, 24h) and ±20% jitter.
+  - `worker/worker`: Complete delivery engine pipeline with priority consumption, suppression check before transmission, response classification, immediate hard-bounce auto-suppression on 5xx, retry deferrals on 4xx, DLQ movement on exhaustion/fatal failure, and graceful drain on SIGTERM.
+  - `cmd/worker`: Standalone background worker daemon with graceful shutdown.
+  - `api/handlers/unsubscribe`:
+    - `POST /u/{token}`: RFC 8058 One-Click unsubscribe endpoint adding `unsubscribe` suppression and emitting `message.unsubscribed`.
+    - `GET /u/{token}`: Hosted unsubscribe confirmation page with one-click submit.
+  - `api/handlers/suppressions`: Management endpoints (`GET /v1/suppressions`, `POST /v1/suppressions`, `DELETE /v1/suppressions/{id}`).
+  - `console`: Suppressions management tab with manual suppression addition, type badges, reason display, source tracking, and removal action.
+  - `migrations`: `000005_delivery_worker.up.sql` and `down.sql`.
+- **Verification & Test Results:**
+  - `worker/worker_test.go`:
+    - `TestDirectMXDeliverySuccess` PASS (end-to-end delivery to mock MX server with VERP return-path, Feedback-ID, and DKIM signature verified).
+    - `TestSmartHostRelayDeliveryWithFromRewrite` PASS (delivery via authenticated smart-host relay with From header rewritten and X-Original-From preserved).
+    - `TestSuppressionCheckPreventsSending` PASS (pre-existing suppression prevents network transmission and marks recipient suppressed).
+    - `TestHardBounceAutoSuppressionAndDLQ` PASS (5xx permanent rejection automatically records hard_bounce suppression and moves to DLQ).
+    - `TestSoftBounceRetryScheduling` PASS (4xx transient failure schedules retry with exponential backoff and jitter without auto-suppressing).
+    - `TestWorkerGracefulDrain` PASS (worker drain stops claiming and rejects new work).
+  - `api/unsubscribe_test.go`:
+    - `TestUnsubscribeEndpoints` PASS (RFC 8058 one-click POST, hosted HTML GET, and tampered token 403 rejection).
+  - `core/crypto`: `TestSignDKIM` PASS (RFC 6376 RSA-SHA256 signature verification).
+  - `go test -count=1 ./...`: 100% PASS across all 19 packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 6: Feedback Loops & Inbound DSN
+- **Status:** Pending
+

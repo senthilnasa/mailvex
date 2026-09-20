@@ -184,6 +184,22 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "templates.read")(http.HandlerFunc(apiHandler.RenderTemplateHandler)),
 	))
 
+	// Phase 5: Suppressions Management
+	s.mux.Handle("GET /v1/suppressions", authMiddleware(
+		middleware.RequirePermission(s.repo, "suppressions.read")(http.HandlerFunc(apiHandler.ListSuppressionsHandler)),
+	))
+	s.mux.Handle("POST /v1/suppressions", authMiddleware(
+		middleware.RequirePermission(s.repo, "suppressions.write")(http.HandlerFunc(apiHandler.CreateSuppressionHandler)),
+	))
+	s.mux.Handle("DELETE /v1/suppressions/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "suppressions.write")(http.HandlerFunc(apiHandler.DeleteSuppressionHandler)),
+	))
+
+	// Phase 5: RFC 8058 One-Click & Hosted Unsubscribe Endpoints (§17.3)
+	unsubHandler := handlers.NewUnsubscribeHandler(s.repo, []byte("mailvex-unsubscribe-token-secret"))
+	s.mux.HandleFunc("POST /u/{token}", unsubHandler.HandleOneClick)
+	s.mux.HandleFunc("GET /u/{token}", unsubHandler.HandleHostedPage)
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)
