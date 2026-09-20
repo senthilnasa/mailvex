@@ -416,3 +416,35 @@ func (a *API) ListAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 		"data": logs,
 	})
 }
+
+// ListMessagesHandler lists messages for active tenant
+func (a *API) ListMessagesHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	tenantID, _ := r.Context().Value(middleware.TenantIDKey).(string)
+
+	msgs, err := a.repo.ListMessages(r.Context(), tenantID, 50)
+	if err != nil {
+		http.Error(w, `{"error":{"code":"internal_error","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": msgs,
+	})
+}
+
+// ListDevMessagesHandler lists messages in the development sink
+func (a *API) ListDevMessagesHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	tenantID, _ := r.Context().Value(middleware.TenantIDKey).(string)
+
+	msgs, err := a.repo.ListDevelopmentMessages(r.Context(), tenantID)
+	if err != nil {
+		http.Error(w, `{"error":{"code":"internal_error","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": msgs,
+	})
+}

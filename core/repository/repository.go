@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -83,6 +84,32 @@ type Repository interface {
 	// Delegations (Phase 2)
 	AddDomainDelegation(ctx context.Context, delegation *domain.DomainDelegation) error
 	IsDomainDelegated(ctx context.Context, parentDomainID, targetTenantID string) (bool, error)
+
+	// Outbox & Queue (Phase 3)
+	SaveOutboxItem(ctx context.Context, item *domain.OutboxItem) error
+	ListPendingOutbox(ctx context.Context, limit int) ([]*domain.OutboxItem, error)
+	MarkOutboxPublished(ctx context.Context, id string) error
+
+	// Messages & Recipients (Phase 3)
+	SaveMessage(ctx context.Context, msg *domain.Message, recipients []*domain.MessageRecipient, events []*domain.MessageEvent, outbox *domain.OutboxItem) error
+	GetMessage(ctx context.Context, tenantID, messageID string) (*domain.Message, []*domain.MessageRecipient, []*domain.MessageEvent, error)
+	ListMessages(ctx context.Context, tenantID string, limit int) ([]*domain.Message, error)
+	ListDevelopmentMessages(ctx context.Context, tenantID string) ([]*domain.Message, error)
+
+	// SMTP Credentials (Phase 3)
+	CreateSMTPCredential(ctx context.Context, cred *domain.SMTPCredential) error
+	GetSMTPCredentialByUsername(ctx context.Context, username string) (*domain.SMTPCredential, error)
+	ListSMTPCredentials(ctx context.Context, tenantID string) ([]*domain.SMTPCredential, error)
+
+	// LAN Devices (Phase 3)
+	CreateDevice(ctx context.Context, dev *domain.Device) error
+	GetDeviceByIP(ctx context.Context, tenantID, ip string) (*domain.Device, error)
+	ListDevices(ctx context.Context, tenantID string) ([]*domain.Device, error)
+
+	// Trusted Networks (Phase 3)
+	AddTrustedNetwork(ctx context.Context, net *domain.TrustedNetwork) error
+	ListTrustedNetworks(ctx context.Context, tenantID string) ([]*domain.TrustedNetwork, error)
+	IsIPInTrustedNetwork(ctx context.Context, tenantID, ip string) (bool, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -105,6 +132,15 @@ type MemoryRepository struct {
 	dkimKeys    map[string][]*domain.DKIMKey // domainID -> keys
 	dnsRecords  map[string][]*domain.DNSRecord // domainID -> records
 	streams     map[string][]*domain.MessageStream // tenantID -> streams
+
+	// Phase 3 collections
+	outboxItems map[string]*domain.OutboxItem
+	messages    map[string]*domain.Message
+	recipients  map[string][]*domain.MessageRecipient // messageID -> recipients
+	events      map[string][]*domain.MessageEvent     // messageID -> events
+	smtpCreds   map[string]*domain.SMTPCredential     // username -> cred
+	devices     map[string][]*domain.Device           // tenantID -> devices
+	trustedNets map[string][]*domain.TrustedNetwork   // tenantID -> nets
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -124,6 +160,13 @@ func NewMemoryRepository() *MemoryRepository {
 		dkimKeys:      make(map[string][]*domain.DKIMKey),
 		dnsRecords:    make(map[string][]*domain.DNSRecord),
 		streams:       make(map[string][]*domain.MessageStream),
+		outboxItems:   make(map[string]*domain.OutboxItem),
+		messages:      make(map[string]*domain.Message),
+		recipients:    make(map[string][]*domain.MessageRecipient),
+		events:        make(map[string][]*domain.MessageEvent),
+		smtpCreds:     make(map[string]*domain.SMTPCredential),
+		devices:       make(map[string][]*domain.Device),
+		trustedNets:   make(map[string][]*domain.TrustedNetwork),
 	}
 	repo.seedDefaults()
 	return repo
@@ -747,6 +790,218 @@ func (m *MemoryRepository) IsDomainDelegated(ctx context.Context, parentDomainID
 
 	for _, del := range m.delegations {
 		if del.ParentDomainID == parentDomainID && del.DelegatedToTenantID == targetTenantID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Phase 3: Outbox & Queue
+
+func (m *MemoryRepository) SaveOutboxItem(ctx context.Context, item *domain.OutboxItem) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.outboxItems[item.ID] = item
+	return nil
+}
+
+func (m *MemoryRepository) ListPendingOutbox(ctx context.Context, limit int) ([]*domain.OutboxItem, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now().UTC()
+	var pending []*domain.OutboxItem
+	for _, item := range m.outboxItems {
+		if item.PublishedAt == nil && !item.AvailableAt.After(now) {
+			pending = append(pending, item)
+			if limit > 0 && len(pending) >= limit {
+				break
+			}
+		}
+	}
+	return pending, nil
+}
+
+func (m *MemoryRepository) MarkOutboxPublished(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	item, exists := m.outboxItems[id]
+	if !exists {
+		return ErrNotFound
+	}
+	now := time.Now().UTC()
+	item.PublishedAt = &now
+	return nil
+}
+
+// Phase 3: Messages & Recipients
+
+func (m *MemoryRepository) SaveMessage(ctx context.Context, msg *domain.Message, recipients []*domain.MessageRecipient, events []*domain.MessageEvent, outbox *domain.OutboxItem) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.messages[msg.ID] = msg
+	m.recipients[msg.ID] = recipients
+	m.events[msg.ID] = events
+	if outbox != nil {
+		m.outboxItems[outbox.ID] = outbox
+	}
+	return nil
+}
+
+func (m *MemoryRepository) GetMessage(ctx context.Context, tenantID, messageID string) (*domain.Message, []*domain.MessageRecipient, []*domain.MessageEvent, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg, exists := m.messages[messageID]
+	if !exists {
+		return nil, nil, nil, ErrNotFound
+	}
+	if msg.TenantID != tenantID {
+		return nil, nil, nil, ErrCrossTenant
+	}
+
+	rcpts := m.recipients[messageID]
+	evts := m.events[messageID]
+	return msg, rcpts, evts, nil
+}
+
+func (m *MemoryRepository) ListMessages(ctx context.Context, tenantID string, limit int) ([]*domain.Message, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*domain.Message
+	for _, msg := range m.messages {
+		if msg.TenantID == tenantID {
+			result = append(result, msg)
+			if limit > 0 && len(result) >= limit {
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+func (m *MemoryRepository) ListDevelopmentMessages(ctx context.Context, tenantID string) ([]*domain.Message, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*domain.Message
+	for _, msg := range m.messages {
+		if msg.TenantID == tenantID && (msg.Environment == "development" || msg.Environment == "test") {
+			result = append(result, msg)
+		}
+	}
+	return result, nil
+}
+
+// Phase 3: SMTP Credentials
+
+func (m *MemoryRepository) CreateSMTPCredential(ctx context.Context, cred *domain.SMTPCredential) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.smtpCreds[cred.Username]; exists {
+		return ErrAlreadyExists
+	}
+	m.smtpCreds[cred.Username] = cred
+	return nil
+}
+
+func (m *MemoryRepository) GetSMTPCredentialByUsername(ctx context.Context, username string) (*domain.SMTPCredential, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	cred, exists := m.smtpCreds[username]
+	if !exists || cred.RevokedAt != nil {
+		return nil, ErrNotFound
+	}
+	return cred, nil
+}
+
+func (m *MemoryRepository) ListSMTPCredentials(ctx context.Context, tenantID string) ([]*domain.SMTPCredential, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*domain.SMTPCredential
+	for _, cred := range m.smtpCreds {
+		if cred.TenantID == tenantID && cred.RevokedAt == nil {
+			result = append(result, cred)
+		}
+	}
+	return result, nil
+}
+
+// Phase 3: LAN Devices
+
+func (m *MemoryRepository) CreateDevice(ctx context.Context, dev *domain.Device) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.devices[dev.TenantID] = append(m.devices[dev.TenantID], dev)
+	return nil
+}
+
+func (m *MemoryRepository) GetDeviceByIP(ctx context.Context, tenantID, ip string) (*domain.Device, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	devs := m.devices[tenantID]
+	for _, d := range devs {
+		if d.ExpectedIP == ip {
+			return d, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryRepository) ListDevices(ctx context.Context, tenantID string) ([]*domain.Device, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	devs := m.devices[tenantID]
+	if devs == nil {
+		return []*domain.Device{}, nil
+	}
+	return devs, nil
+}
+
+// Phase 3: Trusted Networks
+
+func (m *MemoryRepository) AddTrustedNetwork(ctx context.Context, net *domain.TrustedNetwork) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.trustedNets[net.TenantID] = append(m.trustedNets[net.TenantID], net)
+	return nil
+}
+
+func (m *MemoryRepository) ListTrustedNetworks(ctx context.Context, tenantID string) ([]*domain.TrustedNetwork, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	nets := m.trustedNets[tenantID]
+	if nets == nil {
+		return []*domain.TrustedNetwork{}, nil
+	}
+	return nets, nil
+}
+
+func (m *MemoryRepository) IsIPInTrustedNetwork(ctx context.Context, tenantID, clientIP string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ip := net.ParseIP(clientIP)
+	if ip == nil {
+		return false, nil
+	}
+
+	nets := m.trustedNets[tenantID]
+	for _, n := range nets {
+		_, ipNet, err := net.ParseCIDR(n.CIDR)
+		if err == nil && ipNet.Contains(ip) {
 			return true, nil
 		}
 	}

@@ -117,4 +117,29 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
+### Phase 3: Message Model, Queue & SMTP Ingestion
+- **Status:** Completed (2026-09-20)
+- **Implementations:**
+  - `core/domain`: Added `Message`, `MessageRecipient`, `DeliveryAttempt`, `MessageEvent`, `OutboxItem`, `SMTPCredential`, `Device`, and `TrustedNetwork`.
+  - `core/storage`: S3/MinIO compatible object store abstraction with `MemoryStorage` and `FSStorage` for raw MIME payloads and encrypted attachments (§12).
+  - `core/queue`: Queue abstraction with `MemoryQueue` (in-memory channel + delay timer) and PostgreSQL-backed Transactional `OutboxRelay` (§14).
+  - `core/mime`: Robust MIME normalization, bare LF -> CRLF sanitization, 998-character line limit enforcement, IoT/device synthetic MIME generation with `Message-ID`, `Date`, and `MIME-Version` headers (§13.2).
+  - `core/ingest`: Unified Ingestion Engine handling recipient fan-out, VERP HMAC signing, development mailbox sink (`sink_to_mailbox`), stream routing, and transactional outbox staging.
+  - `smtp`: High-performance SMTP Edge server using `github.com/emersion/go-smtp` & `go-sasl`:
+    - SASL PLAIN authentication against tenant `smtp_credentials`.
+    - IP-authenticated trusted networks and IoT devices (§28.1).
+    - Rate limiting and brute-force lockout (5 failed attempts locks client IP for 15 minutes).
+    - Strict open relay prevention (unauthenticated sessions can only send to verified Mailvex domains; external relaying rejected with 550).
+  - `api/handlers`: Added SMTP credentials, IoT devices, trusted networks, and message listing endpoints.
+  - `migrations`: `000003_messages_queue.up.sql` and `down.sql`.
+- **Verification & Test Results:**
+  - `core/mime`: `TestMIMENormalizationAndParsing` PASS (bare LF CRLF fix, long line folding, synthetic headers).
+  - `core/queue`: `TestQueueAndOutboxRelay` PASS (outbox staging -> relay poll -> queue dispatch -> ack).
+  - `smtp`: `TestSMTPAuthenticatedSubmission`, `TestSMTPDeviceIPAuthenticatedSubmission`, `TestOpenRelayPrevention`, `TestBruteForceProtection` all PASS.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
 
+---
+
+### Phase 4: API Sending & Templating
+- **Status:** In Progress

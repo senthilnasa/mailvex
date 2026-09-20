@@ -92,6 +92,27 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "streams.write")(http.HandlerFunc(apiHandler.CreateStreamHandler)),
 	))
 
+	// Phase 3: SMTP Credentials Handlers
+	s.mux.Handle("GET /v1/smtp-credentials", authMiddleware(
+		middleware.RequirePermission(s.repo, "smtp_credentials.read")(http.HandlerFunc(apiHandler.ListSMTPCredentialsHandler)),
+	))
+	s.mux.Handle("POST /v1/smtp-credentials", authMiddleware(
+		middleware.RequirePermission(s.repo, "smtp_credentials.create")(http.HandlerFunc(apiHandler.CreateSMTPCredentialHandler)),
+	))
+
+	// Phase 3: Devices & Trusted Networks
+	s.mux.Handle("GET /v1/devices", authMiddleware(http.HandlerFunc(apiHandler.ListDevicesHandler)))
+	s.mux.Handle("POST /v1/devices", authMiddleware(http.HandlerFunc(apiHandler.CreateDeviceHandler)))
+	s.mux.Handle("POST /v1/trusted-networks", authMiddleware(http.HandlerFunc(apiHandler.AddTrustedNetworkHandler)))
+
+	// Phase 3: Message Logs & Development Sink
+	s.mux.Handle("GET /v1/messages", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.ListMessagesHandler)),
+	))
+	s.mux.Handle("GET /v1/messages/development", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.ListDevMessagesHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)
