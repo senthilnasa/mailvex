@@ -3,7 +3,9 @@ package middleware
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mailvex/mailvex/core/crypto"
@@ -14,9 +16,11 @@ import (
 type contextKey string
 
 const (
-	RequestIDKey contextKey = "request_id"
-	UserKey      contextKey = "user"
-	TenantIDKey  contextKey = "tenant_id"
+	RequestIDKey   contextKey = "request_id"
+	UserKey        contextKey = "user"
+	TenantIDKey    contextKey = "tenant_id"
+	APIKeyKey      contextKey = "api_key"
+	EnvironmentKey contextKey = "environment"
 )
 
 // RequestID adds a unique req_... identifier to each request context and response header
@@ -74,10 +78,53 @@ func (rw *responseWriterWrapper) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// RequireAuth authenticates the user via bearer token or session header
+// RequireAuth authenticates requests via either API Key Bearer token or User Session
 func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+
+			// Check for API Key Bearer token (mvx_live_... or mvx_test_...)
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				if strings.HasPrefix(token, "mvx_live_") || strings.HasPrefix(token, "mvx_test_") {
+					hash := crypto.HashAPIKey(token)
+					apiKey, err := repo.GetAPIKeyByHash(r.Context(), hash)
+					if err != nil {
+						http.Error(w, `{"error":{"code":"unauthorized","message":"Invalid, expired, or revoked API key"}}`, http.StatusUnauthorized)
+						return
+					}
+
+					// Verify client IP if allowed_cidrs configured
+					if len(apiKey.AllowedCIDRs) > 0 {
+						clientHost, _, _ := net.SplitHostPort(r.RemoteAddr)
+						if clientHost == "" {
+							clientHost = r.RemoteAddr
+						}
+						clientIP := net.ParseIP(clientHost)
+						allowed := false
+						for _, cidr := range apiKey.AllowedCIDRs {
+							_, ipNet, err := net.ParseCIDR(cidr)
+							if err == nil && clientIP != nil && ipNet.Contains(clientIP) {
+								allowed = true
+								break
+							}
+						}
+						if !allowed {
+							http.Error(w, `{"error":{"code":"forbidden","message":"Client IP not allowed for this API key"}}`, http.StatusForbidden)
+							return
+						}
+					}
+
+					ctx := context.WithValue(r.Context(), APIKeyKey, apiKey)
+					ctx = context.WithValue(ctx, TenantIDKey, apiKey.TenantID)
+					ctx = context.WithValue(ctx, EnvironmentKey, apiKey.Environment)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			// Fallback to User Session authentication
 			userID := r.Header.Get("X-User-ID")
 			if userID == "" {
 				http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required"}}`, http.StatusUnauthorized)
@@ -95,7 +142,6 @@ func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 			// Tenant context resolution
 			tenantID := r.Header.Get("X-Tenant-ID")
 			if tenantID != "" {
-				// Verify user belongs to tenant or is platform admin
 				if !user.IsPlatformAdmin {
 					_, err := repo.GetTenantMembership(r.Context(), tenantID, user.ID)
 					if err != nil {
@@ -111,10 +157,28 @@ func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 	}
 }
 
-// RequirePermission verifies the authenticated user has the necessary permission in the active tenant
+// RequirePermission verifies the caller has the required permission / scope
 func RequirePermission(repo repository.Repository, permission string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 1. If API Key authenticated
+			if apiKey, ok := r.Context().Value(APIKeyKey).(*domain.APIKey); ok && apiKey != nil {
+				hasScope := false
+				for _, s := range apiKey.Scopes {
+					if s == "*" || s == permission || (permission == "messages.send" && s == "send.email") {
+						hasScope = true
+						break
+					}
+				}
+				if !hasScope {
+					http.Error(w, `{"error":{"code":"forbidden","message":"API key lacks required scope"}}`, http.StatusForbidden)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// 2. If User authenticated
 			user, ok := r.Context().Value(UserKey).(*domain.User)
 			if !ok || user == nil {
 				http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required"}}`, http.StatusUnauthorized)

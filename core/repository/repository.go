@@ -2,9 +2,13 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,6 +114,30 @@ type Repository interface {
 	AddTrustedNetwork(ctx context.Context, net *domain.TrustedNetwork) error
 	ListTrustedNetworks(ctx context.Context, tenantID string) ([]*domain.TrustedNetwork, error)
 	IsIPInTrustedNetwork(ctx context.Context, tenantID, ip string) (bool, error)
+
+	// Phase 4: API Keys
+	CreateAPIKey(ctx context.Context, key *domain.APIKey) error
+	GetAPIKeyByHash(ctx context.Context, hash string) (*domain.APIKey, error)
+	ListAPIKeys(ctx context.Context, tenantID string) ([]*domain.APIKey, error)
+	RevokeAPIKey(ctx context.Context, tenantID, id string) error
+
+	// Phase 4: Templates
+	CreateTemplate(ctx context.Context, t *domain.Template, v *domain.TemplateVersion) error
+	GetTemplate(ctx context.Context, tenantID, id string) (*domain.Template, error)
+	GetTemplateVersion(ctx context.Context, tenantID, templateID string, version int) (*domain.TemplateVersion, error)
+	GetPublishedTemplateVersion(ctx context.Context, tenantID, templateID string) (*domain.TemplateVersion, error)
+	ListTemplates(ctx context.Context, tenantID string) ([]*domain.Template, error)
+
+	// Phase 4: Idempotency
+	GetIdempotencyRecord(ctx context.Context, tenantID, key string) (*domain.IdempotencyRecord, error)
+	SetIdempotencyRecord(ctx context.Context, rec *domain.IdempotencyRecord) error
+
+	// Phase 4: Messages read, details & pagination
+	GetMessageByID(ctx context.Context, tenantID, messageID string) (*domain.Message, error)
+	GetMessageRecipients(ctx context.Context, tenantID, messageID string) ([]*domain.MessageRecipient, error)
+	GetMessageEvents(ctx context.Context, tenantID, messageID string) ([]*domain.MessageEvent, error)
+	ListMessagesPaginated(ctx context.Context, tenantID string, filter domain.MessageFilter) ([]*domain.Message, string, bool, error)
+	UpdateMessageStatus(ctx context.Context, tenantID, messageID, status string) error
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -141,32 +169,44 @@ type MemoryRepository struct {
 	smtpCreds   map[string]*domain.SMTPCredential     // username -> cred
 	devices     map[string][]*domain.Device           // tenantID -> devices
 	trustedNets map[string][]*domain.TrustedNetwork   // tenantID -> nets
+
+	// Phase 4 collections
+	apiKeys          map[string]*domain.APIKey
+	apiKeyHashes     map[string]*domain.APIKey
+	templates        map[string]*domain.Template
+	templateVersions map[string][]*domain.TemplateVersion
+	idempotency      map[string]*domain.IdempotencyRecord
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	repo := &MemoryRepository{
-		organizations: make(map[string]*domain.Organization),
-		tenants:       make(map[string]*domain.Tenant),
-		tenantKeys:    make(map[string][]*domain.TenantKey),
-		users:         make(map[string]*domain.User),
-		roles:         make(map[string]*domain.Role),
-		permissions:   make(map[string]*domain.Permission),
-		rolePerms:     make(map[string][]string),
-		memberships:   make(map[string]*domain.TenantMembership),
-		auditLogs:     make([]*domain.AuditLog, 0),
-		settings:      make(map[string]string),
-		domains:       make(map[string]*domain.Domain),
-		delegations:   make([]*domain.DomainDelegation, 0),
-		dkimKeys:      make(map[string][]*domain.DKIMKey),
-		dnsRecords:    make(map[string][]*domain.DNSRecord),
-		streams:       make(map[string][]*domain.MessageStream),
-		outboxItems:   make(map[string]*domain.OutboxItem),
-		messages:      make(map[string]*domain.Message),
-		recipients:    make(map[string][]*domain.MessageRecipient),
-		events:        make(map[string][]*domain.MessageEvent),
-		smtpCreds:     make(map[string]*domain.SMTPCredential),
-		devices:       make(map[string][]*domain.Device),
-		trustedNets:   make(map[string][]*domain.TrustedNetwork),
+		organizations:    make(map[string]*domain.Organization),
+		tenants:          make(map[string]*domain.Tenant),
+		tenantKeys:       make(map[string][]*domain.TenantKey),
+		users:            make(map[string]*domain.User),
+		roles:            make(map[string]*domain.Role),
+		permissions:      make(map[string]*domain.Permission),
+		rolePerms:        make(map[string][]string),
+		memberships:      make(map[string]*domain.TenantMembership),
+		auditLogs:        make([]*domain.AuditLog, 0),
+		settings:         make(map[string]string),
+		domains:          make(map[string]*domain.Domain),
+		delegations:      make([]*domain.DomainDelegation, 0),
+		dkimKeys:         make(map[string][]*domain.DKIMKey),
+		dnsRecords:       make(map[string][]*domain.DNSRecord),
+		streams:          make(map[string][]*domain.MessageStream),
+		outboxItems:      make(map[string]*domain.OutboxItem),
+		messages:         make(map[string]*domain.Message),
+		recipients:       make(map[string][]*domain.MessageRecipient),
+		events:           make(map[string][]*domain.MessageEvent),
+		smtpCreds:        make(map[string]*domain.SMTPCredential),
+		devices:          make(map[string][]*domain.Device),
+		trustedNets:      make(map[string][]*domain.TrustedNetwork),
+		apiKeys:          make(map[string]*domain.APIKey),
+		apiKeyHashes:     make(map[string]*domain.APIKey),
+		templates:        make(map[string]*domain.Template),
+		templateVersions: make(map[string][]*domain.TemplateVersion),
+		idempotency:      make(map[string]*domain.IdempotencyRecord),
 	}
 	repo.seedDefaults()
 	return repo
@@ -184,7 +224,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"api_keys.read", "api_keys.create", "api_keys.revoke",
 		"smtp_credentials.read", "smtp_credentials.create", "smtp_credentials.revoke",
 		"ip.read", "ip.write", "pools.read", "pools.write",
-		"messages.read", "messages.body.read", "messages.retry", "messages.export", "messages.cancel",
+		"send.email", "messages.read", "messages.body.read", "messages.retry", "messages.export", "messages.cancel",
 		"suppressions.read", "suppressions.write", "suppressions.import",
 		"templates.read", "templates.write", "templates.publish",
 		"webhooks.read", "webhooks.write", "webhooks.replay", "webhooks.secret.rotate",
@@ -215,7 +255,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"domains.read", "domains.write", "domains.verify", "domains.dkim.rotate",
 		"streams.read", "streams.write", "api_keys.read", "api_keys.create", "api_keys.revoke",
 		"smtp_credentials.read", "smtp_credentials.create", "smtp_credentials.revoke",
-		"messages.read", "messages.body.read", "messages.retry", "messages.export",
+		"send.email", "messages.read", "messages.body.read", "messages.retry", "messages.export", "messages.cancel",
 		"suppressions.read", "suppressions.write", "suppressions.import",
 		"templates.read", "templates.write", "templates.publish",
 		"webhooks.read", "webhooks.write", "webhooks.replay",
@@ -1007,3 +1047,346 @@ func (m *MemoryRepository) IsIPInTrustedNetwork(ctx context.Context, tenantID, c
 	}
 	return false, nil
 }
+
+// Phase 4: API Keys
+
+func (m *MemoryRepository) CreateAPIKey(ctx context.Context, key *domain.APIKey) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.apiKeyHashes[key.KeyHash]; exists {
+		return ErrAlreadyExists
+	}
+
+	m.apiKeys[key.ID] = key
+	m.apiKeyHashes[key.KeyHash] = key
+	return nil
+}
+
+func (m *MemoryRepository) GetAPIKeyByHash(ctx context.Context, hash string) (*domain.APIKey, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	key, exists := m.apiKeyHashes[hash]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if key.RevokedAt != nil {
+		return nil, errors.New("api key has been revoked")
+	}
+	if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+		return nil, errors.New("api key has expired")
+	}
+	return key, nil
+}
+
+func (m *MemoryRepository) ListAPIKeys(ctx context.Context, tenantID string) ([]*domain.APIKey, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*domain.APIKey
+	for _, k := range m.apiKeys {
+		if k.TenantID == tenantID && k.RevokedAt == nil {
+			result = append(result, k)
+		}
+	}
+	return result, nil
+}
+
+func (m *MemoryRepository) RevokeAPIKey(ctx context.Context, tenantID, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key, exists := m.apiKeys[id]
+	if !exists {
+		return ErrNotFound
+	}
+	if key.TenantID != tenantID {
+		return ErrCrossTenant
+	}
+
+	now := time.Now()
+	key.RevokedAt = &now
+	return nil
+}
+
+// Phase 4: Templates
+
+func (m *MemoryRepository) CreateTemplate(ctx context.Context, t *domain.Template, v *domain.TemplateVersion) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.templates[t.ID] = t
+	m.templateVersions[t.ID] = append(m.templateVersions[t.ID], v)
+	return nil
+}
+
+func (m *MemoryRepository) GetTemplate(ctx context.Context, tenantID, id string) (*domain.Template, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tmpl, exists := m.templates[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if tmpl.TenantID != tenantID {
+		return nil, ErrCrossTenant
+	}
+	return tmpl, nil
+}
+
+func (m *MemoryRepository) GetTemplateVersion(ctx context.Context, tenantID, templateID string, version int) (*domain.TemplateVersion, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	vers, exists := m.templateVersions[templateID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	for _, v := range vers {
+		if v.TenantID != tenantID {
+			return nil, ErrCrossTenant
+		}
+		if v.Version == version {
+			return v, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryRepository) GetPublishedTemplateVersion(ctx context.Context, tenantID, templateID string) (*domain.TemplateVersion, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	vers, exists := m.templateVersions[templateID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	var highest *domain.TemplateVersion
+	for _, v := range vers {
+		if v.TenantID != tenantID {
+			return nil, ErrCrossTenant
+		}
+		if v.IsPublished {
+			if highest == nil || v.Version > highest.Version {
+				highest = v
+			}
+		}
+	}
+	if highest == nil {
+		return nil, ErrNotFound
+	}
+	return highest, nil
+}
+
+func (m *MemoryRepository) ListTemplates(ctx context.Context, tenantID string) ([]*domain.Template, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*domain.Template
+	for _, t := range m.templates {
+		if t.TenantID == tenantID {
+			result = append(result, t)
+		}
+	}
+	return result, nil
+}
+
+// Phase 4: Idempotency
+
+func (m *MemoryRepository) GetIdempotencyRecord(ctx context.Context, tenantID, key string) (*domain.IdempotencyRecord, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	recID := fmt.Sprintf("%s:%s", tenantID, key)
+	rec, exists := m.idempotency[recID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if time.Now().After(rec.ExpiresAt) {
+		return nil, ErrNotFound
+	}
+	return rec, nil
+}
+
+func (m *MemoryRepository) SetIdempotencyRecord(ctx context.Context, rec *domain.IdempotencyRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.idempotency[rec.ID] = rec
+	return nil
+}
+
+// Phase 4: Messages read, details & pagination
+
+func (m *MemoryRepository) GetMessageByID(ctx context.Context, tenantID, messageID string) (*domain.Message, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg, exists := m.messages[messageID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if msg.TenantID != tenantID {
+		return nil, ErrCrossTenant
+	}
+	return msg, nil
+}
+
+func (m *MemoryRepository) GetMessageRecipients(ctx context.Context, tenantID, messageID string) ([]*domain.MessageRecipient, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg, exists := m.messages[messageID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if msg.TenantID != tenantID {
+		return nil, ErrCrossTenant
+	}
+
+	rcpts := m.recipients[messageID]
+	if rcpts == nil {
+		return []*domain.MessageRecipient{}, nil
+	}
+	return rcpts, nil
+}
+
+func (m *MemoryRepository) GetMessageEvents(ctx context.Context, tenantID, messageID string) ([]*domain.MessageEvent, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg, exists := m.messages[messageID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if msg.TenantID != tenantID {
+		return nil, ErrCrossTenant
+	}
+
+	evts := m.events[messageID]
+	if evts == nil {
+		return []*domain.MessageEvent{}, nil
+	}
+	return evts, nil
+}
+
+func (m *MemoryRepository) UpdateMessageStatus(ctx context.Context, tenantID, messageID, status string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	msg, exists := m.messages[messageID]
+	if !exists {
+		return ErrNotFound
+	}
+	if msg.TenantID != tenantID {
+		return ErrCrossTenant
+	}
+
+	msg.Status = status
+	return nil
+}
+
+func (m *MemoryRepository) ListMessagesPaginated(ctx context.Context, tenantID string, filter domain.MessageFilter) ([]*domain.Message, string, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var matched []*domain.Message
+	for _, msg := range m.messages {
+		if msg.TenantID != tenantID {
+			continue
+		}
+
+		if filter.Status != "" && msg.Status != filter.Status {
+			continue
+		}
+		if filter.From != "" && !strings.Contains(strings.ToLower(msg.FromAddress), strings.ToLower(filter.From)) {
+			continue
+		}
+		if filter.Stream != "" && msg.StreamID != filter.Stream {
+			continue
+		}
+		if filter.Since != nil && msg.CreatedAt.Before(*filter.Since) {
+			continue
+		}
+		if filter.Until != nil && msg.CreatedAt.After(*filter.Until) {
+			continue
+		}
+		if filter.Recipient != "" {
+			hasRcpt := false
+			for _, r := range m.recipients[msg.ID] {
+				if strings.Contains(strings.ToLower(r.Address), strings.ToLower(filter.Recipient)) {
+					hasRcpt = true
+					break
+				}
+			}
+			if !hasRcpt {
+				continue
+			}
+		}
+
+		matched = append(matched, msg)
+	}
+
+	// Sort descending by CreatedAt, then by ID
+	sort.Slice(matched, func(i, j int) bool {
+		if matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+			return matched[i].ID > matched[j].ID
+		}
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+
+	// Cursor decoding: base64(unixNano:id)
+	startIndex := 0
+	if filter.Cursor != "" {
+		if decoded, err := base64.URLEncoding.DecodeString(filter.Cursor); err == nil {
+			parts := strings.SplitN(string(decoded), ":", 2)
+			if len(parts) == 2 {
+				curNano, _ := strconv.ParseInt(parts[0], 10, 64)
+				curID := parts[1]
+
+				for idx, msg := range matched {
+					if msg.CreatedAt.UnixNano() < curNano || (msg.CreatedAt.UnixNano() == curNano && msg.ID < curID) {
+						startIndex = idx
+						break
+					}
+					// If reached end without finding strictly older
+					if idx == len(matched)-1 {
+						startIndex = len(matched)
+					}
+				}
+			}
+		}
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	endIndex := startIndex + limit
+	hasMore := false
+	if endIndex < len(matched) {
+		hasMore = true
+	} else {
+		endIndex = len(matched)
+	}
+
+	var paged []*domain.Message
+	if startIndex < len(matched) {
+		paged = matched[startIndex:endIndex]
+	}
+
+	var nextCursor string
+	if hasMore && len(paged) > 0 {
+		last := paged[len(paged)-1]
+		raw := fmt.Sprintf("%d:%s", last.CreatedAt.UnixNano(), last.ID)
+		nextCursor = base64.URLEncoding.EncodeToString([]byte(raw))
+	}
+
+	return paged, nextCursor, hasMore, nil
+}
+

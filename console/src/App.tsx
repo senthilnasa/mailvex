@@ -40,12 +40,39 @@ interface Stream {
   is_default: boolean
 }
 
+interface APIKey {
+  id: string
+  name: string
+  prefix: string
+  last_four: string
+  environment: string
+  scopes: string[]
+  created_at: string
+}
+
+interface MessageItem {
+  id: string
+  from_address: string
+  subject: string
+  status: string
+  stream_id: string
+  environment: string
+  created_at: string
+}
+
+interface TemplateItem {
+  id: string
+  name: string
+  description?: string
+  created_at: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -58,6 +85,30 @@ export default function App() {
 
   // Streams state
   const [streams, setStreams] = useState<Stream[]>([])
+
+  // Phase 4: API Keys state
+  const [apiKeys, setApiKeys] = useState<APIKey[]>([])
+  const [newKeyName, setNewKeyName] = useState('')
+  const [newKeyEnv, setNewKeyEnv] = useState('live')
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null)
+  const [keyLoading, setKeyLoading] = useState(false)
+
+  // Phase 4: Messages & Inspector state
+  const [messagesList, setMessagesList] = useState<MessageItem[]>([])
+  const [selectedMessage, setSelectedMessage] = useState<any | null>(null)
+  const [selectedMsgRecipients, setSelectedMsgRecipients] = useState<any[]>([])
+  const [selectedMsgEvents, setSelectedMsgEvents] = useState<any[]>([])
+  const [selectedMsgBody, setSelectedMsgBody] = useState<string>('')
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+
+  // Phase 4: Templates state
+  const [templatesList, setTemplatesList] = useState<TemplateItem[]>([])
+  const [newTmplName, setNewTmplName] = useState('')
+  const [newTmplSubject, setNewTmplSubject] = useState('')
+  const [newTmplHTML, setNewTmplHTML] = useState('')
+  const [newTmplText, setNewTmplText] = useState('')
+  const [previewVars, setPreviewVars] = useState('{\n  "name": "Alex"\n}')
+  const [renderedPreview, setRenderedPreview] = useState<any | null>(null)
 
   // Setup form states
   const [profile, setProfile] = useState('standard')
@@ -85,8 +136,11 @@ export default function App() {
     if (activeTenant && user) {
       loadDomains()
       loadStreams()
+      loadAPIKeys()
+      loadMessages()
+      loadTemplates()
     }
-  }, [activeTenant])
+  }, [activeTenant, currentTab])
 
   const loadDomains = async () => {
     if (!activeTenant || !user) return
@@ -112,6 +166,182 @@ export default function App() {
         setStreams(data.data || [])
       }
     } catch {}
+  }
+
+  const loadAPIKeys = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/api-keys', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setApiKeys(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadMessages = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/messages', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMessagesList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadTemplates = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/templates', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTemplatesList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleCreateAPIKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newKeyName) return
+    setKeyLoading(true)
+    try {
+      const res = await fetch('/v1/api-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          name: newKeyName,
+          environment: newKeyEnv,
+          scopes: ['send.email', 'messages.read'],
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setCreatedSecret(data.token)
+        setNewKeyName('')
+        loadAPIKeys()
+      } else {
+        alert(data.error?.message || 'Failed to create API key')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setKeyLoading(false)
+    }
+  }
+
+  const handleRevokeAPIKey = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Are you sure you want to revoke this API key immediately?')) return
+    try {
+      const res = await fetch(`/v1/api-keys/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadAPIKeys()
+      }
+    } catch {}
+  }
+
+  const handleInspectMessage = async (msg: MessageItem) => {
+    if (!activeTenant || !user) return
+    setSelectedMessage(msg)
+    setSelectedMsgBody('')
+    setInspectorOpen(true)
+    try {
+      const resMsg = await fetch(`/v1/messages/${msg.id}`, {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const dataMsg = await resMsg.json()
+      if (resMsg.ok) {
+        setSelectedMsgRecipients(dataMsg.recipients || [])
+      }
+
+      const resEvts = await fetch(`/v1/messages/${msg.id}/events`, {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const dataEvts = await resEvts.json()
+      if (resEvts.ok) {
+        setSelectedMsgEvents(dataEvts.data || [])
+      }
+
+      const resBody = await fetch(`/v1/messages/${msg.id}/body`, {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const dataBody = await resBody.json()
+      if (resBody.ok) {
+        setSelectedMsgBody(dataBody.body || '')
+      }
+    } catch {}
+  }
+
+  const handleCreateTemplate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newTmplName) return
+    try {
+      const res = await fetch('/v1/templates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          name: newTmplName,
+          subject: newTmplSubject,
+          html: newTmplHTML,
+          text: newTmplText,
+          publish_now: true,
+        }),
+      })
+      if (res.ok) {
+        setNewTmplName('')
+        setNewTmplSubject('')
+        setNewTmplHTML('')
+        setNewTmplText('')
+        loadTemplates()
+      } else {
+        const data = await res.json()
+        alert(data.error?.message || 'Failed to create template')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleRenderPreview = async (tmplId: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const vars = JSON.parse(previewVars || '{}')
+      const res = await fetch(`/v1/templates/${tmplId}/render`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ variables: vars }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRenderedPreview(data)
+      } else {
+        alert(data.error?.message || 'Failed to render preview')
+      }
+    } catch (err: any) {
+      alert('Invalid JSON variables: ' + err.message)
+    }
   }
 
   const handleSelectDomain = async (dom: Domain) => {
@@ -524,6 +754,36 @@ export default function App() {
           >
             Message Streams
           </button>
+          <button
+            onClick={() => setCurrentTab('apikeys')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'apikeys'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            API Keys
+          </button>
+          <button
+            onClick={() => setCurrentTab('messages')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'messages'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Message Logs & Inspector
+          </button>
+          <button
+            onClick={() => setCurrentTab('templates')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'templates'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Templates
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -776,6 +1036,434 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* TAB: API KEYS */}
+            {currentTab === 'apikeys' && (
+              <div className="space-y-6 mt-6">
+                {/* Generated Secret Alert Modal / Box */}
+                {createdSecret && (
+                  <div className="bg-emerald-950/60 border border-emerald-500/50 p-6 rounded-xl space-y-3 shadow-xl">
+                    <div className="flex items-center space-x-2 text-emerald-400 font-semibold">
+                      <span>API Key Created Successfully!</span>
+                    </div>
+                    <p className="text-sm text-emerald-200">
+                      Copy this secret key immediately. For your security, you will not be able to see it again.
+                    </p>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="text"
+                        readOnly
+                        value={createdSecret}
+                        className="bg-slate-900 border border-slate-700 text-emerald-300 font-mono text-sm px-3 py-2 rounded-lg flex-1"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(createdSecret)
+                          alert('Copied to clipboard!')
+                        }}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Copy Key
+                      </button>
+                      <button
+                        onClick={() => setCreatedSecret(null)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Create Key Panel */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Create New API Key</h3>
+                  <form onSubmit={handleCreateAPIKey} className="flex gap-4 items-end">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Key Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Backend Production Worker"
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="w-44">
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Environment</label>
+                      <select
+                        value={newKeyEnv}
+                        onChange={(e) => setNewKeyEnv(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="live">Live (External Delivery)</option>
+                        <option value="test">Test (Development Sink)</option>
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={keyLoading}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {keyLoading ? 'Generating...' : 'Generate API Key'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* API Keys Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 font-semibold text-white">
+                    Active API Keys
+                  </div>
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-950/50 text-slate-400">
+                      <tr>
+                        <th className="p-4">Name</th>
+                        <th className="p-4">Prefix / Last 4</th>
+                        <th className="p-4">Environment</th>
+                        <th className="p-4">Scopes</th>
+                        <th className="p-4">Created</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {apiKeys.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-500">
+                            No API keys found. Generate one to start sending via REST API.
+                          </td>
+                        </tr>
+                      ) : (
+                        apiKeys.map((k) => (
+                          <tr key={k.id} className="hover:bg-slate-800/40">
+                            <td className="p-4 font-medium text-white">{k.name}</td>
+                            <td className="p-4 font-mono text-xs text-indigo-400">
+                              {k.prefix}...{k.last_four}
+                            </td>
+                            <td className="p-4">
+                              <span
+                                className={`px-2 py-0.5 text-xs rounded-full ${
+                                  k.environment === 'live'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                }`}
+                              >
+                                {k.environment}
+                              </span>
+                            </td>
+                            <td className="p-4 text-xs text-slate-400">
+                              {k.scopes ? k.scopes.join(', ') : 'send.email'}
+                            </td>
+                            <td className="p-4 text-slate-400 text-xs">
+                              {new Date(k.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => handleRevokeAPIKey(k.id)}
+                                className="px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs rounded-lg transition-colors"
+                              >
+                                Revoke
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: MESSAGES LOGS & INSPECTOR */}
+            {currentTab === 'messages' && (
+              <div className="space-y-6 mt-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <span className="font-semibold text-white">Message Activity Logs</span>
+                    <button
+                      onClick={loadMessages}
+                      className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-slate-950/50 text-slate-400">
+                      <tr>
+                        <th className="p-4">Message ID</th>
+                        <th className="p-4">Sender</th>
+                        <th className="p-4">Subject</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Environment</th>
+                        <th className="p-4">Time</th>
+                        <th className="p-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {messagesList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-slate-500">
+                            No messages recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        messagesList.map((m) => (
+                          <tr key={m.id} className="hover:bg-slate-800/40">
+                            <td className="p-4 font-mono text-xs text-indigo-400">{m.id}</td>
+                            <td className="p-4 text-slate-200">{m.from_address}</td>
+                            <td className="p-4 text-white font-medium">{m.subject}</td>
+                            <td className="p-4">
+                              <span
+                                className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                  m.status === 'delivered'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : m.status === 'queued'
+                                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                }`}
+                              >
+                                {m.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-xs capitalize text-slate-400">{m.environment}</td>
+                            <td className="p-4 text-xs text-slate-400">
+                              {new Date(m.created_at).toLocaleTimeString()}
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => handleInspectMessage(m)}
+                                className="px-3 py-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 text-xs rounded-lg transition-colors"
+                              >
+                                Inspect
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Message Inspector Modal */}
+                {inspectorOpen && selectedMessage && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Message Inspector</h3>
+                          <p className="text-xs font-mono text-indigo-400">{selectedMessage.id}</p>
+                        </div>
+                        <button
+                          onClick={() => setInspectorOpen(false)}
+                          className="text-slate-400 hover:text-white text-xl font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                          <div>
+                            <span className="block text-xs text-slate-500">From</span>
+                            <span className="text-sm font-medium text-slate-200">{selectedMessage.from_address}</span>
+                          </div>
+                          <div>
+                            <span className="block text-xs text-slate-500">Subject</span>
+                            <span className="text-sm font-medium text-slate-200">{selectedMessage.subject}</span>
+                          </div>
+                          <div>
+                            <span className="block text-xs text-slate-500">Status</span>
+                            <span className="text-sm font-medium text-indigo-400 capitalize">{selectedMessage.status}</span>
+                          </div>
+                          <div>
+                            <span className="block text-xs text-slate-500">Environment</span>
+                            <span className="text-sm font-medium text-emerald-400 capitalize">{selectedMessage.environment}</span>
+                          </div>
+                        </div>
+
+                        {/* Recipients */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Recipients</h4>
+                          <div className="bg-slate-950/40 border border-slate-800 rounded-lg overflow-hidden">
+                            <table className="w-full text-left text-xs text-slate-300">
+                              <thead className="bg-slate-900 text-slate-400">
+                                <tr>
+                                  <th className="p-3">Address</th>
+                                  <th className="p-3">Type</th>
+                                  <th className="p-3">Status</th>
+                                  <th className="p-3">Attempts</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800">
+                                {selectedMsgRecipients.map((r) => (
+                                  <tr key={r.id}>
+                                    <td className="p-3 font-mono">{r.address}</td>
+                                    <td className="p-3 uppercase">{r.type}</td>
+                                    <td className="p-3 capitalize">{r.status}</td>
+                                    <td className="p-3">{r.attempts}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Chronological Event History */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Event Timeline</h4>
+                          <div className="space-y-2">
+                            {selectedMsgEvents.map((e) => (
+                              <div key={e.id} className="text-xs bg-slate-950/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                  <span className="font-semibold text-indigo-300">{e.type}</span>
+                                  <span className="text-slate-400">{e.data}</span>
+                                </div>
+                                <span className="text-slate-500 font-mono">
+                                  {new Date(e.occurred_at).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Sandboxed Body HTML Preview (§23.3) */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Message Body Preview (Sandboxed)</h4>
+                          <iframe
+                            sandbox=""
+                            srcDoc={selectedMsgBody}
+                            className="w-full h-64 bg-white rounded-lg border border-slate-700 shadow-inner"
+                            title="Message Content Preview"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: TEMPLATES */}
+            {currentTab === 'templates' && (
+              <div className="space-y-6 mt-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Create Template</h3>
+                  <form onSubmit={handleCreateTemplate} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Template Name</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Welcome Onboarding"
+                          value={newTmplName}
+                          onChange={(e) => setNewTmplName(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Subject (Mustache)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Welcome to {{company}}, {{name}}!"
+                          value={newTmplSubject}
+                          onChange={(e) => setNewTmplSubject(e.target.value)}
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">HTML Body</label>
+                      <textarea
+                        rows={3}
+                        placeholder="<h1>Welcome {{name}}!</h1><p>We are excited to have you.</p>"
+                        value={newTmplHTML}
+                        onChange={(e) => setNewTmplHTML(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Plain Text Body</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Welcome {{name}}! We are excited to have you."
+                        value={newTmplText}
+                        onChange={(e) => setNewTmplText(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg font-mono"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Save & Publish Template
+                    </button>
+                  </form>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 font-semibold text-white">
+                    Published Templates
+                  </div>
+                  <div className="divide-y divide-slate-800">
+                    {templatesList.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500 text-sm">
+                        No templates created yet.
+                      </div>
+                    ) : (
+                      templatesList.map((t) => (
+                        <div key={t.id} className="p-4 flex items-center justify-between hover:bg-slate-800/40">
+                          <div>
+                            <span className="font-semibold text-white">{t.name}</span>
+                            <span className="ml-3 font-mono text-xs text-indigo-400">{t.id}</span>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="text"
+                              value={previewVars}
+                              onChange={(e) => setPreviewVars(e.target.value)}
+                              placeholder='{"name": "Alex"}'
+                              className="bg-slate-800 border border-slate-700 text-xs px-2 py-1 rounded text-slate-300 font-mono w-48"
+                            />
+                            <button
+                              onClick={() => handleRenderPreview(t.id)}
+                              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
+                            >
+                              Live Preview
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Rendered Preview Modal / Card */}
+                {renderedPreview && (
+                  <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-base font-bold text-white">Live Render Preview Output</h4>
+                      <button
+                        onClick={() => setRenderedPreview(null)}
+                        className="text-slate-400 hover:text-white text-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-200">
+                      <span className="text-slate-500 font-semibold mr-2">Subject:</span>
+                      {renderedPreview.subject}
+                    </div>
+                    <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-200">
+                      <span className="text-slate-500 font-semibold mr-2">HTML:</span>
+                      <div dangerouslySetInnerHTML={{ __html: renderedPreview.html }} className="mt-2 p-3 bg-white text-black rounded" />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

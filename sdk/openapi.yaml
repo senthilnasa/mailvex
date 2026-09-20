@@ -114,38 +114,154 @@ paths:
               properties:
                 from: { type: string }
                 to: { type: array, items: { type: string } }
+                cc: { type: array, items: { type: string } }
+                bcc: { type: array, items: { type: string } }
+                reply_to: { type: string }
                 subject: { type: string }
                 text: { type: string }
                 html: { type: string }
+                headers: { type: object, additionalProperties: { type: string } }
+                tags: { type: array, items: { type: string } }
+                metadata: { type: object, additionalProperties: { type: string } }
+                template_id: { type: string }
+                template_variables: { type: object }
                 stream: { type: string, default: transactional }
       responses:
         '202':
           description: Email accepted and queued
         '400':
-          description: Invalid request or header injection detected
+          description: Invalid request, unverified domain, or header injection detected
         '409':
           description: Idempotency key conflict
 
   /email/batch:
     post:
-      summary: Send batch emails (up to 500)
+      summary: Send batch emails (up to 500 recipients)
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, recipients]
+              properties:
+                from: { type: string }
+                subject: { type: string }
+                text: { type: string }
+                html: { type: string }
+                stream: { type: string }
+                recipients:
+                  type: array
+                  items:
+                    type: object
+                    required: [to]
+                    properties:
+                      to: { type: string }
+                      template_variables: { type: object }
+                      metadata: { type: object }
       responses:
-        '202':
-          description: Batch accepted
+        '200':
+          description: Batch processed with per-recipient status
+        '400':
+          description: Validation error or limit exceeded
 
   /messages:
     get:
       summary: List messages (cursor-based pagination)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: recipient
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: stream
+          schema: { type: string }
       responses:
         '200':
-          description: Paginated messages
+          description: Paginated messages list with cursor
 
   /messages/{id}:
     get:
       summary: Get message details
       responses:
         '200':
-          description: Message details
+          description: Message details and recipient overview
+
+  /messages/{id}/recipients:
+    get:
+      summary: List message recipients
+      responses:
+        '200':
+          description: Message recipients list
+
+  /messages/{id}/events:
+    get:
+      summary: List chronological event history for message
+      responses:
+        '200':
+          description: Message events list
+
+  /messages/{id}/body:
+    get:
+      summary: Retrieve stored message body
+      responses:
+        '200':
+          description: HTML and text content
+
+  /messages/{id}/retry:
+    post:
+      summary: Retry delivery of message
+      responses:
+        '200':
+          description: Message marked for retry
+
+  /messages/{id}/cancel:
+    post:
+      summary: Cancel queued message
+      responses:
+        '200':
+          description: Message cancelled
+
+  /templates:
+    get:
+      summary: List templates
+      responses:
+        '200':
+          description: Templates list
+    post:
+      summary: Create new template
+      responses:
+        '201':
+          description: Template created
+
+  /templates/{id}:
+    get:
+      summary: Get template details
+      responses:
+        '200':
+          description: Template details and published version
+
+  /templates/{id}/render:
+    post:
+      summary: Preview template rendering with variables
+      responses:
+        '200':
+          description: Rendered subject, HTML, and text
 
   /domains:
     get:
@@ -177,6 +293,13 @@ paths:
       responses:
         '201':
           description: API key created with secret token displayed once
+
+  /api-keys/{id}:
+    delete:
+      summary: Revoke API key immediately
+      responses:
+        '200':
+          description: API key revoked
 
   /smtp-credentials:
     get:

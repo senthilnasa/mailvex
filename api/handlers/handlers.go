@@ -7,24 +7,36 @@ import (
 	"time"
 
 	"github.com/mailvex/mailvex/api/middleware"
+	"github.com/mailvex/mailvex/core"
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/domain"
 	"github.com/mailvex/mailvex/core/repository"
+	"github.com/mailvex/mailvex/core/storage"
 )
 
 type API struct {
 	repo       repository.Repository
 	audit      *audit.Service
 	encryption *crypto.EnvelopeEncryption
+	ingest     *core.IngestionEngine
+	storage    storage.Storage
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
+	store := storage.NewMemoryStorage()
 	return &API{
 		repo:       repo,
 		audit:      auditService,
 		encryption: encryption,
+		storage:    store,
+		ingest:     core.NewIngestionEngine(repo, store),
 	}
+}
+
+func (a *API) SetIngestEngine(ingest *core.IngestionEngine, store storage.Storage) {
+	a.ingest = ingest
+	a.storage = store
 }
 
 // HealthHandler returns HTTP 200 for liveness
@@ -414,37 +426,5 @@ func (a *API) ListAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": logs,
-	})
-}
-
-// ListMessagesHandler lists messages for active tenant
-func (a *API) ListMessagesHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	tenantID, _ := r.Context().Value(middleware.TenantIDKey).(string)
-
-	msgs, err := a.repo.ListMessages(r.Context(), tenantID, 50)
-	if err != nil {
-		http.Error(w, `{"error":{"code":"internal_error","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": msgs,
-	})
-}
-
-// ListDevMessagesHandler lists messages in the development sink
-func (a *API) ListDevMessagesHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	tenantID, _ := r.Context().Value(middleware.TenantIDKey).(string)
-
-	msgs, err := a.repo.ListDevelopmentMessages(r.Context(), tenantID)
-	if err != nil {
-		http.Error(w, `{"error":{"code":"internal_error","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": msgs,
 	})
 }

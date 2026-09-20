@@ -42,6 +42,7 @@ type IngestRequest struct {
 	StreamName       string
 	Tags             []string
 	Metadata         map[string]string
+	Environment      string // "live", "development", "test"
 }
 
 type IngestResult struct {
@@ -105,7 +106,13 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		return nil, err
 	}
 
-	env := tenant.Environment
+	env := req.Environment
+	if env == "" {
+		env = tenant.Environment
+	}
+	if env == "test" {
+		env = "development"
+	}
 	if env == "" {
 		env = "live"
 	}

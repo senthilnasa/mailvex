@@ -6,31 +6,38 @@ import (
 
 	"github.com/mailvex/mailvex/api/handlers"
 	"github.com/mailvex/mailvex/api/middleware"
+	"github.com/mailvex/mailvex/core"
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/dns"
 	"github.com/mailvex/mailvex/core/repository"
+	"github.com/mailvex/mailvex/core/storage"
 )
 
 // Server configures HTTP routes and middleware for Mailvex API
 type Server struct {
-	mux        *http.ServeMux
-	handler    http.Handler
-	repo       repository.Repository
-	audit      *audit.Service
-	encryption *crypto.EnvelopeEncryption
-	dnsEngine  *dns.Engine
-	logger     *slog.Logger
+	mux          *http.ServeMux
+	handler      http.Handler
+	repo         repository.Repository
+	audit        *audit.Service
+	encryption   *crypto.EnvelopeEncryption
+	dnsEngine    *dns.Engine
+	storage      storage.Storage
+	ingestEngine *core.IngestionEngine
+	logger       *slog.Logger
 }
 
 func NewServer(repo repository.Repository, auditService *audit.Service, enc *crypto.EnvelopeEncryption, logger *slog.Logger) *Server {
+	store := storage.NewMemoryStorage()
 	s := &Server{
-		mux:        http.NewServeMux(),
-		repo:       repo,
-		audit:      auditService,
-		encryption: enc,
-		dnsEngine:  dns.NewEngine(dns.NewSystemResolver()),
-		logger:     logger,
+		mux:          http.NewServeMux(),
+		repo:         repo,
+		audit:        auditService,
+		encryption:   enc,
+		dnsEngine:    dns.NewEngine(dns.NewSystemResolver()),
+		storage:      store,
+		ingestEngine: core.NewIngestionEngine(repo, store),
+		logger:       logger,
 	}
 
 	s.setupRoutes()
@@ -41,8 +48,19 @@ func (s *Server) SetDNSEngine(engine *dns.Engine) {
 	s.dnsEngine = engine
 }
 
+func (s *Server) SetIngestEngine(engine *core.IngestionEngine, store storage.Storage) {
+	s.ingestEngine = engine
+	s.storage = store
+	s.setupRoutes()
+}
+
+func (s *Server) IngestEngine() *core.IngestionEngine {
+	return s.ingestEngine
+}
+
 func (s *Server) setupRoutes() {
 	apiHandler := handlers.NewAPI(s.repo, s.audit, s.encryption)
+	apiHandler.SetIngestEngine(s.ingestEngine, s.storage)
 
 	// Public Health Probes
 	s.mux.HandleFunc("GET /health", apiHandler.HealthHandler)
@@ -111,6 +129,59 @@ func (s *Server) setupRoutes() {
 	))
 	s.mux.Handle("GET /v1/messages/development", authMiddleware(
 		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.ListDevMessagesHandler)),
+	))
+
+	// Phase 4: API Sending & Batch
+	s.mux.Handle("POST /v1/email", authMiddleware(
+		middleware.RequirePermission(s.repo, "send.email")(http.HandlerFunc(apiHandler.SendEmailHandler)),
+	))
+	s.mux.Handle("POST /v1/email/batch", authMiddleware(
+		middleware.RequirePermission(s.repo, "send.email")(http.HandlerFunc(apiHandler.SendEmailBatchHandler)),
+	))
+
+	// Phase 4: Message Inspection, Body, Retry, and Cancel
+	s.mux.Handle("GET /v1/messages/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.GetMessageHandler)),
+	))
+	s.mux.Handle("GET /v1/messages/{id}/recipients", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.GetMessageRecipientsHandler)),
+	))
+	s.mux.Handle("GET /v1/messages/{id}/events", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.read")(http.HandlerFunc(apiHandler.GetMessageEventsHandler)),
+	))
+	s.mux.Handle("GET /v1/messages/{id}/body", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.body.read")(http.HandlerFunc(apiHandler.GetMessageBodyHandler)),
+	))
+	s.mux.Handle("POST /v1/messages/{id}/retry", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.retry")(http.HandlerFunc(apiHandler.RetryMessageHandler)),
+	))
+	s.mux.Handle("POST /v1/messages/{id}/cancel", authMiddleware(
+		middleware.RequirePermission(s.repo, "messages.cancel")(http.HandlerFunc(apiHandler.CancelMessageHandler)),
+	))
+
+	// Phase 4: API Keys Management
+	s.mux.Handle("GET /v1/api-keys", authMiddleware(
+		middleware.RequirePermission(s.repo, "api_keys.read")(http.HandlerFunc(apiHandler.ListAPIKeysHandler)),
+	))
+	s.mux.Handle("POST /v1/api-keys", authMiddleware(
+		middleware.RequirePermission(s.repo, "api_keys.create")(http.HandlerFunc(apiHandler.CreateAPIKeyHandler)),
+	))
+	s.mux.Handle("DELETE /v1/api-keys/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "api_keys.revoke")(http.HandlerFunc(apiHandler.RevokeAPIKeyHandler)),
+	))
+
+	// Phase 4: Templates
+	s.mux.Handle("GET /v1/templates", authMiddleware(
+		middleware.RequirePermission(s.repo, "templates.read")(http.HandlerFunc(apiHandler.ListTemplatesHandler)),
+	))
+	s.mux.Handle("POST /v1/templates", authMiddleware(
+		middleware.RequirePermission(s.repo, "templates.write")(http.HandlerFunc(apiHandler.CreateTemplateHandler)),
+	))
+	s.mux.Handle("GET /v1/templates/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "templates.read")(http.HandlerFunc(apiHandler.GetTemplateHandler)),
+	))
+	s.mux.Handle("POST /v1/templates/{id}/render", authMiddleware(
+		middleware.RequirePermission(s.repo, "templates.read")(http.HandlerFunc(apiHandler.RenderTemplateHandler)),
 	))
 
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger

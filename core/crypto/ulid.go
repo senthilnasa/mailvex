@@ -30,6 +30,8 @@ const (
 	PrefixRequest      = "req_"
 	PrefixAudit        = "aud_"
 	PrefixMembership   = "mem_"
+	PrefixTemplate     = "tmpl_"
+	PrefixTemplateVer  = "tmplver_"
 )
 
 // NewULID generates a new ULID string with the given prefix

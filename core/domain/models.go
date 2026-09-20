@@ -280,4 +280,69 @@ type TrustedNetwork struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type APIKey struct {
+	ID             string     `json:"id"`
+	TenantID       string     `json:"tenant_id"`
+	Name           string     `json:"name"`
+	Prefix         string     `json:"prefix"`
+	KeyHash        string     `json:"-"`
+	LastFour       string     `json:"last_four"`
+	Environment    string     `json:"environment"` // live or test
+	Scopes         []string   `json:"scopes"`
+	AllowedDomains []string   `json:"allowed_domains,omitempty"`
+	AllowedCIDRs   []string   `json:"allowed_cidrs,omitempty"`
+	StreamID       *string    `json:"stream_id,omitempty"`
+	RateLimit      int        `json:"rate_limit"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+type Template struct {
+	ID          string    `json:"id"`
+	TenantID    string    `json:"tenant_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type TemplateVersion struct {
+	ID          string    `json:"id"`
+	TemplateID  string    `json:"template_id"`
+	TenantID    string    `json:"tenant_id"`
+	Version     int       `json:"version"`
+	Subject     string    `json:"subject"`
+	HTML        string    `json:"html,omitempty"`
+	Text        string    `json:"text,omitempty"`
+	Variables   []string  `json:"variables,omitempty"`
+	IsPublished bool      `json:"is_published"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type IdempotencyRecord struct {
+	ID              string            `json:"id"` // tenant_id:api_key_id:idempotency_key
+	TenantID        string            `json:"tenant_id"`
+	RequestHash     string            `json:"request_hash"`
+	Status          string            `json:"status"` // in_progress, completed
+	StatusCode      int               `json:"status_code"`
+	ResponseBody    []byte            `json:"response_body"`
+	ResponseHeaders map[string]string `json:"response_headers"`
+	CreatedAt       time.Time         `json:"created_at"`
+	ExpiresAt       time.Time         `json:"expires_at"`
+}
+
+type MessageFilter struct {
+	Limit     int        `json:"limit"`
+	Cursor    string     `json:"cursor"` // opaque base64
+	Status    string     `json:"status"`
+	Recipient string     `json:"recipient"`
+	From      string     `json:"from"`
+	Stream    string     `json:"stream"`
+	Tag       string     `json:"tag"`
+	Since     *time.Time `json:"since"`
+	Until     *time.Time `json:"until"`
+}
+
 

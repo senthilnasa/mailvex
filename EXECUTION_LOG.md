@@ -142,4 +142,37 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 ---
 
 ### Phase 4: API Sending & Templating
+- **Status:** Completed (2026-09-20)
+- **Implementations:**
+  - `core/domain`: Added `APIKey`, `Template`, `TemplateVersion`, `IdempotencyRecord`, and `MessageFilter` models.
+  - `core/crypto/apikey`: Generation of random base62 API keys (`mvx_live_...`, `mvx_test_...`) with constant-time SHA-256 hash lookup and prefix + last 4 storage.
+  - `core/template`: Logic-less Mustache-compatible template engine supporting variable lookup (`{{var}}`), unescaped HTML (`{{{var}}}` or `{{&var}}`), conditional and iterable sections (`{{#section}}...{{/section}}`), auto-escaping to prevent XSS/template injection, and strict/lenient missing variable enforcement (§23.3).
+  - `core/repository`: Added API key management, template CRUD + published versioning, idempotency records with 24h TTL, and cursor-based pagination for messages.
+  - `api/middleware`: Dual authentication support accepting either User Session (`X-User-ID`) or API Key Bearer tokens (`Bearer mvx_live_...` / `Bearer mvx_test_...`), enforcing scope verification (`send.email`, `messages.read`, etc.) and allowed IP CIDR checks.
+  - `api/handlers/email`:
+    - `POST /v1/email`: Validates Idempotency-Key (handling concurrent in-progress, matching payload replay, and mismatch conflicts), CRLF/header injection rejection (`400 header_injection`), custom headers allowlist check (`X-*`, `List-Id`, `Precedence`), 50 recipient limit, 20 MB attachment limit, domain verification check against tenant verified domains, and Mustache template rendering. Dispatches to ingestion pipeline.
+    - `POST /v1/email/batch`: Batch sending up to 500 recipients with shared defaults, per-recipient overrides (template variables, metadata), and independent failure isolation.
+  - `api/handlers/messages`: Full message inspection (`GET /v1/messages/{id}`), recipient list (`/recipients`), chronological event timeline (`/events`), stored body reading (`/body`), retry (`/retry`), and cancel (`/cancel`), plus cursor-based paginated search (`GET /v1/messages`).
+  - `api/handlers/apikeys`: API key creation (`POST /v1/api-keys`), listing (`GET /v1/api-keys`), and instant revocation (`DELETE /v1/api-keys/{id}`).
+  - `api/handlers/templates`: Template creation, versioning, listing, and live preview rendering (`POST /v1/templates/{id}/render`).
+  - `console`: Interactive React 18 UI for API Key generation (modal showing secret once with copy button), Message Logs with full Inspector modal (recipients table, event timeline, and sandboxed iframe for preview), and Templates editor with live preview output.
+  - `migrations`: `000004_api_keys_and_templates.up.sql` and `down.sql`.
+  - `sdk/openapi.yaml`: Updated OpenAPI 3.1 specifications with complete Phase 4 endpoints.
+- **Verification & Test Results:**
+  - `core/template`: `TestMustacheTemplateRendering`, `TestTemplateHTMLAutoEscape`, `TestTemplateSections`, `TestTemplateMissingVariable` all PASS.
+  - `api`:
+    - `TestAPIKeyAuthenticationAndManagement` PASS (generation, bearer auth, revocation).
+    - `TestSendEmailWithAPIKeyAndDevelopmentSink` PASS (API -> queue -> development mailbox sink verification).
+    - `TestIdempotencySemantics` PASS (replays return cached response, differing payloads return 409 conflict).
+    - `TestHeaderValidationAndCRLFFiltering` PASS (CRLF injection in From/Subject/recipients rejected with 400, prohibited custom headers rejected, allowed headers accepted).
+    - `TestRecipientLimitsAndDomainVerification` PASS (>50 recipients rejected, unverified domain rejected).
+    - `TestTemplateRenderingInEmailSend` PASS (Mustache substitution + HTML auto-escape + body retrieval).
+    - `TestBatchSendingEndpoint` PASS (batch up to 500 with per-recipient metadata).
+    - `TestMessageReadAndCursorPagination` PASS (cursor-based pagination and filter by recipient).
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 5: Outbound Delivery Engine
 - **Status:** In Progress
