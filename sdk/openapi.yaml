@@ -1,0 +1,222 @@
+openapi: 3.1.0
+info:
+  title: Mailvex API
+  version: 1.0.0
+  description: Multi-tenant, self-hosted email infrastructure platform API.
+servers:
+  - url: /v1
+    description: Current server v1 API
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is alive
+  /ready:
+    get:
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Dependencies (DB, Redis, etc.) are healthy
+        '503':
+          description: One or more dependencies are unhealthy
+
+  /auth/login:
+    post:
+      summary: Console user login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful, session cookie set
+        '401':
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      summary: Console user logout
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /auth/me:
+    get:
+      summary: Current authenticated user details and active tenant
+      responses:
+        '200':
+          description: User profile and permissions
+
+  /setup:
+    get:
+      summary: Get setup wizard status
+      responses:
+        '200':
+          description: Setup status
+    post:
+      summary: Execute initial installation setup step
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Step completed successfully
+
+  /organizations:
+    get:
+      summary: List organizations
+      responses:
+        '200':
+          description: List of organizations
+    post:
+      summary: Create organization
+      responses:
+        '201':
+          description: Organization created
+
+  /tenants:
+    get:
+      summary: List tenants accessible to user
+      responses:
+        '200':
+          description: List of tenants
+    post:
+      summary: Create tenant
+      responses:
+        '201':
+          description: Tenant created
+
+  /email:
+    post:
+      summary: Send email via REST API
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to, subject]
+              properties:
+                from: { type: string }
+                to: { type: array, items: { type: string } }
+                subject: { type: string }
+                text: { type: string }
+                html: { type: string }
+                stream: { type: string, default: transactional }
+      responses:
+        '202':
+          description: Email accepted and queued
+        '400':
+          description: Invalid request or header injection detected
+        '409':
+          description: Idempotency key conflict
+
+  /email/batch:
+    post:
+      summary: Send batch emails (up to 500)
+      responses:
+        '202':
+          description: Batch accepted
+
+  /messages:
+    get:
+      summary: List messages (cursor-based pagination)
+      responses:
+        '200':
+          description: Paginated messages
+
+  /messages/{id}:
+    get:
+      summary: Get message details
+      responses:
+        '200':
+          description: Message details
+
+  /domains:
+    get:
+      summary: List domains for tenant
+      responses:
+        '200':
+          description: List of domains
+    post:
+      summary: Add domain
+      responses:
+        '201':
+          description: Domain added
+
+  /domains/{id}/verify:
+    post:
+      summary: Trigger DNS verification for domain
+      responses:
+        '200':
+          description: Verification results
+
+  /api-keys:
+    get:
+      summary: List API keys
+      responses:
+        '200':
+          description: List of keys
+    post:
+      summary: Create API key
+      responses:
+        '201':
+          description: API key created with secret token displayed once
+
+  /smtp-credentials:
+    get:
+      summary: List SMTP credentials
+      responses:
+        '200':
+          description: Credentials list
+    post:
+      summary: Create SMTP credential
+      responses:
+        '201':
+          description: Credential created with password displayed once
+
+  /webhooks:
+    get:
+      summary: List webhooks
+      responses:
+        '200':
+          description: Webhooks list
+    post:
+      summary: Create webhook endpoint
+      responses:
+        '201':
+          description: Webhook created
+
+  /suppressions:
+    get:
+      summary: List suppressed addresses
+      responses:
+        '200':
+          description: Suppressions list
+    post:
+      summary: Add suppression
+      responses:
+        '201':
+          description: Address suppressed
+
+  /audit-logs:
+    get:
+      summary: List audit log entries
+      responses:
+        '200':
+          description: Audit logs

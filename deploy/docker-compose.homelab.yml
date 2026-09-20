@@ -1,0 +1,26 @@
+services:
+  allinone:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.allinone
+    container_name: mailvex-homelab
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - MVX_PROFILE=homelab
+    ports:
+      - "8080:8080" # API
+      - "3000:3000" # Console
+      - "25:25"     # SMTP Inbound / Device IP Auth
+      - "587:587"   # SMTP Submission
+    volumes:
+      - homelab_data:/var/lib/mailvex
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  homelab_data:
