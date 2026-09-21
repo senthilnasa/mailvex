@@ -2579,9 +2579,9 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-8">
           <div className="max-w-5xl mx-auto">
             {/* Top Bar */}
-            <div className="flex items-center justify-between pb-6 border-b border-slate-800">
+            <div className="flex items-center justify-between pb-6 border-b border-slate-800/80">
               <div>
-                <h1 className="text-2xl font-bold text-white">
+                <h1 className="text-xl font-bold text-white tracking-tight">
                   {currentTab === 'dashboard' && (activeTenant?.name || 'Dashboard')}
                   {currentTab === 'domains' && 'Domains & DNS Configuration'}
                   {currentTab === 'streams' && 'Message Streams'}
@@ -2597,62 +2597,91 @@ export default function App() {
                   {currentTab === 'alerts_warmup' && 'Reputation, DNSBL, Warmup & Alert Center'}
                   {currentTab === 'sso_compliance' && 'SSO, Impersonation & Compliance'}
                 </h1>
-                <p className="text-sm text-slate-400 mt-1">
-                  Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
-                  {activeTenant?.environment})
+                <p className="text-xs text-slate-400 mt-1 flex items-center space-x-1.5">
+                  <span>Tenant:</span>
+                  <span className="font-mono text-slate-200 bg-slate-800/80 px-1.5 py-0.5 rounded text-[11px] border border-slate-700/60">{activeTenant?.slug}</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="uppercase text-[10px] font-bold text-indigo-400">{activeTenant?.environment}</span>
                 </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-sm text-emerald-400 font-medium">Phase 12 Active</span>
+              <div className="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-xs text-emerald-400 font-medium">Cluster Healthy</span>
               </div>
             </div>
 
             {/* TAB: DASHBOARD */}
             {currentTab === 'dashboard' && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs text-slate-400 uppercase font-semibold">
-                      Total Domains
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                  <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Sending Domains</span>
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                        <Globe className="w-4 h-4 text-indigo-400" />
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold text-white mt-2">{domains.length}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {domains.filter((d) => d.status === 'verified').length} verified
+                    <div className="text-3xl font-bold text-white mt-3">{domains.length}</div>
+                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      <span>{domains.filter((d) => d.status === 'verified').length} verified</span>
                     </div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs text-slate-400 uppercase font-semibold">
-                      Message Streams
+
+                  <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Message Streams</span>
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                        <GitFork className="w-4 h-4 text-indigo-400" />
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold text-white mt-2">{streams.length}</div>
-                    <div className="text-xs text-slate-500 mt-1">Default 2 streams</div>
+                    <div className="text-3xl font-bold text-white mt-3">{streams.length}</div>
+                    <div className="text-xs text-slate-400 mt-2">Inbound & outbound active</div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs text-slate-400 uppercase font-semibold">
-                      Security Engine
+
+                  <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Security Engine</span>
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                        <Lock className="w-4 h-4 text-indigo-400" />
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold text-indigo-400 mt-2">RSA 2048</div>
-                    <div className="text-xs text-slate-500 mt-1">DKIM active</div>
+                    <div className="text-3xl font-bold text-indigo-300 mt-3">RSA 2048</div>
+                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      <span>DKIM Signing Active</span>
+                    </div>
                   </div>
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs text-slate-400 uppercase font-semibold">
-                      Verification
+
+                  <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Verification</span>
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      </div>
                     </div>
-                    <div className="text-2xl font-bold text-emerald-400 mt-2">Active</div>
-                    <div className="text-xs text-slate-500 mt-1">Multi-resolver</div>
+                    <div className="text-3xl font-bold text-emerald-400 mt-3">Healthy</div>
+                    <div className="text-xs text-slate-400 mt-2">Multi-resolver active</div>
                   </div>
                 </div>
 
-                <div className="mt-8 bg-slate-900 border border-slate-800 rounded-xl p-6">
-                  <h2 className="text-lg font-semibold text-white">
-                    Phase 2: Domains & DNS Active
-                  </h2>
-                  <p className="text-sm text-slate-400 mt-2">
-                    Multi-resolver DNS verification engine, RSA 2048 DKIM key generator,
-                    global domain uniqueness guard, degraded/grace period scheduler, and default
-                    message streams are active and validated.
-                  </p>
+                <div className="mt-6 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center space-x-2">
+                        <Zap className="w-4 h-4 text-indigo-400" />
+                        <span>Carrier-Grade Delivery Infrastructure</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                        Multi-resolver DNS verification engine, RSA 2048 DKIM key generator,
+                        global domain uniqueness guard, degraded/grace period scheduler, and default
+                        message streams are active with end-to-end envelope encryption.
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full">
+                      System Operational
+                    </span>
+                  </div>
                 </div>
               </>
             )}
