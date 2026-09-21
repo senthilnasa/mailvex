@@ -11,13 +11,13 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 | **§36** | Starting Task: Architecture Artifacts, ADRs, Scaffolding | ✅ Completed | Architecture docs, ADRs, OpenAPI spec, ERDs, repo layout | 2026-09-20 |
 | **Phase 1** | Foundation: Multi-tenancy, RBAC, Encryption, Core & API Skeletons | ✅ Completed | Isolation tests, auth tests, encryption tests, setup wizard | 2026-09-20 |
 | **Phase 2** | Domains & DNS: Verification, DKIM, SPF, DMARC | ✅ Completed | DNS stub tests, key rotation, uniqueness, degraded flow | 2026-09-20 |
-| **Phase 3** | Message Model, Queue & SMTP Ingestion | ⏳ Next | Queue tests, open relay tests, SMTP auth | - |
-| **Phase 4** | API Sending: Batch, Idempotency, Limits, Templates minimal | ⏳ Pending | Idempotency tests, rate limit tests | - |
-| **Phase 5** | Delivery Engine: Worker, MX Resolution, Suppression, Transports | ⏳ Pending | Delivery tests, retry tests, suppression | - |
-| **Phase 6** | Async Bounces, Complaints, Unsubscribe Intake | ⏳ Pending | DSN/ARF parser tests, feedback loops | - |
+| **Phase 3** | Message Model, Queue & SMTP Ingestion | ✅ Completed | Outbox queue tests, open relay security tests, MIME parser | 2026-09-20 |
+| **Phase 4** | API Sending: Batch, Idempotency, Limits, Templates minimal | ✅ Completed | Idempotency semantics, API keys, rate limits, templates | 2026-09-20 |
+| **Phase 5** | Delivery Engine: Worker, MX Resolution, Suppression, Transports | ✅ Completed | Direct MX delivery, smart-host relay, retry scheduler, DLQ | 2026-09-21 |
+| **Phase 6** | Async Bounces, Complaints, Unsubscribe Intake | ✅ Completed | DSN hard/soft bounce, ARF FBL complaints, VERP, abuse queue | 2026-09-21 |
 | **Phase 7** | Analytics & Reporting: Rollups, Histograms, ISP Breakdown, CSV | ✅ Completed | Pre-aggregated rollups, latency histogram, provider breakdown, CSV exporter | 2026-09-21 |
-| **Phase 8** | Webhooks Service: Signing, Replay Protection, Retries | ⏳ Next | Webhook signature & auto-disable tests | - |
-| **Phase 9** | Templates Engine & Management | ⏳ Pending | Mustache rendering & safety tests | - |
+| **Phase 8** | Webhooks Service: Signing, Replay Protection, Retries | ✅ Completed | HMAC signing, 24h secret rotation overlap, replay defense, circuit breaker | 2026-09-21 |
+| **Phase 9** | Templates Engine & Management | ⏳ Next | Mustache rendering, syntax validation, draft/publish lifecycle | - |
 | **Phase 10** | Suppression UI/API, Privacy (GDPR/DPDP), Retention | ⏳ Pending | Erasure report & partition purge tests | - |
 | **Phase 11** | Inbound Email, Routing & Local Mailboxes | ⏳ Pending | Inbound route & push notify tests | - |
 | **Phase 12** | Reputation, Health, Alerts, SSO (OIDC/SAML) | ⏳ Pending | Alert evaluation & SSO auth tests | - |
@@ -317,6 +317,59 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 ---
 
 ### Phase 8: Webhook Delivery Engine
+- **Status:** Completed & Verified (2026-09-21)
+- **Components Implemented:**
+  - `migrations/000008_webhooks`:
+    - `webhook_endpoints`: Endpoints with destination URL, description, subscribed events JSON, active HMAC signing secret, previous secret & 24h expiration timestamp for zero-downtime secret rollover, status (`active`, `disabled_failing`, `disabled_manual`), and consecutive failure counter.
+    - `webhook_deliveries`: Full historical delivery log with attempt ID, event ID, event type, serialized payload, HTTP status code, response body preview, error message, attempt number, and duration (ms).
+  - `core/domain`: Added models `WebhookEndpoint` and `WebhookDelivery`.
+  - `core/webhooks`:
+    - `Dispatcher`: Dispatches events to subscribed endpoints with timeout and security headers:
+      - `X-Mailvex-Delivery-Id`: Unique delivery ID (`whd_...`)
+      - `X-Mailvex-Event-Id`: Unique event ID (`evt_...`)
+      - `X-Mailvex-Timestamp`: Unix epoch timestamp `t`
+      - `X-Mailvex-Signature`: `t=<unix>,v1=<sig1>[,v1=<sig2>]`
+    - HMAC-SHA256 Signature computation over string `${t}.${payload}`.
+    - 24-Hour Secret Rotation Overlap (§1.2): Generates dual signatures (`v1=<new>,v1=<old>`) during the 24-hour rollover window.
+    - Replay Defense (`VerifySignature`): Strictly verifies signatures and rejects deliveries where `|now - t| > 300` seconds (§1.1).
+    - Automatic Circuit Breaker: Tracks consecutive failure counts. After 10 consecutive failures, automatically transitions endpoint status to `disabled_failing` to prevent cascading outbound exhaustion (§1.3).
+    - Test Ping (`DispatchPing`): Immediately sends `webhook.test` event ping.
+  - `core/repository`: Added tenant-scoped webhook operations (`CreateWebhookEndpoint`, `GetWebhookEndpoint`, `ListWebhookEndpoints`, `UpdateWebhookEndpoint`, `DeleteWebhookEndpoint`, `RotateWebhookSecret`, `RecordWebhookDelivery`, `ListWebhookDeliveries`, `GetActiveWebhookEndpointsForEvent`).
+  - `api/handlers/webhooks`:
+    - `POST /v1/webhooks`: Register webhook endpoint with validation and secret generation.
+    - `GET /v1/webhooks`: List tenant webhook endpoints.
+    - `GET /v1/webhooks/{id}`: Get endpoint details.
+    - `PATCH /v1/webhooks/{id}`: Update endpoint URL, events, description, status.
+    - `DELETE /v1/webhooks/{id}`: Delete endpoint.
+    - `POST /v1/webhooks/{id}/rotate-secret`: Rotate secret with 24-hour overlap.
+    - `POST /v1/webhooks/{id}/test`: Trigger test event ping.
+    - `GET /v1/webhooks/{id}/deliveries`: Paginated delivery attempts history.
+  - `api/server`: Mounted all Phase 8 routes with RBAC middleware (`webhooks.read`, `webhooks.write`, `webhooks.secret.rotate`).
+  - `console`: Added **Webhooks & Signing** tab:
+    - Endpoint registration form with destination URL, description, and event subscriptions.
+    - Registered endpoints table with status badges (`Active`, `Circuit Broken (10+ Failures)`, `Disabled`).
+    - Secret rotation button with zero-downtime 24-hour dual-signature alert banner.
+    - Test Ping trigger button.
+    - Delivery history drawer/modal showing HTTP status, duration, error messages, and timestamps.
+    - Inline Webhook Security documentation and signature verification guide.
+  - `sdk/openapi.yaml`: Documented all Phase 8 endpoints.
+- **Verification & Test Results:**
+  - `core/webhooks/webhooks_test.go`:
+    - `TestWebhookSignatureGenerationAndVerification` PASS (HMAC-SHA256 valid signature, payload tampering rejection, invalid secret rejection).
+    - `TestWebhookSecretRotation24HourOverlap` PASS (zero-downtime dual signatures verified by receivers using either old or new secret; old secret signature omitted after 24h expiration).
+    - `TestWebhookReplayAttackToleranceRejection` PASS (timestamp > 300s rejected with `ErrReplayAttack`).
+    - `TestWebhookCircuitBreakerAutoDisable` PASS (endpoint automatically disabled after 10 consecutive failures and stopped receiving dispatches).
+    - `TestWebhookTestPing` PASS (ping dispatches `webhook.test` event, signed header verified, delivery logged).
+  - `api/webhooks_test.go`:
+    - `TestWebhookHTTPEndpoints` PASS (full REST API lifecycle: create, list, get, update, secret rotation with 24h overlap, test ping dispatch, delivery history listing, delete).
+  - `go test -count=1 ./...`: 100% PASS across all 22 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 9: Templates Engine & Management
 - **Status:** Pending
+
 
 

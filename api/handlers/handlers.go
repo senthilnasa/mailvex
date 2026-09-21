@@ -15,6 +15,7 @@ import (
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/reports"
 	"github.com/mailvex/mailvex/core/storage"
+	"github.com/mailvex/mailvex/core/webhooks"
 )
 
 type API struct {
@@ -25,6 +26,7 @@ type API struct {
 	storage    storage.Storage
 	reports    *reports.ReportProcessor
 	analytics  *analytics.Engine
+	webhooks   *webhooks.Dispatcher
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
@@ -37,6 +39,7 @@ func NewAPI(repo repository.Repository, auditService *audit.Service, encryption 
 		ingest:     core.NewIngestionEngine(repo, store),
 		reports:    reports.NewReportProcessor(repo, nil, nil),
 		analytics:  analytics.NewEngine(repo),
+		webhooks:   webhooks.NewDispatcher(repo, nil),
 	}
 }
 
@@ -51,6 +54,10 @@ func (a *API) SetReportProcessor(p *reports.ReportProcessor) {
 
 func (a *API) SetAnalyticsEngine(e *analytics.Engine) {
 	a.analytics = e
+}
+
+func (a *API) SetWebhookDispatcher(d *webhooks.Dispatcher) {
+	a.webhooks = d
 }
 
 // HealthHandler returns HTTP 200 for liveness

@@ -139,12 +139,38 @@ interface LatencyHistogramItem {
   percentage: number
 }
 
+interface WebhookEndpointItem {
+  id: string
+  url: string
+  description?: string
+  events: string[]
+  secret: string
+  previous_secret?: string
+  previous_secret_expires_at?: string
+  status: string
+  consecutive_failures: number
+  created_at: string
+}
+
+interface WebhookDeliveryItem {
+  id: string
+  endpoint_id: string
+  event_id: string
+  event_type: string
+  payload: string
+  status_code?: number
+  response_body?: string
+  error_message?: string
+  duration_ms: number
+  created_at: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -202,6 +228,16 @@ export default function App() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
 
+  // Phase 8: Webhooks state
+  const [webhooksList, setWebhooksList] = useState<WebhookEndpointItem[]>([])
+  const [newWebhookURL, setNewWebhookURL] = useState('')
+  const [newWebhookDesc, setNewWebhookDesc] = useState('')
+  const [newWebhookEvents, setNewWebhookEvents] = useState<string>('*')
+  const [selectedWebhook, setSelectedWebhook] = useState<WebhookEndpointItem | null>(null)
+  const [webhookDeliveries, setWebhookDeliveries] = useState<WebhookDeliveryItem[]>([])
+  const [deliveriesModalOpen, setDeliveriesModalOpen] = useState(false)
+  const [webhookActionMsg, setWebhookActionMsg] = useState<string | null>(null)
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -236,8 +272,124 @@ export default function App() {
       loadFBLReports()
       loadPostmasterSnaps()
       loadAnalytics()
+      loadWebhooks()
     }
   }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
+
+  const loadWebhooks = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/webhooks', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setWebhooksList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleCreateWebhook = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newWebhookURL) return
+    try {
+      const events = newWebhookEvents === '*' ? ['*'] : newWebhookEvents.split(',').map((s) => s.trim()).filter(Boolean)
+      const res = await fetch('/v1/webhooks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          url: newWebhookURL,
+          description: newWebhookDesc || undefined,
+          events: events.length > 0 ? events : ['*'],
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setNewWebhookURL('')
+        setNewWebhookDesc('')
+        setNewWebhookEvents('*')
+        loadWebhooks()
+        setWebhookActionMsg(`Created webhook endpoint with secret: ${data.data?.secret}`)
+      } else {
+        alert(data.error?.message || 'Failed to create webhook')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleRotateWebhookSecret = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Rotate secret? Both old and new secrets will be signed for 24 hours to prevent dropped payloads.')) return
+    try {
+      const res = await fetch(`/v1/webhooks/${id}/rotate-secret`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        loadWebhooks()
+        setWebhookActionMsg(`New Secret: ${data.data?.secret}. Both old and new secrets active until: ${new Date(data.overlap_expires_at).toLocaleString()}`)
+      } else {
+        alert(data.error?.message || 'Failed to rotate secret')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleTestWebhook = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/webhooks/${id}/test`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        const del = data.delivery
+        alert(`Test Ping Dispatched!\nStatus Code: ${del?.status_code || 'Error'}\nDuration: ${del?.duration_ms}ms\nResponse: ${del?.response_body || del?.error_message || 'None'}`)
+        loadWebhooks()
+      } else {
+        alert(data.error?.message || 'Ping failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleViewDeliveries = async (ep: WebhookEndpointItem) => {
+    if (!activeTenant || !user) return
+    setSelectedWebhook(ep)
+    setDeliveriesModalOpen(true)
+    try {
+      const res = await fetch(`/v1/webhooks/${ep.id}/deliveries`, {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setWebhookDeliveries(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleDeleteWebhook = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Delete this webhook endpoint?')) return
+    try {
+      const res = await fetch(`/v1/webhooks/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadWebhooks()
+      }
+    } catch {}
+  }
 
   const loadAnalytics = async () => {
     if (!activeTenant || !user) return
@@ -1106,6 +1258,16 @@ export default function App() {
           >
             Analytics & Reports
           </button>
+          <button
+            onClick={() => setCurrentTab('webhooks')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'webhooks'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Webhooks & Signing
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -1124,6 +1286,7 @@ export default function App() {
                   {currentTab === 'suppressions' && 'Suppression List & Safeguards'}
                   {currentTab === 'reputation' && 'Reputation, Feedback Loops & Abuse Queue'}
                   {currentTab === 'analytics' && 'Analytics & Deliverability Reporting'}
+                  {currentTab === 'webhooks' && 'Webhooks, Signatures & Replay Defense'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -2406,6 +2569,272 @@ export default function App() {
                     </table>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* TAB: WEBHOOKS */}
+            {currentTab === 'webhooks' && (
+              <div className="mt-6 space-y-8">
+                {/* Action Alert Banner */}
+                {webhookActionMsg && (
+                  <div className="bg-emerald-950/80 border border-emerald-500 rounded-xl p-4 flex items-center justify-between text-emerald-200 text-xs font-mono">
+                    <div className="flex items-center space-x-2">
+                      <span>🔑</span>
+                      <span>{webhookActionMsg}</span>
+                    </div>
+                    <button
+                      onClick={() => setWebhookActionMsg(null)}
+                      className="text-slate-400 hover:text-white text-base ml-4"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {/* Register Webhook Form */}
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
+                  <h2 className="text-base font-semibold text-white">Register Webhook Endpoint</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Configure real-time HTTPS webhook endpoints with HMAC-SHA256 signatures and timestamp replay defense.
+                  </p>
+                  <form onSubmit={handleCreateWebhook} className="mt-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300">Destination URL</label>
+                        <input
+                          type="url"
+                          required
+                          placeholder="https://your-api.com/webhooks/mailvex"
+                          value={newWebhookURL}
+                          onChange={(e) => setNewWebhookURL(e.target.value)}
+                          className="mt-1 block w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300">Description (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Production events subscriber"
+                          value={newWebhookDesc}
+                          onChange={(e) => setNewWebhookDesc(e.target.value)}
+                          className="mt-1 block w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300">
+                        Subscribed Events (comma-separated, or * for all)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="* or message.delivered, message.bounced, message.complained"
+                        value={newWebhookEvents}
+                        onChange={(e) => setNewWebhookEvents(e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 text-xs font-mono border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                      >
+                        Register Webhook
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Webhooks Endpoints Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="px-6 py-5 border-b border-slate-800">
+                    <h3 className="text-base font-semibold text-white">Registered Webhooks</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Configured endpoints receiving signed HTTP POST dispatches.
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <tr>
+                          <th className="px-6 py-3">Endpoint URL</th>
+                          <th className="px-6 py-3">Events</th>
+                          <th className="px-6 py-3">Signing Secret</th>
+                          <th className="px-6 py-3">Status</th>
+                          <th className="px-6 py-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {webhooksList.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                              No webhooks registered. Add an endpoint above to receive real-time event notifications.
+                            </td>
+                          </tr>
+                        ) : (
+                          webhooksList.map((ep) => (
+                            <tr key={ep.id} className="hover:bg-slate-800/40">
+                              <td className="px-6 py-4">
+                                <div className="font-mono text-xs text-white font-semibold">{ep.url}</div>
+                                {ep.description && (
+                                  <div className="text-xs text-slate-400 mt-0.5">{ep.description}</div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-1">
+                                  {ep.events.map((ev) => (
+                                    <span
+                                      key={ev}
+                                      className="px-2 py-0.5 rounded text-xs font-mono bg-indigo-950 text-indigo-300 border border-indigo-800"
+                                    >
+                                      {ev}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-mono text-xs text-slate-400">
+                                  {ep.secret.slice(0, 10)}••••••••
+                                </div>
+                                <button
+                                  onClick={() => handleRotateWebhookSecret(ep.id)}
+                                  className="text-xs text-indigo-400 hover:text-indigo-300 underline mt-1"
+                                >
+                                  Rotate Secret (24h overlap)
+                                </button>
+                              </td>
+                              <td className="px-6 py-4">
+                                {ep.status === 'active' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                    Active
+                                  </span>
+                                )}
+                                {ep.status === 'disabled_failing' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-950 text-rose-400 border border-rose-800">
+                                    Circuit Broken (10+ Failures)
+                                  </span>
+                                )}
+                                {ep.status === 'disabled_manual' && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                                    Disabled
+                                  </span>
+                                )}
+                                {ep.consecutive_failures > 0 && (
+                                  <div className="text-xs text-rose-400 mt-0.5">
+                                    {ep.consecutive_failures} failures
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => handleTestWebhook(ep.id)}
+                                    className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
+                                  >
+                                    Test Ping
+                                  </button>
+                                  <button
+                                    onClick={() => handleViewDeliveries(ep)}
+                                    className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
+                                  >
+                                    Deliveries
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteWebhook(ep.id)}
+                                    className="text-xs text-rose-400 hover:text-rose-300"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Webhook Signature & Security Docs Box */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <h3 className="text-base font-semibold text-white mb-2">Webhook Security &amp; Replay Protection (§1.1, §1.2)</h3>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Mailvex signs each delivery using HMAC-SHA256. Verify the signature header and check timestamp tolerance before processing payloads:
+                  </p>
+                  <pre className="bg-slate-950 text-indigo-300 p-4 rounded-lg text-xs font-mono overflow-x-auto border border-slate-800">
+{`Header: X-Mailvex-Signature: t=<unix_time>,v1=<hmac_sha256_hex>
+Expected string to sign: \`\${timestamp}.\${raw_json_body}\`
+Replay defense: reject if |now - timestamp| > 300 seconds
+Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
+                  </pre>
+                </div>
+
+                {/* Deliveries History Modal */}
+                {deliveriesModalOpen && (
+                  <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-semibold text-white">
+                            Webhook Delivery History
+                          </h3>
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                            {selectedWebhook?.url}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setDeliveriesModalOpen(false)}
+                          className="text-slate-400 hover:text-white text-lg font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="p-6 overflow-y-auto flex-1">
+                        <table className="w-full text-left text-xs text-slate-300">
+                          <thead className="bg-slate-950/60 uppercase font-semibold text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="px-4 py-2">Delivery ID</th>
+                              <th className="px-4 py-2">Event</th>
+                              <th className="px-4 py-2">Status</th>
+                              <th className="px-4 py-2">Duration</th>
+                              <th className="px-4 py-2">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800">
+                            {webhookDeliveries.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                                  No delivery attempts recorded for this webhook.
+                                </td>
+                              </tr>
+                            ) : (
+                              webhookDeliveries.map((del) => (
+                                <tr key={del.id} className="hover:bg-slate-800/40">
+                                  <td className="px-4 py-3 font-mono text-white">{del.id}</td>
+                                  <td className="px-4 py-3 font-mono text-indigo-300">{del.event_type}</td>
+                                  <td className="px-4 py-3">
+                                    {del.status_code && del.status_code >= 200 && del.status_code < 300 ? (
+                                      <span className="text-emerald-400 font-semibold">{del.status_code} OK</span>
+                                    ) : (
+                                      <span className="text-rose-400 font-semibold">
+                                        {del.status_code || 'Error'}: {del.error_message || 'Failed'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono">{del.duration_ms}ms</td>
+                                  <td className="px-4 py-3 text-slate-500">
+                                    {new Date(del.created_at).toLocaleTimeString()}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

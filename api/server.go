@@ -250,6 +250,32 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.DownloadAnalyticsExportHandler)),
 	))
 
+	// Phase 8: Webhook Delivery Engine (§20)
+	s.mux.Handle("POST /v1/webhooks", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.write")(http.HandlerFunc(apiHandler.CreateWebhookEndpointHandler)),
+	))
+	s.mux.Handle("GET /v1/webhooks", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.read")(http.HandlerFunc(apiHandler.ListWebhookEndpointsHandler)),
+	))
+	s.mux.Handle("GET /v1/webhooks/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.read")(http.HandlerFunc(apiHandler.GetWebhookEndpointHandler)),
+	))
+	s.mux.Handle("PATCH /v1/webhooks/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.write")(http.HandlerFunc(apiHandler.UpdateWebhookEndpointHandler)),
+	))
+	s.mux.Handle("DELETE /v1/webhooks/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.write")(http.HandlerFunc(apiHandler.DeleteWebhookEndpointHandler)),
+	))
+	s.mux.Handle("POST /v1/webhooks/{id}/rotate-secret", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.secret.rotate")(http.HandlerFunc(apiHandler.RotateWebhookSecretHandler)),
+	))
+	s.mux.Handle("POST /v1/webhooks/{id}/test", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.write")(http.HandlerFunc(apiHandler.TestWebhookEndpointHandler)),
+	))
+	s.mux.Handle("GET /v1/webhooks/{id}/deliveries", authMiddleware(
+		middleware.RequirePermission(s.repo, "webhooks.read")(http.HandlerFunc(apiHandler.ListWebhookDeliveriesHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

@@ -597,5 +597,32 @@ type AnalyticsExport struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
+type WebhookEndpoint struct {
+	ID                      string     `json:"id"`
+	TenantID                string     `json:"tenant_id"`
+	URL                     string     `json:"url"`
+	Description             *string    `json:"description,omitempty"`
+	Events                  []string   `json:"events"` // e.g. ["*"], ["message.delivered", "message.bounced"]
+	Secret                  string     `json:"secret,omitempty"`
+	PreviousSecret          *string    `json:"previous_secret,omitempty"`
+	PreviousSecretExpiresAt *time.Time `json:"previous_secret_expires_at,omitempty"`
+	Status                  string     `json:"status"` // active, disabled_failing, disabled_manual
+	ConsecutiveFailures     int        `json:"consecutive_failures"`
+	CreatedAt               time.Time  `json:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at"`
+}
 
-
+type WebhookDelivery struct {
+	ID           string    `json:"id"`
+	TenantID     string    `json:"tenant_id"`
+	EndpointID   string    `json:"endpoint_id"`
+	EventID      string    `json:"event_id"`
+	EventType    string    `json:"event_type"`
+	Payload      string    `json:"payload"`
+	StatusCode   *int      `json:"status_code,omitempty"`
+	ResponseBody *string   `json:"response_body,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	Attempt      int       `json:"attempt"`
+	DurationMS   int       `json:"duration_ms"`
+	CreatedAt    time.Time `json:"created_at"`
+}

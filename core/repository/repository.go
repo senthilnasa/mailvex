@@ -195,6 +195,17 @@ type Repository interface {
 	GetAnalyticsExport(ctx context.Context, tenantID, exportID string) (*domain.AnalyticsExport, error)
 	ListAnalyticsExports(ctx context.Context, tenantID string, limit int) ([]*domain.AnalyticsExport, error)
 	UpdateAnalyticsExport(ctx context.Context, tenantID, exportID, status string, fileURL *string, fileData []byte) error
+
+	// Phase 8: Webhooks
+	CreateWebhookEndpoint(ctx context.Context, endpoint *domain.WebhookEndpoint) error
+	GetWebhookEndpoint(ctx context.Context, tenantID, id string) (*domain.WebhookEndpoint, error)
+	ListWebhookEndpoints(ctx context.Context, tenantID string) ([]*domain.WebhookEndpoint, error)
+	UpdateWebhookEndpoint(ctx context.Context, endpoint *domain.WebhookEndpoint) error
+	DeleteWebhookEndpoint(ctx context.Context, tenantID, id string) error
+	RotateWebhookSecret(ctx context.Context, tenantID, id, newSecret string, prevExpiresAt time.Time) (*domain.WebhookEndpoint, error)
+	RecordWebhookDelivery(ctx context.Context, delivery *domain.WebhookDelivery) error
+	ListWebhookDeliveries(ctx context.Context, tenantID, endpointID string, limit, offset int) ([]*domain.WebhookDelivery, error)
+	GetActiveWebhookEndpointsForEvent(ctx context.Context, tenantID, eventType string) ([]*domain.WebhookEndpoint, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -254,6 +265,10 @@ type MemoryRepository struct {
 	// Phase 7 collections
 	analyticsRollups []*domain.AnalyticsRollup
 	analyticsExports map[string]*domain.AnalyticsExport
+
+	// Phase 8 collections
+	webhookEndpoints  map[string]*domain.WebhookEndpoint
+	webhookDeliveries []*domain.WebhookDelivery
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -300,6 +315,8 @@ func NewMemoryRepository() *MemoryRepository {
 		postmasterSnaps:  make([]*domain.PostmasterSnapshot, 0),
 		analyticsRollups: make([]*domain.AnalyticsRollup, 0),
 		analyticsExports: make(map[string]*domain.AnalyticsExport),
+		webhookEndpoints:  make(map[string]*domain.WebhookEndpoint),
+		webhookDeliveries: make([]*domain.WebhookDelivery, 0),
 	}
 
 	// Seed default IP pool
@@ -386,7 +403,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"send.email", "messages.read", "messages.body.read", "messages.retry", "messages.export", "messages.cancel",
 		"suppressions.read", "suppressions.write", "suppressions.import",
 		"templates.read", "templates.write", "templates.publish",
-		"webhooks.read", "webhooks.write", "webhooks.replay",
+		"webhooks.read", "webhooks.write", "webhooks.replay", "webhooks.secret.rotate",
 		"analytics.read", "analytics.export", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
@@ -2385,6 +2402,169 @@ func equalPtr(a, b *string) bool {
 		return false
 	}
 	return *a == *b
+}
+
+// Phase 8: Webhook Repository Methods
+
+func (r *MemoryRepository) CreateWebhookEndpoint(ctx context.Context, endpoint *domain.WebhookEndpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if endpoint.TenantID == "" {
+		return errors.New("tenant_id is required")
+	}
+	r.webhookEndpoints[endpoint.ID] = endpoint
+	return nil
+}
+
+func (r *MemoryRepository) GetWebhookEndpoint(ctx context.Context, tenantID, id string) (*domain.WebhookEndpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ep, ok := r.webhookEndpoints[id]
+	if !ok || ep.TenantID != tenantID {
+		return nil, errors.New("webhook endpoint not found")
+	}
+	return ep, nil
+}
+
+func (r *MemoryRepository) ListWebhookEndpoints(ctx context.Context, tenantID string) ([]*domain.WebhookEndpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*domain.WebhookEndpoint
+	for _, ep := range r.webhookEndpoints {
+		if ep.TenantID == tenantID {
+			result = append(result, ep)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+	return result, nil
+}
+
+func (r *MemoryRepository) UpdateWebhookEndpoint(ctx context.Context, endpoint *domain.WebhookEndpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.webhookEndpoints[endpoint.ID]
+	if !ok || existing.TenantID != endpoint.TenantID {
+		return errors.New("webhook endpoint not found")
+	}
+
+	endpoint.UpdatedAt = time.Now().UTC()
+	r.webhookEndpoints[endpoint.ID] = endpoint
+	return nil
+}
+
+func (r *MemoryRepository) DeleteWebhookEndpoint(ctx context.Context, tenantID, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ep, ok := r.webhookEndpoints[id]
+	if !ok || ep.TenantID != tenantID {
+		return errors.New("webhook endpoint not found")
+	}
+
+	delete(r.webhookEndpoints, id)
+	return nil
+}
+
+func (r *MemoryRepository) RotateWebhookSecret(ctx context.Context, tenantID, id, newSecret string, prevExpiresAt time.Time) (*domain.WebhookEndpoint, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ep, ok := r.webhookEndpoints[id]
+	if !ok || ep.TenantID != tenantID {
+		return nil, errors.New("webhook endpoint not found")
+	}
+
+	oldSecret := ep.Secret
+	ep.PreviousSecret = &oldSecret
+	ep.PreviousSecretExpiresAt = &prevExpiresAt
+	ep.Secret = newSecret
+	ep.UpdatedAt = time.Now().UTC()
+	return ep, nil
+}
+
+func (r *MemoryRepository) RecordWebhookDelivery(ctx context.Context, delivery *domain.WebhookDelivery) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.webhookDeliveries = append(r.webhookDeliveries, delivery)
+
+	// Update endpoint failure counts and circuit breaker
+	ep, ok := r.webhookEndpoints[delivery.EndpointID]
+	if ok && ep.TenantID == delivery.TenantID {
+		isSuccess := delivery.StatusCode != nil && *delivery.StatusCode >= 200 && *delivery.StatusCode < 300
+		if isSuccess {
+			ep.ConsecutiveFailures = 0
+		} else {
+			ep.ConsecutiveFailures++
+			if ep.ConsecutiveFailures >= 10 { // circuit breaking threshold
+				ep.Status = "disabled_failing"
+			}
+		}
+		ep.UpdatedAt = time.Now().UTC()
+	}
+
+	return nil
+}
+
+func (r *MemoryRepository) ListWebhookDeliveries(ctx context.Context, tenantID, endpointID string, limit, offset int) ([]*domain.WebhookDelivery, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var matched []*domain.WebhookDelivery
+	for _, d := range r.webhookDeliveries {
+		if d.TenantID == tenantID {
+			if endpointID == "" || d.EndpointID == endpointID {
+				matched = append(matched, d)
+			}
+		}
+	}
+
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(matched) {
+		return []*domain.WebhookDelivery{}, nil
+	}
+
+	end := offset + limit
+	if limit <= 0 || end > len(matched) {
+		end = len(matched)
+	}
+
+	return matched[offset:end], nil
+}
+
+func (r *MemoryRepository) GetActiveWebhookEndpointsForEvent(ctx context.Context, tenantID, eventType string) ([]*domain.WebhookEndpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*domain.WebhookEndpoint
+	for _, ep := range r.webhookEndpoints {
+		if ep.TenantID == tenantID && ep.Status == "active" {
+			subscribes := false
+			for _, ev := range ep.Events {
+				if ev == "*" || ev == eventType {
+					subscribes = true
+					break
+				}
+			}
+			if subscribes {
+				result = append(result, ep)
+			}
+		}
+	}
+	return result, nil
 }
 
 

@@ -321,9 +321,110 @@ paths:
           description: Webhooks list
     post:
       summary: Create webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                description: { type: string }
+                events:
+                  type: array
+                  items: { type: string }
       responses:
         '201':
           description: Webhook created
+
+  /webhooks/{id}:
+    get:
+      summary: Get webhook endpoint details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Webhook details
+    patch:
+      summary: Update webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+                description: { type: string }
+                events:
+                  type: array
+                  items: { type: string }
+                status:
+                  type: string
+                  enum: [active, disabled_manual]
+      responses:
+        '200':
+          description: Webhook updated
+    delete:
+      summary: Delete webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Webhook deleted
+
+  /webhooks/{id}/rotate-secret:
+    post:
+      summary: Rotate webhook signing secret with 24-hour overlap window
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Secret rotated and expiration scheduled
+
+  /webhooks/{id}/test:
+    post:
+      summary: Send a test ping event to webhook endpoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Test ping dispatch result
+
+  /webhooks/{id}/deliveries:
+    get:
+      summary: List webhook delivery attempts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Webhook deliveries history
 
   /suppressions:
     get:
