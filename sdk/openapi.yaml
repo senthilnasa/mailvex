@@ -504,3 +504,117 @@ paths:
       responses:
         '201':
           description: Snapshot recorded
+
+  /v1/analytics/overview:
+    get:
+      summary: Query aggregated deliverability KPIs and complaint rate warning
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+            default: 24h
+        - name: stream_id
+          in: query
+          schema:
+            type: string
+        - name: domain_id
+          in: query
+          schema:
+            type: string
+        - name: provider
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Analytics overview summary
+
+  /v1/analytics/time-series:
+    get:
+      summary: Query time-series delivery and bounce trend points
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+        - name: resolution
+          in: query
+          schema:
+            type: string
+            enum: [1h, 1d]
+      responses:
+        '200':
+          description: Time series points
+
+  /v1/analytics/providers:
+    get:
+      summary: Query delivery and complaint breakdown classified by major mailbox provider
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+      responses:
+        '200':
+          description: Major provider breakdown
+
+  /v1/analytics/latency:
+    get:
+      summary: Query outbound SMTP delivery latency histogram distribution
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [24h, 7d, 30d]
+      responses:
+        '200':
+          description: Latency histogram distribution
+
+  /v1/analytics/export:
+    post:
+      summary: Trigger asynchronous or on-demand analytics CSV export
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                range:
+                  type: string
+                  enum: [24h, 7d, 30d]
+                stream_id:
+                  type: string
+                domain_id:
+                  type: string
+      responses:
+        '201':
+          description: Export job created
+
+  /v1/analytics/exports:
+    get:
+      summary: List analytics report exports
+      responses:
+        '200':
+          description: Export jobs list
+
+  /v1/analytics/exports/{id}/download:
+    get:
+      summary: Download generated analytics CSV report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string

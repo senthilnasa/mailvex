@@ -280,6 +280,17 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		return nil, fmt.Errorf("failed to commit message transaction: %w", err)
 	}
 
+	campaignTag := "default"
+	if len(msg.Tags) > 0 {
+		campaignTag = msg.Tags[0]
+	}
+	now := time.Now().UTC()
+	for _, rcpt := range recipients {
+		if rcpt.Status != "suppressed" {
+			_ = eng.repo.RecordAnalyticsEvent(ctx, req.TenantID, "message.sent", &streamID, &fromDom.ID, rcpt.AddressDomain, campaignTag, 0, now)
+		}
+	}
+
 	return &IngestResult{
 		MessageID:    msgID,
 		Status:       "queued",

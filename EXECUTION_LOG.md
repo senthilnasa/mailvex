@@ -15,10 +15,10 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 | **Phase 4** | API Sending: Batch, Idempotency, Limits, Templates minimal | ⏳ Pending | Idempotency tests, rate limit tests | - |
 | **Phase 5** | Delivery Engine: Worker, MX Resolution, Suppression, Transports | ⏳ Pending | Delivery tests, retry tests, suppression | - |
 | **Phase 6** | Async Bounces, Complaints, Unsubscribe Intake | ⏳ Pending | DSN/ARF parser tests, feedback loops | - |
-| **Phase 7** | Webhooks Service: Signing, Replay Protection, Retries | ⏳ Pending | Webhook signature & auto-disable tests | - |
-| **Phase 8** | Suppression UI/API, Privacy (GDPR/DPDP), Retention | ⏳ Pending | Erasure report & partition purge tests | - |
+| **Phase 7** | Analytics & Reporting: Rollups, Histograms, ISP Breakdown, CSV | ✅ Completed | Pre-aggregated rollups, latency histogram, provider breakdown, CSV exporter | 2026-09-21 |
+| **Phase 8** | Webhooks Service: Signing, Replay Protection, Retries | ⏳ Next | Webhook signature & auto-disable tests | - |
 | **Phase 9** | Templates Engine & Management | ⏳ Pending | Mustache rendering & safety tests | - |
-| **Phase 10** | Tracking & Analytics: Bot Filtering, Rollups | ⏳ Pending | Signed click/open & bot filter tests | - |
+| **Phase 10** | Suppression UI/API, Privacy (GDPR/DPDP), Retention | ⏳ Pending | Erasure report & partition purge tests | - |
 | **Phase 11** | Inbound Email, Routing & Local Mailboxes | ⏳ Pending | Inbound route & push notify tests | - |
 | **Phase 12** | Reputation, Health, Alerts, SSO (OIDC/SAML) | ⏳ Pending | Alert evaluation & SSO auth tests | - |
 | **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI | ⏳ Pending | Backup/restore test, load tests | - |
@@ -271,5 +271,52 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 ---
 
 ### Phase 7: Analytics & Reporting
+- **Status:** Completed & Verified (2026-09-21)
+- **Components Implemented:**
+  - `migrations/000007_analytics`:
+    - `analytics_rollups`: Multi-dimensional pre-aggregated counter table partitioned by time bucket (`1h`, `1d`) with dimensions (`tenant_id`, `stream_id`, `domain_id`, `provider`, `campaign_tag`), latency histogram distribution columns (`latency_lt_5s`, `latency_lt_30s`, `latency_lt_1m`, `latency_lt_5m`, `latency_lt_15m`, `latency_gt_15m`), and sum/count for percentiles.
+    - `analytics_exports`: Persistent job records for on-demand and asynchronous CSV exports.
+  - `core/domain`: Added `AnalyticsRollup`, `AnalyticsFilter`, `AnalyticsSummary`, `TimeSeriesPoint`, `ProviderBreakdown`, `LatencyHistogram`, and `AnalyticsExport`.
+  - `core/analytics`:
+    - Destination Provider Classifier (`ClassifyProvider`) categorizing destination domains into `google`, `microsoft`, `yahoo`, `apple`, `fastmail`, and `other`.
+    - `AnalyticsEngine` with high-level aggregations (`QueryOverview`, `QueryTimeSeries`, `QueryProviderBreakdown`, `QueryLatencyHistogram`, `GenerateCSVExport`).
+    - Reputation warning rule: sets `ComplaintWarning = true` when complaint rate reaches or exceeds 0.10% (Google / Yahoo spam rate threshold).
+  - `core/repository`: Tenant-scoped analytics recording methods (`RecordAnalyticsEvent`, `QueryAnalyticsSummary`, `QueryTimeSeriesPoints`, `QueryProviderBreakdown`, `QueryLatencyHistogram`, `SaveAnalyticsExport`, `GetAnalyticsExport`, `ListAnalyticsExports`).
+  - Event recording hooks:
+    - Ingestion: `message.sent` recorded in `core/ingest.go`.
+    - Delivery: `message.delivered` (with latency duration), `hard_bounce`, and `soft_bounce` recorded in `worker/worker.go`.
+    - Reports: DSN hard/soft bounces, ARF complaints, and mailto unsubscribes recorded in `core/reports/processor.go`.
+  - `api/handlers/analytics`:
+    - `GET /v1/analytics/overview`: Aggregated KPI summary with delivery, bounce, complaint, unsubscribe rates and Google/Yahoo threshold warning flag.
+    - `GET /v1/analytics/time-series`: Dynamic hourly/daily trend buckets.
+    - `GET /v1/analytics/providers`: Major ISP delivery & complaint performance breakdown.
+    - `GET /v1/analytics/latency`: Latency distribution histogram across 6 latency buckets.
+    - `POST /v1/analytics/export`: Create on-demand CSV export job.
+    - `GET /v1/analytics/exports`: List tenant exports.
+    - `GET /v1/analytics/exports/{id}/download`: Stream CSV attachment directly to client.
+  - `api/server`: Mounted all Phase 7 routes with RBAC middlewares (`analytics.read`, `analytics.export`).
+  - `console`: Added **Analytics & Reports** tab:
+    - Time range selector (`24 Hours`, `7 Days`, `30 Days`).
+    - Prominent Google & Yahoo Deliverability Alert banner when complaint rate exceeds 0.10%.
+    - KPI cards (Total Sent, Delivery Rate %, Bounce Rate %, Complaint Rate %).
+    - Latency percentile metrics (Median p50, Tail p95) and Unsubscribe metrics.
+    - Delivery Latency distribution histogram bar chart.
+    - ISP Provider Breakdown table with sortable metrics per mailbox provider.
+    - On-demand CSV Export button with automatic browser download.
+  - `sdk/openapi.yaml`: Documented all Phase 7 endpoints.
+- **Verification & Test Results:**
+  - `core/analytics/analytics_test.go`:
+    - `TestAnalyticsEngineRollupsAndRates` PASS (pre-aggregated rollups, KPI calculations, delivery rate, bounce rate, complaint rate warning evaluation, CSV generation).
+    - `TestClassifyProvider` PASS (Google, Microsoft, Yahoo, Apple, Fastmail, unknown domain classification).
+  - `api/analytics_test.go`:
+    - `TestAnalyticsHTTPEndpoints` PASS (RBAC protection, overview endpoint, time-series endpoint, provider breakdown endpoint, latency endpoint, export generation, and CSV download).
+  - `go test -count=1 ./...`: 100% PASS across all 21 packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 8: Webhook Delivery Engine
 - **Status:** Pending
+
 

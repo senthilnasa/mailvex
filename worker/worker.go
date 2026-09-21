@@ -344,12 +344,15 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 			OccurredAt:  now,
 			CreatedAt:   now,
 		})
+		campaignTag := hygieneParams.CampaignTag
+		_ = w.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "message.delivered", &msg.StreamID, &msg.DomainID, rcpt.AddressDomain, campaignTag, delResp.Duration.Seconds(), now)
 		_ = w.updateMessageSummary(ctx, msg.TenantID, msg.ID)
 		return nil
 	}
 
 	// Delivery Failed: Classify bounce
 	classification := w.classifier.Classify(delResp.SMTPCode, delResp.EnhancedCode, delResp.ResponseText)
+	campaignTag := hygieneParams.CampaignTag
 
 	if classification.Classification == "hard_bounce" || classification.Action == "suppress_immediate" {
 		// 5xx Hard Bounce: suppress immediately & dead letter (§15 step 13, §16, §18)
@@ -375,6 +378,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 			OccurredAt:  now,
 			CreatedAt:   now,
 		})
+		_ = w.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "hard_bounce", &msg.StreamID, &msg.DomainID, rcpt.AddressDomain, campaignTag, 0, now)
 
 		// Record to DLQ (§15.2)
 		_ = w.repo.RecordDeadLetter(ctx, &domain.DeadLetterMessage{
@@ -409,6 +413,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 				OccurredAt:  now,
 				CreatedAt:   now,
 			})
+			_ = w.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "soft_bounce", &msg.StreamID, &msg.DomainID, rcpt.AddressDomain, campaignTag, 0, now)
 		} else {
 			// Retries exhausted -> failed and move to DLQ
 			_ = w.repo.UpdateRecipientDelivery(ctx, rcpt.ID, "failed", attemptNo, &delResp.SMTPCode, &delResp.ResponseText, nil, nil, nil, nil)

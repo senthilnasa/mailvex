@@ -497,5 +497,105 @@ type PostmasterSnapshot struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
+type AnalyticsRollup struct {
+	ID                 string    `json:"id"`
+	TenantID           string    `json:"tenant_id"`
+	TimeBucket         string    `json:"time_bucket"` // 1m, 1h, 1d, 1mo
+	BucketStart        time.Time `json:"bucket_start"`
+	StreamID           *string   `json:"stream_id,omitempty"`
+	DomainID           *string   `json:"domain_id,omitempty"`
+	Provider           string    `json:"provider"` // google, microsoft, yahoo, apple, other
+	CampaignTag        string    `json:"campaign_tag"`
+	SentCount          int64     `json:"sent_count"`
+	DeliveredCount     int64     `json:"delivered_count"`
+	BouncedHardCount   int64     `json:"bounced_hard_count"`
+	BouncedSoftCount   int64     `json:"bounced_soft_count"`
+	DeferredCount      int64     `json:"deferred_count"`
+	ComplainedCount    int64     `json:"complained_count"`
+	OpenedUniqueCount  int64     `json:"opened_unique_count"`
+	OpenedTotalCount   int64     `json:"opened_total_count"`
+	ClickedUniqueCount int64     `json:"clicked_unique_count"`
+	ClickedTotalCount  int64     `json:"clicked_total_count"`
+	UnsubscribedCount  int64     `json:"unsubscribed_count"`
+	LatencyUnder5s     int64     `json:"latency_under_5s"`
+	LatencyUnder30s    int64     `json:"latency_under_30s"`
+	LatencyUnder1m     int64     `json:"latency_under_1m"`
+	LatencyUnder5m     int64     `json:"latency_under_5m"`
+	LatencyUnder15m    int64     `json:"latency_under_15m"`
+	LatencyOver15m     int64     `json:"latency_over_15m"`
+}
+
+type AnalyticsFilter struct {
+	From        *time.Time `json:"from,omitempty"`
+	To          *time.Time `json:"to,omitempty"`
+	StreamID    *string    `json:"stream_id,omitempty"`
+	DomainID    *string    `json:"domain_id,omitempty"`
+	Provider    *string    `json:"provider,omitempty"`
+	CampaignTag *string    `json:"campaign_tag,omitempty"`
+}
+
+type AnalyticsSummary struct {
+	Sent             int64   `json:"sent"`
+	Delivered        int64   `json:"delivered"`
+	BouncedHard      int64   `json:"bounced_hard"`
+	BouncedSoft      int64   `json:"bounced_soft"`
+	Deferred         int64   `json:"deferred"`
+	Complained       int64   `json:"complained"`
+	OpenedUnique     int64   `json:"opened_unique"`
+	OpenedTotal      int64   `json:"opened_total"`
+	ClickedUnique    int64   `json:"clicked_unique"`
+	ClickedTotal     int64   `json:"clicked_total"`
+	Unsubscribed     int64   `json:"unsubscribed"`
+	DeliveryRate     float64 `json:"delivery_rate"`     // delivered / sent
+	BounceRate       float64 `json:"bounce_rate"`       // (bounced_hard + bounced_soft) / sent
+	HardBounceRate   float64 `json:"hard_bounce_rate"`  // bounced_hard / sent
+	ComplaintRate    float64 `json:"complaint_rate"`    // complained / delivered
+	OpenRate         float64 `json:"open_rate"`         // opened_unique / delivered
+	ClickRate        float64 `json:"click_rate"`        // clicked_unique / delivered
+	UnsubscribeRate  float64 `json:"unsubscribe_rate"`  // unsubscribed / delivered
+	ComplaintWarning bool    `json:"complaint_warning"` // true if complaint_rate >= 0.001 (0.10%)
+}
+
+type TimeSeriesPoint struct {
+	Timestamp     string  `json:"timestamp"` // ISO 8601
+	Sent          int64   `json:"sent"`
+	Delivered     int64   `json:"delivered"`
+	Bounced       int64   `json:"bounced"`
+	Complained    int64   `json:"complained"`
+	DeliveryRate  float64 `json:"delivery_rate"`
+	ComplaintRate float64 `json:"complaint_rate"`
+}
+
+type ProviderBreakdown struct {
+	Provider      string  `json:"provider"`
+	Sent          int64   `json:"sent"`
+	Delivered     int64   `json:"delivered"`
+	Bounced       int64   `json:"bounced"`
+	Complained    int64   `json:"complained"`
+	DeliveryRate  float64 `json:"delivery_rate"`
+	ComplaintRate float64 `json:"complaint_rate"`
+}
+
+type LatencyHistogram struct {
+	Under5s  int64 `json:"under_5s"`
+	Under30s int64 `json:"under_30s"`
+	Under1m  int64 `json:"under_1m"`
+	Under5m  int64 `json:"under_5m"`
+	Under15m int64 `json:"under_15m"`
+	Over15m  int64 `json:"over_15m"`
+}
+
+type AnalyticsExport struct {
+	ID             string     `json:"id"`
+	TenantID       string     `json:"tenant_id"`
+	Status         string     `json:"status"` // pending, completed, failed
+	Format         string     `json:"format"` // csv
+	FilterCriteria string     `json:"filter_criteria,omitempty"`
+	FileURL        *string    `json:"file_url,omitempty"`
+	FileData       []byte     `json:"-"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+}
+
 
 

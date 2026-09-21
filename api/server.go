@@ -227,6 +227,29 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "reports.read")(http.HandlerFunc(apiHandler.SavePostmasterSnapshotHandler)),
 	))
 
+	// Phase 7: Analytics & Reporting Endpoints (§19.2, §19.3)
+	s.mux.Handle("GET /v1/analytics/overview", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.GetAnalyticsOverviewHandler)),
+	))
+	s.mux.Handle("GET /v1/analytics/time-series", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.GetAnalyticsTimeSeriesHandler)),
+	))
+	s.mux.Handle("GET /v1/analytics/providers", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.GetAnalyticsProvidersHandler)),
+	))
+	s.mux.Handle("GET /v1/analytics/latency", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.GetAnalyticsLatencyHandler)),
+	))
+	s.mux.Handle("POST /v1/analytics/export", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.export")(http.HandlerFunc(apiHandler.CreateAnalyticsExportHandler)),
+	))
+	s.mux.Handle("GET /v1/analytics/exports", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.ListAnalyticsExportsHandler)),
+	))
+	s.mux.Handle("GET /v1/analytics/exports/{id}/download", authMiddleware(
+		middleware.RequirePermission(s.repo, "analytics.read")(http.HandlerFunc(apiHandler.DownloadAnalyticsExportHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

@@ -191,6 +191,17 @@ func (p *ReportProcessor) ProcessInboundDSN(ctx context.Context, rawMIME []byte,
 			Attempts:         rcpt.Attempts + 1,
 			CreatedAt:        now,
 		})
+
+		var streamIDPtr, domainIDPtr *string
+		campaignTag := "default"
+		if msg != nil {
+			streamIDPtr = &msg.StreamID
+			domainIDPtr = &msg.DomainID
+			if len(msg.Tags) > 0 {
+				campaignTag = msg.Tags[0]
+			}
+		}
+		_ = p.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "hard_bounce", streamIDPtr, domainIDPtr, rcpt.AddressDomain, campaignTag, 0, now)
 	} else {
 		// Soft bounce / deferred
 		_ = p.repo.UpdateRecipientDelivery(ctx, rcpt.ID, "deferred", rcpt.Attempts+1, &parsed.Status, &parsed.DiagnosticCode, nil, nil, nil, nil)
@@ -204,6 +215,17 @@ func (p *ReportProcessor) ProcessInboundDSN(ctx context.Context, rawMIME []byte,
 			OccurredAt:  now,
 			CreatedAt:   now,
 		})
+
+		var streamIDPtr, domainIDPtr *string
+		campaignTag := "default"
+		if msg != nil {
+			streamIDPtr = &msg.StreamID
+			domainIDPtr = &msg.DomainID
+			if len(msg.Tags) > 0 {
+				campaignTag = msg.Tags[0]
+			}
+		}
+		_ = p.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "soft_bounce", streamIDPtr, domainIDPtr, rcpt.AddressDomain, campaignTag, 0, now)
 	}
 
 	tenantID := rcpt.TenantID
@@ -334,6 +356,18 @@ func (p *ReportProcessor) ProcessInboundARF(ctx context.Context, rawMIME []byte)
 			Source:        "fbl",
 			CreatedAt:     now,
 		})
+
+		var domainIDPtr *string
+		campaignTag := "default"
+		if parsed.CampaignTag != "" {
+			campaignTag = parsed.CampaignTag
+		} else if msg != nil {
+			if len(msg.Tags) > 0 {
+				campaignTag = msg.Tags[0]
+			}
+			domainIDPtr = &msg.DomainID
+		}
+		_ = p.repo.RecordAnalyticsEvent(ctx, tenantID, "message.complained", streamIDPtr, domainIDPtr, addressDomain, campaignTag, 0, now)
 	}
 
 	return &ProcessARFResult{
@@ -416,6 +450,16 @@ func (p *ReportProcessor) ProcessMailtoUnsubscribe(ctx context.Context, recipien
 		OccurredAt:  now,
 		CreatedAt:   now,
 	})
+
+	var domainIDPtr *string
+	campaignTag := "default"
+	if msg != nil {
+		domainIDPtr = &msg.DomainID
+		if len(msg.Tags) > 0 {
+			campaignTag = msg.Tags[0]
+		}
+	}
+	_ = p.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "message.unsubscribed", streamIDPtr, domainIDPtr, rcpt.AddressDomain, campaignTag, 0, now)
 
 	return nil
 }

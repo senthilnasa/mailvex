@@ -8,6 +8,7 @@ import (
 
 	"github.com/mailvex/mailvex/api/middleware"
 	"github.com/mailvex/mailvex/core"
+	"github.com/mailvex/mailvex/core/analytics"
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/domain"
@@ -23,6 +24,7 @@ type API struct {
 	ingest     *core.IngestionEngine
 	storage    storage.Storage
 	reports    *reports.ReportProcessor
+	analytics  *analytics.Engine
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
@@ -34,6 +36,7 @@ func NewAPI(repo repository.Repository, auditService *audit.Service, encryption 
 		storage:    store,
 		ingest:     core.NewIngestionEngine(repo, store),
 		reports:    reports.NewReportProcessor(repo, nil, nil),
+		analytics:  analytics.NewEngine(repo),
 	}
 }
 
@@ -44,6 +47,10 @@ func (a *API) SetIngestEngine(ingest *core.IngestionEngine, store storage.Storag
 
 func (a *API) SetReportProcessor(p *reports.ReportProcessor) {
 	a.reports = p
+}
+
+func (a *API) SetAnalyticsEngine(e *analytics.Engine) {
+	a.analytics = e
 }
 
 // HealthHandler returns HTTP 200 for liveness

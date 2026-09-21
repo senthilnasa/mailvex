@@ -184,6 +184,17 @@ type Repository interface {
 	SavePostmasterSnapshot(ctx context.Context, snap *domain.PostmasterSnapshot) error
 	ListPostmasterSnapshots(ctx context.Context, domainID string, limit int) ([]*domain.PostmasterSnapshot, error)
 	GetRecipientByTokenOrID(ctx context.Context, tokenOrID string) (*domain.MessageRecipient, *domain.Message, error)
+
+	// Phase 7: Analytics & Reporting
+	RecordAnalyticsEvent(ctx context.Context, tenantID, eventType string, streamID, domainID *string, provider, campaignTag string, latencySec float64, occurredAt time.Time) error
+	QueryAnalyticsOverview(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) (*domain.AnalyticsSummary, error)
+	QueryAnalyticsTimeSeries(ctx context.Context, tenantID string, interval string, filter domain.AnalyticsFilter) ([]*domain.TimeSeriesPoint, error)
+	QueryProviderBreakdown(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) ([]*domain.ProviderBreakdown, error)
+	QueryLatencyHistogram(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) (*domain.LatencyHistogram, error)
+	CreateAnalyticsExport(ctx context.Context, export *domain.AnalyticsExport) error
+	GetAnalyticsExport(ctx context.Context, tenantID, exportID string) (*domain.AnalyticsExport, error)
+	ListAnalyticsExports(ctx context.Context, tenantID string, limit int) ([]*domain.AnalyticsExport, error)
+	UpdateAnalyticsExport(ctx context.Context, tenantID, exportID, status string, fileURL *string, fileData []byte) error
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -239,6 +250,10 @@ type MemoryRepository struct {
 	abuseReports     map[string]*domain.AbuseReport
 	ipReputations    []*domain.IPReputationSnapshot
 	postmasterSnaps  []*domain.PostmasterSnapshot
+
+	// Phase 7 collections
+	analyticsRollups []*domain.AnalyticsRollup
+	analyticsExports map[string]*domain.AnalyticsExport
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -283,6 +298,8 @@ func NewMemoryRepository() *MemoryRepository {
 		abuseReports:     make(map[string]*domain.AbuseReport),
 		ipReputations:    make([]*domain.IPReputationSnapshot, 0),
 		postmasterSnaps:  make([]*domain.PostmasterSnapshot, 0),
+		analyticsRollups: make([]*domain.AnalyticsRollup, 0),
+		analyticsExports: make(map[string]*domain.AnalyticsExport),
 	}
 
 	// Seed default IP pool
@@ -370,7 +387,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"suppressions.read", "suppressions.write", "suppressions.import",
 		"templates.read", "templates.write", "templates.publish",
 		"webhooks.read", "webhooks.write", "webhooks.replay",
-		"analytics.read", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
+		"analytics.read", "analytics.export", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
 }
@@ -1994,6 +2011,380 @@ func (r *MemoryRepository) GetRecipientByTokenOrID(ctx context.Context, tokenOrI
 	}
 
 	return nil, nil, errors.New("recipient or message not found")
+}
+
+// Phase 7: Analytics & Reporting Methods
+
+func (r *MemoryRepository) RecordAnalyticsEvent(ctx context.Context, tenantID, eventType string, streamID, domainID *string, provider, campaignTag string, latencySec float64, occurredAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if provider == "" {
+		provider = "other"
+	}
+	if campaignTag == "" {
+		campaignTag = "default"
+	}
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+
+	// Increment rollups for 1m, 1h, 1d buckets
+	buckets := []struct {
+		name  string
+		start time.Time
+	}{
+		{"1m", occurredAt.Truncate(time.Minute)},
+		{"1h", occurredAt.Truncate(time.Hour)},
+		{"1d", time.Date(occurredAt.Year(), occurredAt.Month(), occurredAt.Day(), 0, 0, 0, 0, time.UTC)},
+	}
+
+	for _, b := range buckets {
+		var rollup *domain.AnalyticsRollup
+		for _, ex := range r.analyticsRollups {
+			if ex.TenantID == tenantID && ex.TimeBucket == b.name && ex.BucketStart.Equal(b.start) &&
+				equalPtr(ex.StreamID, streamID) && equalPtr(ex.DomainID, domainID) &&
+				ex.Provider == provider && ex.CampaignTag == campaignTag {
+				rollup = ex
+				break
+			}
+		}
+
+		if rollup == nil {
+			id := fmt.Sprintf("ar_%s_%s_%d", tenantID, b.name, b.start.Unix())
+			rollup = &domain.AnalyticsRollup{
+				ID:          id,
+				TenantID:    tenantID,
+				TimeBucket:  b.name,
+				BucketStart: b.start,
+				StreamID:    streamID,
+				DomainID:    domainID,
+				Provider:    provider,
+				CampaignTag: campaignTag,
+			}
+			r.analyticsRollups = append(r.analyticsRollups, rollup)
+		}
+
+		// Increment event counters
+		switch eventType {
+		case "message.sent", "sent":
+			rollup.SentCount++
+		case "message.delivered", "delivered":
+			rollup.DeliveredCount++
+		case "message.bounced", "bounced", "hard_bounce":
+			rollup.BouncedHardCount++
+		case "soft_bounce":
+			rollup.BouncedSoftCount++
+		case "message.deferred", "deferred":
+			rollup.DeferredCount++
+		case "message.complained", "complained", "abuse":
+			rollup.ComplainedCount++
+		case "message.opened", "opened":
+			rollup.OpenedUniqueCount++
+			rollup.OpenedTotalCount++
+		case "message.clicked", "clicked":
+			rollup.ClickedUniqueCount++
+			rollup.ClickedTotalCount++
+		case "message.unsubscribed", "unsubscribed":
+			rollup.UnsubscribedCount++
+		}
+
+		// Increment latency histogram if provided
+		if latencySec > 0 {
+			switch {
+			case latencySec < 5:
+				rollup.LatencyUnder5s++
+			case latencySec < 30:
+				rollup.LatencyUnder30s++
+			case latencySec < 60:
+				rollup.LatencyUnder1m++
+			case latencySec < 300:
+				rollup.LatencyUnder5m++
+			case latencySec < 900:
+				rollup.LatencyUnder15m++
+			default:
+				rollup.LatencyOver15m++
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *MemoryRepository) matchesFilter(rollup *domain.AnalyticsRollup, tenantID string, filter domain.AnalyticsFilter) bool {
+	if rollup.TenantID != tenantID {
+		return false
+	}
+	if filter.From != nil && rollup.BucketStart.Before(*filter.From) {
+		return false
+	}
+	if filter.To != nil && rollup.BucketStart.After(*filter.To) {
+		return false
+	}
+	if filter.StreamID != nil && (rollup.StreamID == nil || *rollup.StreamID != *filter.StreamID) {
+		return false
+	}
+	if filter.DomainID != nil && (rollup.DomainID == nil || *rollup.DomainID != *filter.DomainID) {
+		return false
+	}
+	if filter.Provider != nil && !strings.EqualFold(rollup.Provider, *filter.Provider) {
+		return false
+	}
+	if filter.CampaignTag != nil && !strings.EqualFold(rollup.CampaignTag, *filter.CampaignTag) {
+		return false
+	}
+	return true
+}
+
+func (r *MemoryRepository) QueryAnalyticsOverview(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) (*domain.AnalyticsSummary, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Default to last 30 days if no time filter given
+	summary := &domain.AnalyticsSummary{}
+
+	for _, roll := range r.analyticsRollups {
+		// Use 1h resolution for queries under 7 days, 1d resolution otherwise
+		if roll.TimeBucket != "1h" && roll.TimeBucket != "1d" {
+			continue
+		}
+		// Avoid double-counting: use 1h if present, or fallback to 1d
+		if roll.TimeBucket == "1h" {
+			if !r.matchesFilter(roll, tenantID, filter) {
+				continue
+			}
+			summary.Sent += roll.SentCount
+			summary.Delivered += roll.DeliveredCount
+			summary.BouncedHard += roll.BouncedHardCount
+			summary.BouncedSoft += roll.BouncedSoftCount
+			summary.Deferred += roll.DeferredCount
+			summary.Complained += roll.ComplainedCount
+			summary.OpenedUnique += roll.OpenedUniqueCount
+			summary.OpenedTotal += roll.OpenedTotalCount
+			summary.ClickedUnique += roll.ClickedUniqueCount
+			summary.ClickedTotal += roll.ClickedTotalCount
+			summary.Unsubscribed += roll.UnsubscribedCount
+		}
+	}
+
+	// Compute derived rates
+	if summary.Sent > 0 {
+		summary.DeliveryRate = float64(summary.Delivered) / float64(summary.Sent)
+		summary.BounceRate = float64(summary.BouncedHard+summary.BouncedSoft) / float64(summary.Sent)
+		summary.HardBounceRate = float64(summary.BouncedHard) / float64(summary.Sent)
+	}
+	if summary.Delivered > 0 {
+		summary.ComplaintRate = float64(summary.Complained) / float64(summary.Delivered)
+		summary.OpenRate = float64(summary.OpenedUnique) / float64(summary.Delivered)
+		summary.ClickRate = float64(summary.ClickedUnique) / float64(summary.Delivered)
+		summary.UnsubscribeRate = float64(summary.Unsubscribed) / float64(summary.Delivered)
+	}
+
+	// Complaint warning threshold: >= 0.10% (0.001) per Google / Yahoo deliverability standards (§19.2)
+	if summary.ComplaintRate >= 0.001 {
+		summary.ComplaintWarning = true
+	}
+
+	return summary, nil
+}
+
+func (r *MemoryRepository) QueryAnalyticsTimeSeries(ctx context.Context, tenantID string, interval string, filter domain.AnalyticsFilter) ([]*domain.TimeSeriesPoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if interval == "" {
+		interval = "1h"
+	}
+
+	pointsMap := make(map[string]*domain.TimeSeriesPoint)
+
+	for _, roll := range r.analyticsRollups {
+		if roll.TimeBucket != interval {
+			continue
+		}
+		if !r.matchesFilter(roll, tenantID, filter) {
+			continue
+		}
+
+		tsKey := roll.BucketStart.Format(time.RFC3339)
+		p, exists := pointsMap[tsKey]
+		if !exists {
+			p = &domain.TimeSeriesPoint{Timestamp: tsKey}
+			pointsMap[tsKey] = p
+		}
+
+		p.Sent += roll.SentCount
+		p.Delivered += roll.DeliveredCount
+		p.Bounced += roll.BouncedHardCount + roll.BouncedSoftCount
+		p.Complained += roll.ComplainedCount
+	}
+
+	// Compute rates and sort chronologically
+	var points []*domain.TimeSeriesPoint
+	for _, p := range pointsMap {
+		if p.Sent > 0 {
+			p.DeliveryRate = float64(p.Delivered) / float64(p.Sent)
+		}
+		if p.Delivered > 0 {
+			p.ComplaintRate = float64(p.Complained) / float64(p.Delivered)
+		}
+		points = append(points, p)
+	}
+
+	sort.Slice(points, func(i, j int) bool {
+		return points[i].Timestamp < points[j].Timestamp
+	})
+
+	return points, nil
+}
+
+func (r *MemoryRepository) QueryProviderBreakdown(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) ([]*domain.ProviderBreakdown, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	provMap := make(map[string]*domain.ProviderBreakdown)
+
+	for _, roll := range r.analyticsRollups {
+		if roll.TimeBucket != "1h" {
+			continue
+		}
+		if !r.matchesFilter(roll, tenantID, filter) {
+			continue
+		}
+
+		pName := roll.Provider
+		if pName == "" {
+			pName = "other"
+		}
+
+		pb, exists := provMap[pName]
+		if !exists {
+			pb = &domain.ProviderBreakdown{Provider: pName}
+			provMap[pName] = pb
+		}
+
+		pb.Sent += roll.SentCount
+		pb.Delivered += roll.DeliveredCount
+		pb.Bounced += roll.BouncedHardCount + roll.BouncedSoftCount
+		pb.Complained += roll.ComplainedCount
+	}
+
+	var results []*domain.ProviderBreakdown
+	for _, pb := range provMap {
+		if pb.Sent > 0 {
+			pb.DeliveryRate = float64(pb.Delivered) / float64(pb.Sent)
+		}
+		if pb.Delivered > 0 {
+			pb.ComplaintRate = float64(pb.Complained) / float64(pb.Delivered)
+		}
+		results = append(results, pb)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Sent > results[j].Sent
+	})
+
+	return results, nil
+}
+
+func (r *MemoryRepository) QueryLatencyHistogram(ctx context.Context, tenantID string, filter domain.AnalyticsFilter) (*domain.LatencyHistogram, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	hist := &domain.LatencyHistogram{}
+
+	for _, roll := range r.analyticsRollups {
+		if roll.TimeBucket != "1h" {
+			continue
+		}
+		if !r.matchesFilter(roll, tenantID, filter) {
+			continue
+		}
+
+		hist.Under5s += roll.LatencyUnder5s
+		hist.Under30s += roll.LatencyUnder30s
+		hist.Under1m += roll.LatencyUnder1m
+		hist.Under5m += roll.LatencyUnder5m
+		hist.Under15m += roll.LatencyUnder15m
+		hist.Over15m += roll.LatencyOver15m
+	}
+
+	return hist, nil
+}
+
+func (r *MemoryRepository) CreateAnalyticsExport(ctx context.Context, export *domain.AnalyticsExport) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.analyticsExports[export.ID] = export
+	return nil
+}
+
+func (r *MemoryRepository) GetAnalyticsExport(ctx context.Context, tenantID, exportID string) (*domain.AnalyticsExport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	exp, ok := r.analyticsExports[exportID]
+	if !ok || exp.TenantID != tenantID {
+		return nil, errors.New("export not found")
+	}
+	return exp, nil
+}
+
+func (r *MemoryRepository) ListAnalyticsExports(ctx context.Context, tenantID string, limit int) ([]*domain.AnalyticsExport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var list []*domain.AnalyticsExport
+	for _, exp := range r.analyticsExports {
+		if exp.TenantID == tenantID {
+			list = append(list, exp)
+		}
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].CreatedAt.After(list[j].CreatedAt)
+	})
+
+	if len(list) > limit {
+		list = list[:limit]
+	}
+	return list, nil
+}
+
+func (r *MemoryRepository) UpdateAnalyticsExport(ctx context.Context, tenantID, exportID, status string, fileURL *string, fileData []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	exp, ok := r.analyticsExports[exportID]
+	if !ok || exp.TenantID != tenantID {
+		return errors.New("export not found")
+	}
+	exp.Status = status
+	if fileURL != nil {
+		exp.FileURL = fileURL
+	}
+	if fileData != nil {
+		exp.FileData = fileData
+	}
+	if status == "completed" || status == "failed" {
+		now := time.Now().UTC()
+		exp.CompletedAt = &now
+	}
+	return nil
+}
+
+func equalPtr(a, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 

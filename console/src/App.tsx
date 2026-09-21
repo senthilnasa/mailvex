@@ -104,12 +104,47 @@ interface PostmasterSnapshotItem {
   dkim_success_rate: number
 }
 
+interface AnalyticsSummary {
+  period_start: string
+  period_end: string
+  sent_count: number
+  delivered_count: number
+  delivery_rate: number
+  hard_bounce_count: number
+  soft_bounce_count: number
+  bounce_rate: number
+  complaint_count: number
+  complaint_rate: number
+  complaint_warning: boolean
+  unsubscribe_count: number
+  unsubscribe_rate: number
+  median_latency_seconds: number
+  p95_latency_seconds: number
+}
+
+interface ProviderBreakdownItem {
+  provider: string
+  sent_count: number
+  delivered_count: number
+  bounce_count: number
+  complaint_count: number
+  delivery_rate: number
+  bounce_rate: number
+  complaint_rate: number
+}
+
+interface LatencyHistogramItem {
+  bucket: string
+  count: number
+  percentage: number
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -159,6 +194,14 @@ export default function App() {
   const [postmasterSnaps, setPostmasterSnaps] = useState<PostmasterSnapshotItem[]>([])
   const [abuseStatusFilter, setAbuseStatusFilter] = useState('pending')
 
+  // Phase 7: Analytics state
+  const [analyticsRange, setAnalyticsRange] = useState<'24h' | '7d' | '30d'>('24h')
+  const [analyticsSummary, setAnalyticsSummary] = useState<AnalyticsSummary | null>(null)
+  const [analyticsProviders, setAnalyticsProviders] = useState<ProviderBreakdownItem[]>([])
+  const [analyticsLatency, setAnalyticsLatency] = useState<LatencyHistogramItem[]>([])
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -192,8 +235,70 @@ export default function App() {
       loadAbuseReports()
       loadFBLReports()
       loadPostmasterSnaps()
+      loadAnalytics()
     }
-  }, [activeTenant, currentTab, abuseStatusFilter])
+  }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
+
+  const loadAnalytics = async () => {
+    if (!activeTenant || !user) return
+    setAnalyticsLoading(true)
+    try {
+      const q = `?range=${analyticsRange}`
+      const [overviewRes, providersRes, latencyRes] = await Promise.all([
+        fetch(`/v1/analytics/overview${q}`, {
+          headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        }),
+        fetch(`/v1/analytics/providers${q}`, {
+          headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        }),
+        fetch(`/v1/analytics/latency${q}`, {
+          headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        }),
+      ])
+
+      if (overviewRes.ok) {
+        const data = await overviewRes.json()
+        setAnalyticsSummary(data)
+      }
+      if (providersRes.ok) {
+        const data = await providersRes.json()
+        setAnalyticsProviders(data.data || [])
+      }
+      if (latencyRes.ok) {
+        const data = await latencyRes.json()
+        setAnalyticsLatency(data.data || [])
+      }
+    } catch {}
+    finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  const handleExportCSV = async () => {
+    if (!activeTenant || !user) return
+    setExportLoading(true)
+    try {
+      const res = await fetch('/v1/analytics/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ range: analyticsRange }),
+      })
+      const data = await res.json()
+      if (res.ok && data.export?.id) {
+        window.open(`/v1/analytics/exports/${data.export.id}/download`, '_blank')
+      } else {
+        alert(data.error?.message || 'Failed to generate export')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setExportLoading(false)
+    }
+  }
 
   const loadAbuseReports = async () => {
     if (!activeTenant || !user) return
@@ -991,6 +1096,16 @@ export default function App() {
           >
             Reputation & Abuse
           </button>
+          <button
+            onClick={() => setCurrentTab('analytics')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'analytics'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Analytics & Reports
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -1008,6 +1123,7 @@ export default function App() {
                   {currentTab === 'templates' && 'Templates'}
                   {currentTab === 'suppressions' && 'Suppression List & Safeguards'}
                   {currentTab === 'reputation' && 'Reputation, Feedback Loops & Abuse Queue'}
+                  {currentTab === 'analytics' && 'Analytics & Deliverability Reporting'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -2068,6 +2184,226 @@ export default function App() {
                         <li>ARF complaints route to designated FBL address</li>
                       </ol>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: ANALYTICS */}
+            {currentTab === 'analytics' && (
+              <div className="mt-6 space-y-8">
+                {/* Time range selector & Export CSV */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-semibold uppercase text-slate-400 mr-2">Time Range:</span>
+                    {(['24h', '7d', '30d'] as const).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setAnalyticsRange(r)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                          analyticsRange === r
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {r === '24h' ? 'Last 24 Hours' : r === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
+                      </button>
+                    ))}
+                    {analyticsLoading && (
+                      <span className="text-xs text-indigo-400 animate-pulse ml-2">Loading metrics...</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={handleExportCSV}
+                      disabled={exportLoading}
+                      className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+                    >
+                      <span>{exportLoading ? 'Generating...' : '📥 Export CSV Report'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Reputation Alert if complaint rate exceeds 0.10% threshold */}
+                {analyticsSummary?.complaint_warning && (
+                  <div className="bg-red-950/70 border border-red-500/80 rounded-xl p-4 flex items-start space-x-3 text-red-200">
+                    <span className="text-xl">⚠️</span>
+                    <div>
+                      <div className="font-semibold text-sm text-red-300">Google &amp; Yahoo Deliverability Warning: Complaint Rate Exceeded 0.10%</div>
+                      <p className="text-xs text-red-300/80 mt-1">
+                        Current tenant complaint rate is {(analyticsSummary.complaint_rate * 100).toFixed(3)}%. Mailbox providers will defer or spam-folder messages if complaint rate approaches or exceeds 0.30%. Review unverified lists and enforce immediate suppression.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* KPI Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Sent</div>
+                    <div className="text-2xl font-bold text-white mt-2">
+                      {analyticsSummary?.sent_count?.toLocaleString() || 0}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">Outbound messages</div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Delivery Rate</div>
+                    <div className="text-2xl font-bold text-emerald-400 mt-2">
+                      {((analyticsSummary?.delivery_rate || 0) * 100).toFixed(2)}%
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {analyticsSummary?.delivered_count?.toLocaleString() || 0} delivered
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Bounce Rate</div>
+                    <div className="text-2xl font-bold text-rose-400 mt-2">
+                      {((analyticsSummary?.bounce_rate || 0) * 100).toFixed(2)}%
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {analyticsSummary?.hard_bounce_count || 0} hard / {analyticsSummary?.soft_bounce_count || 0} soft
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Complaint Rate</div>
+                    <div className={`text-2xl font-bold mt-2 ${analyticsSummary?.complaint_warning ? 'text-red-400' : 'text-slate-200'}`}>
+                      {((analyticsSummary?.complaint_rate || 0) * 100).toFixed(3)}%
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {analyticsSummary?.complaint_count || 0} spam reports
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Performance Row: Latency & Unsubscribes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Delivery Latency Percentiles</div>
+                    <div className="flex items-baseline space-x-4 mt-2">
+                      <div>
+                        <span className="text-xl font-bold text-indigo-400">
+                          {analyticsSummary ? `${analyticsSummary.median_latency_seconds.toFixed(2)}s` : '—'}
+                        </span>
+                        <span className="text-xs text-slate-500 ml-1">Median (p50)</span>
+                      </div>
+                      <div>
+                        <span className="text-xl font-bold text-sky-400">
+                          {analyticsSummary ? `${analyticsSummary.p95_latency_seconds.toFixed(2)}s` : '—'}
+                        </span>
+                        <span className="text-xs text-slate-500 ml-1">p95 Tail</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      End-to-end time from queue ingestion to remote MX 250 OK.
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Unsubscribe Metrics</div>
+                    <div className="flex items-baseline space-x-4 mt-2">
+                      <div>
+                        <span className="text-xl font-bold text-amber-400">
+                          {((analyticsSummary?.unsubscribe_rate || 0) * 100).toFixed(2)}%
+                        </span>
+                        <span className="text-xs text-slate-500 ml-1">Unsubscribe Rate</span>
+                      </div>
+                      <div>
+                        <span className="text-xl font-bold text-white">
+                          {analyticsSummary?.unsubscribe_count || 0}
+                        </span>
+                        <span className="text-xs text-slate-500 ml-1">Total Opt-Outs</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-2">
+                      One-click RFC 8058 and mailto opt-outs.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Latency Distribution Histogram */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <div className="border-b border-slate-800 pb-4 mb-4">
+                    <h3 className="text-base font-semibold text-white">Delivery Latency Distribution</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Histogram of outbound SMTP delivery times into remote provider receiving queues.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {analyticsLatency.length === 0 ? (
+                      <div className="text-center py-6 text-slate-500 text-xs">No latency metrics recorded yet.</div>
+                    ) : (
+                      analyticsLatency.map((item) => (
+                        <div key={item.bucket} className="space-y-1">
+                          <div className="flex justify-between text-xs text-slate-300">
+                            <span className="font-mono">{item.bucket}</span>
+                            <span>{item.count} msgs ({item.percentage.toFixed(1)}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(item.percentage > 0 ? 3 : 0, item.percentage))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Provider Breakdown Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="px-6 py-5 border-b border-slate-800">
+                    <h3 className="text-base font-semibold text-white">Major ISP / Provider Breakdown</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Deliverability performance classified by destination MX (Google, Microsoft, Yahoo, Apple, Fastmail).
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <tr>
+                          <th className="px-6 py-3">Provider</th>
+                          <th className="px-6 py-3">Sent</th>
+                          <th className="px-6 py-3">Delivered</th>
+                          <th className="px-6 py-3">Delivery Rate</th>
+                          <th className="px-6 py-3">Bounces</th>
+                          <th className="px-6 py-3">Bounce Rate</th>
+                          <th className="px-6 py-3">Complaints</th>
+                          <th className="px-6 py-3">Complaint Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {analyticsProviders.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                              No provider breakdown data available for this range.
+                            </td>
+                          </tr>
+                        ) : (
+                          analyticsProviders.map((p) => (
+                            <tr key={p.provider} className="hover:bg-slate-800/40">
+                              <td className="px-6 py-4 font-semibold text-white capitalize">{p.provider}</td>
+                              <td className="px-6 py-4 text-slate-300 font-mono text-xs">{p.sent_count.toLocaleString()}</td>
+                              <td className="px-6 py-4 text-emerald-400 font-mono text-xs">{p.delivered_count.toLocaleString()}</td>
+                              <td className="px-6 py-4 text-slate-200">{(p.delivery_rate * 100).toFixed(1)}%</td>
+                              <td className="px-6 py-4 text-rose-400 font-mono text-xs">{p.bounce_count}</td>
+                              <td className="px-6 py-4 text-slate-200">{(p.bounce_rate * 100).toFixed(2)}%</td>
+                              <td className="px-6 py-4 text-amber-400 font-mono text-xs">{p.complaint_count}</td>
+                              <td className="px-6 py-4 font-semibold">
+                                <span className={p.complaint_rate >= 0.001 ? 'text-red-400' : 'text-slate-300'}>
+                                  {(p.complaint_rate * 100).toFixed(3)}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
