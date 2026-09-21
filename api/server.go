@@ -302,6 +302,36 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "retention.write")(http.HandlerFunc(apiHandler.ExecuteRetentionPurgeHandler)),
 	))
 
+	// Phase 10: Open & Click Tracking Endpoints (§19)
+	s.mux.HandleFunc("GET /o/{token}", apiHandler.HandleOpenPixel)
+	s.mux.HandleFunc("GET /c/{token}", apiHandler.HandleClickRedirect)
+
+	// Phase 10: Inbound Email Routing & Message Management (§21)
+	s.mux.Handle("GET /v1/inbound/routes", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.ListInboundRoutesHandler)),
+	))
+	s.mux.Handle("POST /v1/inbound/routes", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.write")(http.HandlerFunc(apiHandler.CreateInboundRouteHandler)),
+	))
+	s.mux.Handle("GET /v1/inbound/routes/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.GetInboundRouteHandler)),
+	))
+	s.mux.Handle("PATCH /v1/inbound/routes/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.write")(http.HandlerFunc(apiHandler.UpdateInboundRouteHandler)),
+	))
+	s.mux.Handle("DELETE /v1/inbound/routes/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.write")(http.HandlerFunc(apiHandler.DeleteInboundRouteHandler)),
+	))
+	s.mux.Handle("POST /v1/inbound/routes/test", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.TestInboundRouteMatchHandler)),
+	))
+	s.mux.Handle("GET /v1/inbound/messages", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.ListInboundMessagesHandler)),
+	))
+	s.mux.Handle("GET /v1/inbound/messages/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.GetInboundMessageHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

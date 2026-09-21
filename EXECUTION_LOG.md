@@ -419,8 +419,56 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
-### Phase 10: Advanced Templates & Inbound Mail Routing
-- **Status:** In Progress
+### Phase 10: Open/Click Tracking Engine & Inbound Mail Routing
+- **Status:** Completed & Verified (2026-09-21)
+- **Implementations:**
+  - `migrations/000010_tracking_and_inbound`: Added tables `tracking_links`, `tracking_events`, `inbound_routes`, and `inbound_messages`.
+  - `core/domain`: Added models `TrackingLink`, `TrackingEvent`, `InboundRoute`, and `InboundMessage`.
+  - `core/crypto/ulid`: Added prefixes `tl_` (`PrefixTrackingLink`), `te_` (`PrefixTrackingEvent`), `inr_` (`PrefixInboundRoute`), and `inm_` (`PrefixInboundMessage`).
+  - `core/tracking`:
+    - `TrackingEngine`: RFC 2046 1x1 transparent GIF generation (`Cache-Control: no-store, no-cache, must-revalidate, max-age=0`), signed HMAC tokens for open tracking and click tracking with expiration check.
+    - Anti-Open Redirect Defense (§19): Target URL strictly resolved from `tracking_links` repository table by `link_id`, NEVER accepted directly from query or URL path parameters. Tampered or expired tokens return HTTP 404.
+    - Bot Prefetch Filtering (§19): Identifies Apple Mail Privacy Protection (`Apple-Mail-Privacy-Protection`), GoogleImageProxy (`GoogleImageProxy`), Microsoft SafeLinks, common vulnerability scanner user-agents, and automated hits occurring within < 2 seconds of delivery. Flagged with `is_bot = true` and `bot_reason` recorded in `tracking_events`.
+    - IP Pseudonymization (§20): Privacy-first IP masking (/24 for IPv4, /48 for IPv6) before logging.
+    - HTML Processing: Link rewriting (`href="..."` replaced with signed tracking redirect) and open pixel injection before closing `</body>` tag or appended to HTML.
+  - `core/inbound`:
+    - `InboundRouter`: Evaluates inbound routes sorted by `priority ASC` (lowest number first).
+    - Precedence Engine (§21): Matches recipient address against `exact` match, `wildcard` pattern (e.g. `support-*@help.com`), and `catch_all` domain rule (e.g. `@help.com`).
+    - Skipping inactive routes (`is_active = false`), storing inbound messages with SPF, DKIM, and DMARC verification verdicts.
+  - `core/repository`: Added repository methods and thread-safe implementations for tracking links/events and inbound routes/messages.
+  - `api/handlers`:
+    - `GET /o/{token}`: Transparent 1x1 GIF open tracking pixel.
+    - `GET /c/{token}`: Click tracking link redirect with safe repository URL lookup.
+    - `GET /v1/inbound/routes` & `POST /v1/inbound/routes`: Inbound routing rule CRUD.
+    - `GET /v1/inbound/routes/{id}`, `PATCH /v1/inbound/routes/{id}`, `DELETE /v1/inbound/routes/{id}`: Route management.
+    - `POST /v1/inbound/routes/test`: Precedence engine route simulation and match testing.
+    - `GET /v1/inbound/messages` & `GET /v1/inbound/messages/{id}`: Inbound email log retrieval.
+  - `api/server`: Mounted all Phase 10 endpoints with RBAC middleware (`tracking.read`, `inbound.routes`, `inbound.read`, `inbound.write`).
+  - `console`:
+    - **Inbound Routing Tab**:
+      - Precedence Engine Route Simulator & Match Tester (`POST /v1/inbound/routes/test`).
+      - Inbound Route creation form with Priority, Match Type (`exact`, `wildcard`, `catch_all`), Pattern, Action (`webhook`, `store_only`, `forward`, `discard`), and Target.
+      - Inbound Routing Rules management table with live active/disabled toggle and deletion.
+      - Inbound Mail Logs table with SPF/DKIM/DMARC authentication verification badges.
+  - `sdk/openapi.yaml`: Documented all Phase 10 tracking and inbound endpoints.
+- **Verification & Test Results:**
+  - `core/tracking/tracking_test.go`:
+    - `TestOpenPixelAndTokenValidation` PASS (HMAC token verification, 1x1 transparent GIF response).
+    - `TestClickTrackingSafeRedirect` PASS (safe repository URL lookup, tampered token 404 rejection).
+    - `TestBotAndPrefetchFiltering` PASS (Apple MPP, GoogleImageProxy, instant hits < 2s flagged as bot).
+    - `TestHTMLInjectionAndRewriting` PASS (link rewriting and pixel injection).
+  - `core/inbound/inbound_test.go`:
+    - `TestInboundRoutePrecedence` PASS (exact > wildcard > catch_all precedence, priority order, inactive route skipping).
+    - `TestInboundMessageStorage` PASS (inbound message storage with SPF/DKIM/DMARC verdicts).
+  - `api/tracking_inbound_test.go`:
+    - `TestTrackingEndpoints` PASS (open pixel, click redirect, anti-open redirect defense).
+    - `TestInboundRoutingEndpoints` PASS (route CRUD, match simulation, inbound message listing).
+  - `go test -count=1 ./...`: 100% PASS across all 24 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
 
 
 

@@ -35,6 +35,10 @@ const (
 	PrefixMembership        = "mem_"
 	PrefixTemplate          = "tmpl_"
 	PrefixTemplateVer       = "tmplver_"
+	PrefixTrackingLink      = "tl_"
+	PrefixTrackingEvent     = "te_"
+	PrefixInboundRoute      = "inr_"
+	PrefixInboundMessage    = "inm_"
 )
 
 // NewULID generates a new ULID string with the given prefix

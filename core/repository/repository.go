@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -220,6 +221,21 @@ type Repository interface {
 	GetRetentionPolicy(ctx context.Context, tenantID string) (*domain.RetentionPolicy, error)
 	UpdateRetentionPolicy(ctx context.Context, policy *domain.RetentionPolicy) error
 	ExecuteRetentionPurge(ctx context.Context, tenantID string) (*domain.RetentionPurgeSummary, error)
+
+	// Phase 10: Tracking & Inbound Routing
+	SaveTrackingLink(ctx context.Context, link *domain.TrackingLink) error
+	GetTrackingLink(ctx context.Context, tenantID, linkID string) (*domain.TrackingLink, error)
+	RecordTrackingEvent(ctx context.Context, evt *domain.TrackingEvent) error
+	ListTrackingEvents(ctx context.Context, tenantID, messageID string) ([]*domain.TrackingEvent, error)
+	CreateInboundRoute(ctx context.Context, route *domain.InboundRoute) error
+	GetInboundRoute(ctx context.Context, tenantID, id string) (*domain.InboundRoute, error)
+	ListInboundRoutes(ctx context.Context, tenantID string) ([]*domain.InboundRoute, error)
+	UpdateInboundRoute(ctx context.Context, route *domain.InboundRoute) error
+	DeleteInboundRoute(ctx context.Context, tenantID, id string) error
+	MatchInboundRoute(ctx context.Context, tenantID, toAddress string) (*domain.InboundRoute, error)
+	SaveInboundMessage(ctx context.Context, msg *domain.InboundMessage) error
+	GetInboundMessage(ctx context.Context, tenantID, id string) (*domain.InboundMessage, error)
+	ListInboundMessages(ctx context.Context, tenantID string, limit, offset int) ([]*domain.InboundMessage, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -288,6 +304,12 @@ type MemoryRepository struct {
 	suppressionImports []*domain.SuppressionImport
 	privacyRequests    map[string]*domain.PrivacyRequest
 	retentionPolicies  map[string]*domain.RetentionPolicy
+
+	// Phase 10 collections
+	trackingLinks   map[string]*domain.TrackingLink // key: tenantID:linkID
+	trackingEvents  []*domain.TrackingEvent
+	inboundRoutes   map[string]*domain.InboundRoute // key: routeID
+	inboundMessages []*domain.InboundMessage
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -339,6 +361,10 @@ func NewMemoryRepository() *MemoryRepository {
 		suppressionImports: make([]*domain.SuppressionImport, 0),
 		privacyRequests:    make(map[string]*domain.PrivacyRequest),
 		retentionPolicies:  make(map[string]*domain.RetentionPolicy),
+		trackingLinks:      make(map[string]*domain.TrackingLink),
+		trackingEvents:     make([]*domain.TrackingEvent, 0),
+		inboundRoutes:      make(map[string]*domain.InboundRoute),
+		inboundMessages:    make([]*domain.InboundMessage, 0),
 	}
 
 	// Seed default IP pool
@@ -400,6 +426,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"audit.read",
 		"settings.read", "settings.write",
 		"retention.read", "retention.write", "privacy.erase", "privacy.export", "privacy.read",
+		"inbound.read", "inbound.write", "inbound.routes", "tracking.read",
 		"impersonate.read", "impersonate.write",
 		"system.read", "system.write",
 	}
@@ -428,6 +455,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"webhooks.read", "webhooks.write", "webhooks.replay", "webhooks.secret.rotate",
 		"analytics.read", "analytics.export", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
 		"retention.read", "retention.write", "privacy.erase", "privacy.export", "privacy.read",
+		"inbound.read", "inbound.write", "inbound.routes", "tracking.read",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
 }
@@ -2940,6 +2968,236 @@ func (r *MemoryRepository) ExecuteRetentionPurge(ctx context.Context, tenantID s
 	}
 	return summary, nil
 }
+
+// Phase 10: Tracking & Inbound Routing
+
+func (r *MemoryRepository) SaveTrackingLink(ctx context.Context, link *domain.TrackingLink) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if link.ID == "" {
+		link.ID = crypto.NewULID(crypto.PrefixTrackingLink)
+	}
+	if link.CreatedAt.IsZero() {
+		link.CreatedAt = time.Now().UTC()
+	}
+	key := fmt.Sprintf("%s:%s", link.TenantID, link.LinkID)
+	r.trackingLinks[key] = link
+	return nil
+}
+
+func (r *MemoryRepository) GetTrackingLink(ctx context.Context, tenantID, linkID string) (*domain.TrackingLink, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	key := fmt.Sprintf("%s:%s", tenantID, linkID)
+	link, ok := r.trackingLinks[key]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return link, nil
+}
+
+func (r *MemoryRepository) RecordTrackingEvent(ctx context.Context, evt *domain.TrackingEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if evt.ID == "" {
+		evt.ID = crypto.NewULID(crypto.PrefixTrackingEvent)
+	}
+	if evt.OccurredAt.IsZero() {
+		evt.OccurredAt = time.Now().UTC()
+	}
+	r.trackingEvents = append(r.trackingEvents, evt)
+	return nil
+}
+
+func (r *MemoryRepository) ListTrackingEvents(ctx context.Context, tenantID, messageID string) ([]*domain.TrackingEvent, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*domain.TrackingEvent
+	for _, ev := range r.trackingEvents {
+		if ev.TenantID == tenantID {
+			if messageID == "" || ev.MessageID == messageID {
+				result = append(result, ev)
+			}
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].OccurredAt.After(result[j].OccurredAt)
+	})
+	return result, nil
+}
+
+func (r *MemoryRepository) CreateInboundRoute(ctx context.Context, route *domain.InboundRoute) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if route.ID == "" {
+		route.ID = crypto.NewULID(crypto.PrefixInboundRoute)
+	}
+	now := time.Now().UTC()
+	route.CreatedAt = now
+	route.UpdatedAt = now
+	r.inboundRoutes[route.ID] = route
+	return nil
+}
+
+func (r *MemoryRepository) GetInboundRoute(ctx context.Context, tenantID, id string) (*domain.InboundRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	route, ok := r.inboundRoutes[id]
+	if !ok || route.TenantID != tenantID {
+		return nil, ErrNotFound
+	}
+	return route, nil
+}
+
+func (r *MemoryRepository) ListInboundRoutes(ctx context.Context, tenantID string) ([]*domain.InboundRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.InboundRoute
+	for _, route := range r.inboundRoutes {
+		if route.TenantID == tenantID {
+			list = append(list, route)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Priority != list[j].Priority {
+			return list[i].Priority < list[j].Priority
+		}
+		return list[i].CreatedAt.Before(list[j].CreatedAt)
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) UpdateInboundRoute(ctx context.Context, route *domain.InboundRoute) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.inboundRoutes[route.ID]
+	if !ok || existing.TenantID != route.TenantID {
+		return ErrNotFound
+	}
+	route.UpdatedAt = time.Now().UTC()
+	r.inboundRoutes[route.ID] = route
+	return nil
+}
+
+func (r *MemoryRepository) DeleteInboundRoute(ctx context.Context, tenantID, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.inboundRoutes[id]
+	if !ok || existing.TenantID != tenantID {
+		return ErrNotFound
+	}
+	delete(r.inboundRoutes, id)
+	return nil
+}
+
+func (r *MemoryRepository) MatchInboundRoute(ctx context.Context, tenantID, toAddress string) (*domain.InboundRoute, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	normAddr := strings.ToLower(strings.TrimSpace(toAddress))
+	parts := strings.Split(normAddr, "@")
+	if len(parts) != 2 {
+		return nil, errors.New("invalid email address")
+	}
+	domainPart := parts[1]
+
+	var tenantRoutes []*domain.InboundRoute
+	for _, route := range r.inboundRoutes {
+		if route.TenantID == tenantID && route.IsActive {
+			tenantRoutes = append(tenantRoutes, route)
+		}
+	}
+
+	sort.Slice(tenantRoutes, func(i, j int) bool {
+		return tenantRoutes[i].Priority < tenantRoutes[j].Priority
+	})
+
+	for _, route := range tenantRoutes {
+		pattern := strings.ToLower(strings.TrimSpace(route.Pattern))
+		switch route.MatchType {
+		case "exact":
+			if pattern == normAddr {
+				return route, nil
+			}
+		case "wildcard":
+			if matched, _ := filepath.Match(pattern, normAddr); matched {
+				return route, nil
+			}
+		case "catch_all":
+			cleanPattern := strings.TrimPrefix(pattern, "@")
+			cleanPattern = strings.TrimPrefix(cleanPattern, "*@")
+			if strings.EqualFold(cleanPattern, domainPart) {
+				return route, nil
+			}
+		}
+	}
+
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) SaveInboundMessage(ctx context.Context, msg *domain.InboundMessage) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if msg.ID == "" {
+		msg.ID = crypto.NewULID(crypto.PrefixInboundMessage)
+	}
+	if msg.CreatedAt.IsZero() {
+		msg.CreatedAt = time.Now().UTC()
+	}
+	r.inboundMessages = append(r.inboundMessages, msg)
+	return nil
+}
+
+func (r *MemoryRepository) GetInboundMessage(ctx context.Context, tenantID, id string) (*domain.InboundMessage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, msg := range r.inboundMessages {
+		if msg.ID == id && msg.TenantID == tenantID {
+			return msg, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) ListInboundMessages(ctx context.Context, tenantID string, limit, offset int) ([]*domain.InboundMessage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.InboundMessage
+	for _, msg := range r.inboundMessages {
+		if msg.TenantID == tenantID {
+			list = append(list, msg)
+		}
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].CreatedAt.After(list[j].CreatedAt)
+	})
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(list) {
+		return []*domain.InboundMessage{}, nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(list) {
+		end = len(list)
+	}
+	return list[offset:end], nil
+}
+
 
 
 

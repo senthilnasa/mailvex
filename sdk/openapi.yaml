@@ -820,3 +820,160 @@ paths:
             text/csv:
               schema:
                 type: string
+
+  /o/{token}:
+    get:
+      summary: Transparent 1x1 GIF open tracking pixel
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Signed HMAC tracking token
+      responses:
+        '200':
+          description: RFC 2046 transparent 1x1 GIF with Cache-Control no-store
+          content:
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Token invalid, expired, or tampered
+
+  /c/{token}:
+    get:
+      summary: Safe click tracking redirect
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Signed HMAC tracking token
+      responses:
+        '302':
+          description: Temporary redirect to safe repository-resolved destination URL
+        '404':
+          description: Link not found or token invalid
+
+  /v1/inbound/routes:
+    get:
+      summary: List inbound mail routing rules
+      responses:
+        '200':
+          description: Array of inbound routing rules sorted by priority
+    post:
+      summary: Create inbound mail routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pattern]
+              properties:
+                priority: { type: integer, default: 10 }
+                match_type: { type: string, enum: [exact, wildcard, catch_all], default: exact }
+                pattern: { type: string }
+                action: { type: string, enum: [webhook, store_only, forward, discard], default: webhook }
+                action_target: { type: string }
+                is_active: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Inbound route created
+
+  /v1/inbound/routes/{id}:
+    get:
+      summary: Get inbound routing rule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inbound route details
+        '404':
+          description: Route not found
+    patch:
+      summary: Update inbound routing rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                priority: { type: integer }
+                match_type: { type: string, enum: [exact, wildcard, catch_all] }
+                pattern: { type: string }
+                action: { type: string, enum: [webhook, store_only, forward, discard] }
+                action_target: { type: string }
+                is_active: { type: boolean }
+      responses:
+        '200':
+          description: Updated inbound route
+        '404':
+          description: Route not found
+    delete:
+      summary: Delete inbound routing rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Inbound route deleted
+        '404':
+          description: Route not found
+
+  /v1/inbound/routes/test:
+    post:
+      summary: Test inbound recipient address against active routing table
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address: { type: string, format: email }
+      responses:
+        '200':
+          description: Route match result with matched flag and rule details
+
+  /v1/inbound/messages:
+    get:
+      summary: List received inbound emails
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Array of inbound messages with SPF/DKIM/DMARC verdicts
+
+  /v1/inbound/messages/{id}:
+    get:
+      summary: Get inbound message details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inbound message detail
+        '404':
+          description: Inbound message not found

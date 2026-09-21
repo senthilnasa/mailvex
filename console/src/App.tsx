@@ -195,12 +195,38 @@ interface RetentionPurgeResult {
   purged_raw_mime_count: number
 }
 
+interface InboundRoute {
+  id: string
+  tenant_id: string
+  priority: number
+  match_type: 'exact' | 'wildcard' | 'catch_all'
+  pattern: string
+  action: 'webhook' | 'store_only' | 'forward' | 'discard'
+  action_target?: string
+  is_active: boolean
+  created_at: string
+}
+
+interface InboundMessage {
+  id: string
+  tenant_id: string
+  route_id?: string
+  from_address: string
+  to_address: string
+  subject: string
+  spf_status: string
+  dkim_status: string
+  dmarc_status: string
+  status: string
+  created_at: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -288,6 +314,19 @@ export default function App() {
   const [retentionMsg, setRetentionMsg] = useState<string | null>(null)
   const [purgeResult, setPurgeResult] = useState<RetentionPurgeResult | null>(null)
 
+  // Phase 10: Inbound Routing state
+  const [inboundRoutes, setInboundRoutes] = useState<InboundRoute[]>([])
+  const [inboundMessages, setInboundMessages] = useState<InboundMessage[]>([])
+  const [newRoutePriority, setNewRoutePriority] = useState(10)
+  const [newRouteMatchType, setNewRouteMatchType] = useState<'exact' | 'wildcard' | 'catch_all'>('exact')
+  const [newRoutePattern, setNewRoutePattern] = useState('')
+  const [newRouteAction, setNewRouteAction] = useState<'webhook' | 'store_only' | 'forward' | 'discard'>('webhook')
+  const [newRouteTarget, setNewRouteTarget] = useState('')
+  const [newRouteActive, setNewRouteActive] = useState(true)
+  const [testInboundAddress, setTestInboundAddress] = useState('')
+  const [testInboundResult, setTestInboundResult] = useState<any | null>(null)
+  const [inboundActionMsg, setInboundActionMsg] = useState<string | null>(null)
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -325,8 +364,128 @@ export default function App() {
       loadWebhooks()
       loadPrivacyRequests()
       loadRetentionPolicy()
+      loadInboundRoutes()
+      loadInboundMessages()
     }
   }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
+
+  const loadInboundRoutes = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/inbound/routes', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setInboundRoutes(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadInboundMessages = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/inbound/messages?limit=50', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setInboundMessages(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleCreateInboundRoute = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newRoutePattern) return
+    try {
+      const res = await fetch('/v1/inbound/routes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          priority: Number(newRoutePriority),
+          match_type: newRouteMatchType,
+          pattern: newRoutePattern.trim(),
+          action: newRouteAction,
+          action_target: newRouteTarget.trim() ? newRouteTarget.trim() : undefined,
+          is_active: newRouteActive,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setInboundActionMsg('Inbound route created successfully.')
+        setNewRoutePattern('')
+        setNewRouteTarget('')
+        setNewRoutePriority(10)
+        loadInboundRoutes()
+        setTimeout(() => setInboundActionMsg(null), 4000)
+      } else {
+        alert(data.error?.message || 'Failed to create inbound route')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleDeleteInboundRoute = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Are you sure you want to delete this inbound route?')) return
+    try {
+      const res = await fetch(`/v1/inbound/routes/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadInboundRoutes()
+      }
+    } catch {}
+  }
+
+  const handleToggleInboundRoute = async (route: InboundRoute) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/inbound/routes/${route.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ is_active: !route.is_active }),
+      })
+      if (res.ok) {
+        loadInboundRoutes()
+      }
+    } catch {}
+  }
+
+  const handleTestInboundRoute = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !testInboundAddress) return
+    try {
+      const res = await fetch('/v1/inbound/routes/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ address: testInboundAddress.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTestInboundResult(data)
+      } else {
+        alert(data.error?.message || 'Failed to test route match')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
 
   const loadPrivacyRequests = async () => {
     if (!activeTenant || !user) return
@@ -1493,6 +1652,16 @@ export default function App() {
           >
             Privacy & Retention
           </button>
+          <button
+            onClick={() => setCurrentTab('inbound')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'inbound'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Inbound Routing
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -1513,6 +1682,7 @@ export default function App() {
                   {currentTab === 'analytics' && 'Analytics & Deliverability Reporting'}
                   {currentTab === 'webhooks' && 'Webhooks, Signatures & Replay Defense'}
                   {currentTab === 'privacy_retention' && 'Suppression Privacy & Data Retention'}
+                  {currentTab === 'inbound' && 'Inbound Email Routing & Processing'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -3407,6 +3577,352 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                               </td>
                               <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{req.result_summary || '—'}</td>
                               <td className="px-4 py-3 text-slate-500">{new Date(req.requested_at).toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Phase 10: Inbound Routing Tab */}
+            {currentTab === 'inbound' && (
+              <div className="space-y-6">
+                {inboundActionMsg && (
+                  <div className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-sm p-3 rounded-lg flex items-center justify-between">
+                    <span>{inboundActionMsg}</span>
+                    <button onClick={() => setInboundActionMsg(null)} className="text-emerald-400 hover:text-white text-xs">✕</button>
+                  </div>
+                )}
+
+                {/* Top Section: Overview & Route Simulator */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Route Simulator */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+                    <h2 className="text-base font-semibold text-white mb-2 flex items-center justify-between">
+                      <span>Route Simulator & Tester</span>
+                      <span className="text-xs font-mono text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                        §21 Precedence Engine
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mb-4">
+                      Simulate inbound recipient addresses against your active routing table to verify evaluation order and target dispatch.
+                    </p>
+                    <form onSubmit={handleTestInboundRoute} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">
+                          Test Recipient Email Address
+                        </label>
+                        <div className="flex space-x-2">
+                          <input
+                            type="email"
+                            required
+                            value={testInboundAddress}
+                            onChange={(e) => setTestInboundAddress(e.target.value)}
+                            placeholder="e.g. support-vip@mail.example.com"
+                            className="flex-1 px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                          >
+                            Test Match
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+
+                    {testInboundResult && (
+                      <div className="mt-4 pt-4 border-t border-slate-800">
+                        {testInboundResult.matched ? (
+                          <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-lg p-3 text-xs">
+                            <div className="flex items-center text-emerald-400 font-semibold mb-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>
+                              Matched Route #{testInboundResult.route.priority} ({testInboundResult.route.id})
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-slate-300 mt-2">
+                              <div><span className="text-slate-400">Match Type:</span> <span className="font-mono text-white">{testInboundResult.route.match_type}</span></div>
+                              <div><span className="text-slate-400">Pattern:</span> <span className="font-mono text-white">{testInboundResult.route.pattern}</span></div>
+                              <div><span className="text-slate-400">Action:</span> <span className="font-mono text-indigo-300">{testInboundResult.route.action}</span></div>
+                              <div><span className="text-slate-400">Target:</span> <span className="font-mono text-white">{testInboundResult.route.action_target || '—'}</span></div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-amber-950/40 border border-amber-800/60 rounded-lg p-3 text-xs text-amber-300">
+                            <span className="font-semibold">No Match Found:</span> No active route matched recipient <code className="text-amber-200 font-mono">{testInboundResult.address}</code>. Inbound mail to this address will be dropped or rejected.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Create New Route */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+                    <h2 className="text-base font-semibold text-white mb-2">Create Inbound Route</h2>
+                    <p className="text-xs text-slate-400 mb-4">
+                      Define priority rules to match inbound SMTP mail and route to webhooks, forwarding addresses, or storage.
+                    </p>
+                    <form onSubmit={handleCreateInboundRoute} className="space-y-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-300 mb-1">
+                            Priority (1-999)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="999"
+                            required
+                            value={newRoutePriority}
+                            onChange={(e) => setNewRoutePriority(Number(e.target.value))}
+                            className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-300 mb-1">
+                            Match Type
+                          </label>
+                          <select
+                            value={newRouteMatchType}
+                            onChange={(e) => setNewRouteMatchType(e.target.value as any)}
+                            className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="exact">Exact Address</option>
+                            <option value="wildcard">Wildcard (*)</option>
+                            <option value="catch_all">Catch-All (@domain)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-300 mb-1">
+                            Action
+                          </label>
+                          <select
+                            value={newRouteAction}
+                            onChange={(e) => setNewRouteAction(e.target.value as any)}
+                            className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="webhook">Webhook POST</option>
+                            <option value="store_only">Store Only</option>
+                            <option value="forward">Forward SMTP</option>
+                            <option value="discard">Discard / Drop</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">
+                          Pattern
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newRoutePattern}
+                          onChange={(e) => setNewRoutePattern(e.target.value)}
+                          placeholder={newRouteMatchType === 'catch_all' ? '@example.com' : newRouteMatchType === 'wildcard' ? 'support-*@example.com' : 'contact@example.com'}
+                          className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+
+                      {(newRouteAction === 'webhook' || newRouteAction === 'forward') && (
+                        <div>
+                          <label className="block text-xs font-medium text-slate-300 mb-1">
+                            Action Target {newRouteAction === 'webhook' ? '(HTTPS Endpoint URL)' : '(Forward Destination Email)'}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newRouteTarget}
+                            onChange={(e) => setNewRouteTarget(e.target.value)}
+                            placeholder={newRouteAction === 'webhook' ? 'https://api.example.com/webhooks/inbound' : 'team@internal.example.com'}
+                            className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1">
+                        <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newRouteActive}
+                            onChange={(e) => setNewRouteActive(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span>Route Enabled (Active)</span>
+                        </label>
+
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                        >
+                          Add Inbound Route
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Section 2: Inbound Routes Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
+                    <div className="flex items-center space-x-3">
+                      <span>Inbound Routing Rules ({inboundRoutes.length})</span>
+                      <span className="text-xs text-slate-400 font-normal">
+                        Evaluated in ascending priority order (1 first)
+                      </span>
+                    </div>
+                    <button
+                      onClick={loadInboundRoutes}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-3">Priority</th>
+                          <th className="px-4 py-3">Match Type</th>
+                          <th className="px-4 py-3">Pattern</th>
+                          <th className="px-4 py-3">Action</th>
+                          <th className="px-4 py-3">Target</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {inboundRoutes.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                              No inbound routing rules configured yet. Create a route above to start processing incoming emails.
+                            </td>
+                          </tr>
+                        ) : (
+                          inboundRoutes.map((route) => (
+                            <tr key={route.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-3 font-mono font-bold text-white">#{route.priority}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  route.match_type === 'exact'
+                                    ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                                    : route.match_type === 'wildcard'
+                                    ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                                    : 'bg-amber-950 text-amber-400 border border-amber-800'
+                                }`}>
+                                  {route.match_type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-mono font-medium text-white">{route.pattern}</td>
+                              <td className="px-4 py-3 font-mono text-indigo-300">{route.action}</td>
+                              <td className="px-4 py-3 text-slate-400 max-w-xs truncate font-mono text-xs">
+                                {route.action_target || '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => handleToggleInboundRoute(route)}
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
+                                    route.is_active
+                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'
+                                      : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {route.is_active ? 'Active' : 'Disabled'}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <button
+                                  onClick={() => handleDeleteInboundRoute(route.id)}
+                                  className="text-red-400 hover:text-red-300 text-xs font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 3: Inbound Message History Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
+                    <div className="flex items-center space-x-3">
+                      <span>Inbound Mail Logs ({inboundMessages.length})</span>
+                      <span className="text-xs text-slate-400 font-normal">
+                        Recent inbound SMTP deliveries with SPF / DKIM / DMARC authentication verdicts
+                      </span>
+                    </div>
+                    <button
+                      onClick={loadInboundMessages}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-3">Message ID</th>
+                          <th className="px-4 py-3">From</th>
+                          <th className="px-4 py-3">To</th>
+                          <th className="px-4 py-3">Subject</th>
+                          <th className="px-4 py-3">Auth Verification</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Received At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {inboundMessages.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                              No inbound messages received yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          inboundMessages.map((msg) => (
+                            <tr key={msg.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-3 font-mono text-white">{msg.id}</td>
+                              <td className="px-4 py-3 font-mono text-slate-300">{msg.from_address}</td>
+                              <td className="px-4 py-3 font-mono text-slate-300">{msg.to_address}</td>
+                              <td className="px-4 py-3 text-white max-w-xs truncate">{msg.subject || '(no subject)'}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center space-x-1 font-mono text-[10px]">
+                                  <span className={`px-1.5 py-0.5 rounded ${
+                                    msg.spf_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                  }`}>
+                                    SPF:{msg.spf_status || 'none'}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded ${
+                                    msg.dkim_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                  }`}>
+                                    DKIM:{msg.dkim_status || 'none'}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded ${
+                                    msg.dmarc_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                  }`}>
+                                    DMARC:{msg.dmarc_status || 'none'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  msg.status === 'dispatched'
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                    : msg.status === 'stored'
+                                    ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                }`}>
+                                  {msg.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-500">
+                                {new Date(msg.created_at).toLocaleString()}
+                              </td>
                             </tr>
                           ))
                         )}

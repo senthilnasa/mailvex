@@ -675,3 +675,58 @@ type RetentionPurgeSummary struct {
 	PurgedAttemptsCount int       `json:"purged_attempts_count"`
 	PurgedRawMIMECount  int       `json:"purged_raw_mime_count"`
 }
+
+type TrackingLink struct {
+	ID        string    `json:"id"`
+	TenantID  string    `json:"tenant_id"`
+	MessageID string    `json:"message_id"`
+	LinkID    string    `json:"link_id"`
+	TargetURL string    `json:"target_url"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type TrackingEvent struct {
+	ID          string    `json:"id"`
+	TenantID    string    `json:"tenant_id"`
+	MessageID   string    `json:"message_id"`
+	RecipientID string    `json:"recipient_id"`
+	Type        string    `json:"type"` // open, click
+	TargetURL   *string   `json:"target_url,omitempty"`
+	IP          string    `json:"ip"`
+	UserAgent   *string   `json:"user_agent,omitempty"`
+	IsBot       bool      `json:"is_bot"`
+	BotReason   *string   `json:"bot_reason,omitempty"`
+	OccurredAt  time.Time `json:"occurred_at"`
+}
+
+type InboundRoute struct {
+	ID           string    `json:"id"`
+	TenantID     string    `json:"tenant_id"`
+	Priority     int       `json:"priority"`
+	MatchType    string    `json:"match_type"` // exact, wildcard, catch_all
+	Pattern      string    `json:"pattern"`
+	Action       string    `json:"action"` // webhook, store_only, forward, discard
+	ActionTarget *string   `json:"action_target,omitempty"`
+	IsActive     bool      `json:"is_active"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type InboundMessage struct {
+	ID          string    `json:"id"`
+	TenantID    string    `json:"tenant_id"`
+	RouteID     *string   `json:"route_id,omitempty"`
+	MessageID   *string   `json:"message_id,omitempty"`
+	FromAddress string    `json:"from_address"`
+	ToAddress   string    `json:"to_address"`
+	Subject     *string   `json:"subject,omitempty"`
+	SizeBytes   int       `json:"size_bytes"`
+	RawMIMERef  *string   `json:"raw_mime_ref,omitempty"`
+	SPFStatus   string    `json:"spf_status"`
+	DKIMStatus  string    `json:"dkim_status"`
+	DMARCStatus string    `json:"dmarc_status"`
+	SpamScore   float64   `json:"spam_score"`
+	Status      string    `json:"status"` // processed, failed, quarantined
+	CreatedAt   time.Time `json:"created_at"`
+}
+
