@@ -38,6 +38,8 @@ type Repository interface {
 	CreateUser(ctx context.Context, user *domain.User) error
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUserByID(ctx context.Context, id string) (*domain.User, error)
+	UpdateUserPassword(ctx context.Context, email, passwordHash string) error
+	ResetPlatformAdmin(ctx context.Context, email, passwordHash string) (*domain.User, error)
 
 	// Tenant operations
 	CreateTenant(ctx context.Context, tenant *domain.Tenant) error
@@ -673,7 +675,45 @@ func (m *MemoryRepository) GetUserByEmail(ctx context.Context, email string) (*d
 	defer m.mu.RUnlock()
 
 	for _, user := range m.users {
-		if user.Email == email {
+		if strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(email)) {
+			return user, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryRepository) UpdateUserPassword(ctx context.Context, email, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, user := range m.users {
+		if strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(email)) {
+			user.PasswordHash = passwordHash
+			user.UpdatedAt = time.Now().UTC()
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (m *MemoryRepository) ResetPlatformAdmin(ctx context.Context, email, passwordHash string) (*domain.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, user := range m.users {
+		if user.IsPlatformAdmin {
+			user.Email = strings.ToLower(strings.TrimSpace(email))
+			user.PasswordHash = passwordHash
+			user.UpdatedAt = time.Now().UTC()
+			return user, nil
+		}
+	}
+
+	for _, user := range m.users {
+		if strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(email)) {
+			user.PasswordHash = passwordHash
+			user.IsPlatformAdmin = true
+			user.UpdatedAt = time.Now().UTC()
 			return user, nil
 		}
 	}

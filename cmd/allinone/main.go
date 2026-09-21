@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/dns"
+	"github.com/mailvex/mailvex/core/domain"
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/storage"
 	"github.com/mailvex/mailvex/smtp"
@@ -70,6 +72,57 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 		ShutdownGrace: 10 * time.Second,
 	}
 	deliveryWorker := worker.NewDeliveryWorker(repo, store, router, resolver, classifier, workerCfg)
+
+	// Pre-seed default platform administrator credentials for immediate access
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail == "" {
+		adminEmail = "admin@example.com"
+	}
+	adminEmail = strings.ToLower(strings.TrimSpace(adminEmail))
+	adminPass := os.Getenv("ADMIN_PASSWORD")
+	if adminPass == "" {
+		adminPass = "Password123!"
+	}
+	orgID := "org_default"
+	_ = repo.CreateOrganization(context.Background(), &domain.Organization{
+		ID:        orgID,
+		Name:      "Default Organization",
+		Slug:      "default-org",
+		Status:    "active",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	})
+	tenantID := "tenant_default"
+	_ = repo.CreateTenant(context.Background(), &domain.Tenant{
+		ID:             tenantID,
+		OrganizationID: orgID,
+		Name:           "Production",
+		Slug:           "production",
+		Environment:    "live",
+		Status:         "active",
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	})
+	adminHash, _ := crypto.HashPassword(adminPass)
+	adminUser := &domain.User{
+		ID:              "user_platform_admin",
+		OrganizationID:  orgID,
+		Email:           adminEmail,
+		PasswordHash:    adminHash,
+		Status:          "active",
+		IsPlatformAdmin: true,
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+	}
+	_ = repo.CreateUser(context.Background(), adminUser)
+	_ = repo.AddTenantMembership(context.Background(), &domain.TenantMembership{
+		ID:        "mem_platform_admin",
+		TenantID:  tenantID,
+		UserID:    adminUser.ID,
+		RoleID:    "role_tenant_owner",
+		CreatedAt: time.Now().UTC(),
+	})
+	_ = repo.SetSetting(context.Background(), "setup_completed", "true")
 
 	return &AllInOneSupervisor{
 		repo:           repo,

@@ -179,6 +179,8 @@ func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 		a.encryption, _ = crypto.NewEnvelopeEncryption([]byte("mailvex-homelab-32byte-masterkek"))
 	}
 
+	req.AdminEmail = strings.ToLower(strings.TrimSpace(req.AdminEmail))
+
 	// 1. Resolve or Create Organization
 	orgSlug := slugify(req.OrgName)
 	if orgSlug == "" {
@@ -216,6 +218,7 @@ func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 	existingUser, err := a.repo.GetUserByEmail(r.Context(), req.AdminEmail)
 	if err == nil && existingUser != nil {
 		adminID = existingUser.ID
+		_ = a.repo.UpdateUserPassword(r.Context(), req.AdminEmail, pwdHash)
 	} else {
 		adminID = crypto.NewULID(crypto.PrefixUser)
 		adminUser := &domain.User{
@@ -356,6 +359,7 @@ func (a *API) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	user, err := a.repo.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		http.Error(w, `{"error":{"code":"unauthorized","message":"Invalid email or password"}}`, http.StatusUnauthorized)
@@ -387,6 +391,87 @@ func (a *API) LoginHandler(w http.ResponseWriter, r *http.Request) {
 			"is_platform_admin": user.IsPlatformAdmin,
 		},
 		"tenants": tenants,
+	})
+}
+
+// ResetAdminHandler resets or seeds the platform administrator credentials
+func (a *API) ResetAdminHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":{"code":"invalid_request","message":"Malformed JSON"}}`, http.StatusBadRequest)
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Email == "" || len(req.Password) < 8 {
+		http.Error(w, `{"error":{"code":"invalid_input","message":"Email required and password must be at least 8 characters"}}`, http.StatusBadRequest)
+		return
+	}
+
+	pwdHash, err := crypto.HashPassword(req.Password)
+	if err != nil {
+		http.Error(w, `{"error":{"code":"hashing_failed","message":"Password hashing failed"}}`, http.StatusInternalServerError)
+		return
+	}
+
+	user, err := a.repo.ResetPlatformAdmin(r.Context(), req.Email, pwdHash)
+	if err != nil {
+		orgID := crypto.NewULID(crypto.PrefixOrg)
+		_ = a.repo.CreateOrganization(r.Context(), &domain.Organization{
+			ID:        orgID,
+			Name:      "Default Organization",
+			Slug:      "default-org",
+			Status:    "active",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		})
+		adminID := crypto.NewULID(crypto.PrefixUser)
+		user = &domain.User{
+			ID:              adminID,
+			OrganizationID:  orgID,
+			Email:           req.Email,
+			PasswordHash:    pwdHash,
+			Status:          "active",
+			IsPlatformAdmin: true,
+			CreatedAt:       time.Now().UTC(),
+			UpdatedAt:       time.Now().UTC(),
+		}
+		_ = a.repo.CreateUser(r.Context(), user)
+
+		tenantID := crypto.NewULID(crypto.PrefixTenant)
+		_ = a.repo.CreateTenant(r.Context(), &domain.Tenant{
+			ID:             tenantID,
+			OrganizationID: orgID,
+			Name:           "Production",
+			Slug:           "production",
+			Environment:    "live",
+			Status:         "active",
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		})
+		_ = a.repo.AddTenantMembership(r.Context(), &domain.TenantMembership{
+			ID:        crypto.NewULID(crypto.PrefixMembership),
+			TenantID:  tenantID,
+			UserID:    adminID,
+			RoleID:    "role_tenant_owner",
+			CreatedAt: time.Now().UTC(),
+		})
+	}
+
+	_ = a.repo.SetSetting(r.Context(), "setup_completed", "true")
+
+	_ = a.audit.Log(r.Context(), &domain.AuditLog{
+		ActorUserID:  &user.ID,
+		Action:       "auth.admin_reset",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"message": "Platform admin credentials reset successfully",
+		"email":   user.Email,
 	})
 }
 

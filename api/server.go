@@ -78,6 +78,7 @@ func (s *Server) setupRoutes() {
 
 	// Auth Handlers
 	s.mux.HandleFunc("POST /v1/auth/login", apiHandler.LoginHandler)
+	s.mux.HandleFunc("POST /v1/auth/reset-admin", apiHandler.ResetAdminHandler)
 
 	// Authenticated Handlers
 	authMiddleware := middleware.RequireAuth(s.repo)

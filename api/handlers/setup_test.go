@@ -106,3 +106,37 @@ func TestSetupExecuteHandler_PreExistingResourcesRecovery(t *testing.T) {
 	}
 }
 
+func TestResetAdminHandler(t *testing.T) {
+	repo := repository.NewMemoryRepository()
+	auditSvc := audit.NewService(repo)
+	api := handlers.NewAPI(repo, auditSvc, nil)
+
+	// Call ResetAdminHandler to seed platform admin
+	payload := map[string]string{
+		"email":    "ADMIN@EXAMPLE.COM",
+		"password": "NewSecretPassword123!",
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/v1/auth/reset-admin", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	api.ResetAdminHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify login works case-insensitively with the new password
+	loginPayload := map[string]string{
+		"email":    "admin@example.com",
+		"password": "NewSecretPassword123!",
+	}
+	loginBody, _ := json.Marshal(loginPayload)
+	loginReq := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewReader(loginBody))
+	loginW := httptest.NewRecorder()
+	api.LoginHandler(loginW, loginReq)
+
+	if loginW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on login, got %d: %s", loginW.Code, loginW.Body.String())
+	}
+}
+
