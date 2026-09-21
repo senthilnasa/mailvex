@@ -45,7 +45,7 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 	auditSvc := audit.NewService(repo)
 
 	apiSrv := api.NewServer(repo, auditSvc, enc, logger)
-	dnsEngine := dns.NewEngine(nil)
+	dnsEngine := dns.NewEngine(dns.NewSystemResolver())
 	apiSrv.SetDNSEngine(dnsEngine)
 
 	ingestEngine := core.NewIngestionEngine(repo, store)

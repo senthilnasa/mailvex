@@ -230,6 +230,9 @@ func (a *API) VerifyDomainHandler(w http.ResponseWriter, r *http.Request, dnsEng
 	dkim, _ := a.repo.GetActiveDKIMKey(r.Context(), domainID)
 	platformHost := "mail.example.com"
 
+	if dnsEngine == nil {
+		dnsEngine = dns.NewEngine(dns.NewSystemResolver())
+	}
 	results, allPassed := dnsEngine.VerifyDomain(r.Context(), dom, dkim, platformHost)
 
 	// Update records

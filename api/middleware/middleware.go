@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -49,6 +50,25 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// Recoverer catches unhandled panics and writes a clean JSON 500 error response
+func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					if logger != nil {
+						logger.Error("http_panic_recovered", "panic", fmt.Sprintf("%v", rec), "path", r.URL.Path)
+					}
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`{"error":{"code":"internal_error","message":"An unexpected error occurred during processing"}}`))
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // Logger logs each incoming HTTP request with timing and status

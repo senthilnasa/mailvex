@@ -198,3 +198,49 @@ func TestDomainsAndDNSLifecycle(t *testing.T) {
 		t.Fatalf("expected at least 2 streams, got %d", len(streams))
 	}
 }
+
+func TestDomainVerification_NilDNSEngineSafe(t *testing.T) {
+	server, repo := setupTestServer(t)
+	// Explicitly simulate nil resolver
+	server.SetDNSEngine(dns.NewEngine(nil))
+
+	orgID := crypto.NewULID(crypto.PrefixOrg)
+	_ = repo.CreateOrganization(t.Context(), &domain.Organization{
+		ID: orgID, Name: "DNS Safe Org", Slug: "dns-safe-org", Status: "active",
+	})
+	tenantID := crypto.NewULID(crypto.PrefixTenant)
+	_ = repo.CreateTenant(t.Context(), &domain.Tenant{
+		ID: tenantID, OrganizationID: orgID, Name: "Safe Tenant", Slug: "safe-tenant", Status: "active",
+	})
+	userID := crypto.NewULID(crypto.PrefixUser)
+	_ = repo.CreateUser(t.Context(), &domain.User{
+		ID: userID, OrganizationID: orgID, Email: "admin@dns-safe.org", IsPlatformAdmin: true,
+	})
+	_ = repo.AddTenantMembership(t.Context(), &domain.TenantMembership{
+		ID: crypto.NewULID(crypto.PrefixMembership), TenantID: tenantID, UserID: userID, RoleID: "role_tenant_owner",
+	})
+
+	// Add domain
+	domID := crypto.NewULID(crypto.PrefixDomain)
+	_ = repo.CreateDomain(t.Context(), &domain.Domain{
+		ID:             domID,
+		TenantID:       tenantID,
+		Name:           "my-homelab.local",
+		Type:           "local",
+		Status:         "pending",
+		OwnershipToken: "token123",
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	})
+
+	// Verify domain: POST /v1/domains/{id}/verify
+	req := httptest.NewRequest("POST", "/v1/domains/"+domID+"/verify", nil)
+	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Tenant-ID", tenantID)
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on verify with nil-safe engine, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}

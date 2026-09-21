@@ -458,9 +458,10 @@ func (s *Server) setupRoutes() {
 	))
 
 
-	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
+	// Apply global middleware: RequestID -> Logger -> Recoverer -> SecurityHeaders
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)
+	h = middleware.Recoverer(s.logger)(h)
 	h = middleware.Logger(s.logger)(h)
 	h = middleware.RequestID(h)
 

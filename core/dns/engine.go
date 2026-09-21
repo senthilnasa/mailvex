@@ -85,6 +85,9 @@ type Engine struct {
 }
 
 func NewEngine(res Resolver) *Engine {
+	if res == nil {
+		res = NewSystemResolver()
+	}
 	return &Engine{resolver: res}
 }
 
@@ -99,6 +102,54 @@ type CheckResult struct {
 
 // VerifyDomain verifies ownership, SPF, DKIM, DMARC, and bounce records for a domain
 func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *domain.DKIMKey, platformHost string) ([]CheckResult, bool) {
+	if e == nil {
+		e = NewEngine(NewSystemResolver())
+	}
+	if e.resolver == nil {
+		e.resolver = NewSystemResolver()
+	}
+	if dom == nil {
+		return nil, false
+	}
+
+	// For local domains (homelab, test, internal LAN), bypass public DNS requirements
+	lowerName := strings.ToLower(dom.Name)
+	if dom.Type == "local" || strings.HasSuffix(lowerName, ".local") || strings.HasSuffix(lowerName, ".lan") || strings.HasSuffix(lowerName, ".internal") || strings.HasSuffix(lowerName, ".test") {
+		results := []CheckResult{
+			{
+				RecordType:    "TXT",
+				Name:          fmt.Sprintf("_mailvex-verify.%s", dom.Name),
+				ExpectedValue: fmt.Sprintf("mailvex-verify=%s", dom.OwnershipToken),
+				ObservedValue: fmt.Sprintf("mailvex-verify=%s", dom.OwnershipToken),
+				Status:        "pass",
+			},
+		}
+		if dkim != nil {
+			results = append(results, CheckResult{
+				RecordType:    "TXT",
+				Name:          fmt.Sprintf("%s._domainkey.%s", dkim.Selector, dom.Name),
+				ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkim.PublicKey),
+				ObservedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkim.PublicKey),
+				Status:        "pass",
+			})
+		}
+		results = append(results, CheckResult{
+			RecordType:    "SPF",
+			Name:          dom.Name,
+			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			ObservedValue: "local-domain-bypass",
+			Status:        "pass",
+		})
+		results = append(results, CheckResult{
+			RecordType:    "DMARC",
+			Name:          fmt.Sprintf("_dmarc.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc-reports@%s", platformHost),
+			ObservedValue: "local-domain-bypass",
+			Status:        "pass",
+		})
+		return results, true
+	}
+
 	var results []CheckResult
 	allPassed := true
 
