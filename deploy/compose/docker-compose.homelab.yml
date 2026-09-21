@@ -1,0 +1,63 @@
+services:
+  mailvex:
+    image: mailvex/mailvex-allinone:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.allinone
+    container_name: mailvex-homelab
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # Web Console & REST API
+      - "2525:2525"   # Inbound IoT / LAN Device SMTP
+      - "25:25"       # Public Inbound MX (Optional)
+    environment:
+      - MVX_PROFILE=homelab
+      - PORT=8080
+      - SMTP_PORT=2525
+      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
+      - MVX_REDIS_URL=redis:6379
+      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - MVX_RELAY_TRANSPORT=enabled # Smart-host relay for home ISPs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - mailvex_data:/var/lib/mailvex
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: mailvex-mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootsecret
+      - MYSQL_DATABASE=mailvex
+      - MYSQL_USER=mailvex
+      - MYSQL_PASSWORD=secret
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ../homelab/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: mailvex-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mailvex_data:
+  mariadb_data:
+  redis_data:

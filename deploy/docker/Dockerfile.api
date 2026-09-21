@@ -1,0 +1,38 @@
+#syntax=docker/dockerfile:1
+# ---------------------------------------------------------
+# Mailvex API Gateway & Webhook Service (Multi-arch)
+# Supports linux/amd64 and linux/arm64
+# ---------------------------------------------------------
+
+# Stage 1: Build binary
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-w -s" -o /bin/mailvex-api ./cmd/api
+
+# Stage 2: Final minimal runtime
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata curl && \
+    addgroup -S mailvex && adduser -S mailvex -G mailvex
+
+USER mailvex
+
+COPY --from=builder /bin/mailvex-api /usr/local/bin/mailvex-api
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/mailvex-api"]

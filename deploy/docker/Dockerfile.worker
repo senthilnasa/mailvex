@@ -1,0 +1,36 @@
+#syntax=docker/dockerfile:1
+# ---------------------------------------------------------
+# Mailvex Outbound Delivery Worker (Multi-arch)
+# Supports linux/amd64 and linux/arm64
+# ---------------------------------------------------------
+
+# Stage 1: Build binary
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-w -s" -o /bin/mailvex-worker ./cmd/worker
+
+# Stage 2: Final minimal runtime
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata libcap && \
+    addgroup -S mailvex && adduser -S mailvex -G mailvex
+
+COPY --from=builder /bin/mailvex-worker /usr/local/bin/mailvex-worker
+
+# Allow binding to privileged ports (< 1024) if needed
+RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/mailvex-worker
+
+USER mailvex
+
+ENTRYPOINT ["/usr/local/bin/mailvex-worker"]

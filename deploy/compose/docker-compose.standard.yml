@@ -1,0 +1,72 @@
+services:
+  api:
+    image: mailvex/mailvex-api:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    container_name: mailvex-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - MVX_PROFILE=standard
+      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
+      - MVX_REDIS_URL=redis:6379
+      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: mailvex/mailvex-worker:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    container_name: mailvex-worker
+    restart: always
+    environment:
+      - MVX_PROFILE=standard
+      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
+      - MVX_REDIS_URL=redis:6379
+      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - MVX_OUTBOUND_PORT=25
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: mailvex-standard-db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootsecret
+      - MYSQL_DATABASE=mailvex
+      - MYSQL_USER=mailvex
+      - MYSQL_PASSWORD=secret
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: mailvex-standard-redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  db_data:
+  redis_data:

@@ -1,4 +1,30 @@
 import React, { useState, useEffect } from 'react'
+import {
+  LayoutDashboard,
+  Globe,
+  GitFork,
+  Key,
+  Inbox,
+  FileCode,
+  Ban,
+  ShieldAlert,
+  BarChart3,
+  Webhook,
+  Lock,
+  ArrowDownLeft,
+  Flame,
+  ShieldCheck,
+  Server,
+  Cpu,
+  Network,
+  Mail,
+  Building2,
+  Layers,
+  Zap,
+  LogOut,
+  Shield,
+  Sparkles
+} from 'lucide-react'
 
 interface Tenant {
   id: string
@@ -2050,117 +2076,208 @@ export default function App() {
 
   if (setupCompleted === null) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-slate-400">
+        <div className="relative">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-xl shadow-indigo-500/25 animate-pulse">
+            <Zap className="w-6 h-6 text-white" />
+          </div>
+        </div>
+        <p className="mt-4 text-xs font-mono tracking-wider uppercase text-slate-500">Checking installation status...</p>
       </div>
     )
   }
 
-  // 1. Setup Wizard View
+  // 1. Modern Enterprise Setup Wizard View
   if (!setupCompleted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white text-2xl shadow-lg shadow-indigo-500/20">
-              M
-            </div>
+      <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.18),rgba(255,255,255,0))] text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 rounded-2xl shadow-xl shadow-indigo-500/30 ring-1 ring-white/20 mb-4">
+            <Zap className="w-7 h-7 text-white" />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-            Welcome to Mailvex
-          </h2>
-          <p className="mt-2 text-center text-sm text-slate-400">
-            Initial Platform Installation Wizard
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+            Mailvex Platform Setup
+          </h1>
+          <p className="mt-2 text-sm text-slate-400 max-w-md mx-auto">
+            Initialize your carrier-grade, self-hosted email infrastructure engine with multi-tenant isolation.
           </p>
         </div>
 
-        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-slate-900 py-8 px-6 shadow-xl border border-slate-800 sm:rounded-2xl sm:px-10">
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
+          <div className="bg-slate-900/90 backdrop-blur-xl py-8 px-6 shadow-2xl border border-slate-800/80 rounded-2xl sm:px-10">
             {setupError && (
-              <div className="mb-4 bg-red-950/50 border border-red-500 text-red-300 text-sm p-3 rounded-lg">
-                {setupError}
+              <div className="mb-6 bg-rose-950/60 border border-rose-500/60 text-rose-300 text-xs p-4 rounded-xl flex items-start space-x-3">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0 text-rose-400 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">Installation Failed</span>
+                  <span>{setupError}</span>
+                </div>
               </div>
             )}
 
-            <form className="space-y-5" onSubmit={handleSetup}>
+            <form className="space-y-6" onSubmit={handleSetup}>
+              {/* Profile Selector Cards */}
               <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Deployment Profile
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
+                  1. Select Deployment Architecture
                 </label>
-                <select
-                  value={profile}
-                  onChange={(e) => setProfile(e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-700 bg-slate-800 text-slate-200 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-lg"
-                >
-                  <option value="standard">Standard (Production / Single Server)</option>
-                  <option value="homelab">Home Lab (Low Resource / IoT Mail Hub)</option>
-                  <option value="cluster">Cluster (High Availability Multi-Node)</option>
-                </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div
+                    onClick={() => setProfile('standard')}
+                    className={`cursor-pointer rounded-xl p-3.5 border transition-all relative flex flex-col justify-between ${
+                      profile === 'standard'
+                        ? 'bg-indigo-950/40 border-indigo-500/80 ring-2 ring-indigo-500/30 text-white'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Server className={`w-5 h-5 ${profile === 'standard' ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Recommended
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-200">Standard</div>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-tight">Production single-server with MariaDB & Redis.</p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setProfile('homelab')}
+                    className={`cursor-pointer rounded-xl p-3.5 border transition-all relative flex flex-col justify-between ${
+                      profile === 'homelab'
+                        ? 'bg-indigo-950/40 border-indigo-500/80 ring-2 ring-indigo-500/30 text-white'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Cpu className={`w-5 h-5 ${profile === 'homelab' ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          &lt; 200MB
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-200">Home Lab</div>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-tight">Ultra low-memory supervisor for homelab/IoT.</p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setProfile('cluster')}
+                    className={`cursor-pointer rounded-xl p-3.5 border transition-all relative flex flex-col justify-between ${
+                      profile === 'cluster'
+                        ? 'bg-indigo-950/40 border-indigo-500/80 ring-2 ring-indigo-500/30 text-white'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Network className={`w-5 h-5 ${profile === 'cluster' ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          Scale HA
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-200">Cluster</div>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-tight">Multi-node horizontally scaled delivery queue.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              {/* Organization and Tenant */}
               <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Organization Name
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
+                  2. Organization & Primary Tenant
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                  placeholder="e.g. Acme Corporation"
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Organization Name</label>
+                    <div className="relative">
+                      <Building2 className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="text"
+                        required
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        placeholder="Acme Corporation"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Primary Tenant Name</label>
+                    <div className="relative">
+                      <Layers className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="text"
+                        required
+                        value={tenantName}
+                        onChange={(e) => setTenantName(e.target.value)}
+                        placeholder="Production"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              {/* Platform Admin Credentials */}
               <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Primary Tenant Name
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">
+                  3. Platform Administrator
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={tenantName}
-                  onChange={(e) => setTenantName(e.target.value)}
-                  placeholder="e.g. Production"
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Admin Email Address</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="email"
+                        required
+                        value={adminEmail}
+                        onChange={(e) => setAdminEmail(e.target.value)}
+                        placeholder="admin@example.com"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Admin Master Password</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="password"
+                        required
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Minimum 8 characters (alphanumeric + symbol)"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Platform Admin Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Admin Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="At least 8 characters"
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
+              {/* Submit Button */}
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={setupLoading}
-                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-semibold text-xs tracking-wide uppercase text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-600/25 ring-1 ring-white/10 transition-all disabled:opacity-50"
                 >
-                  {setupLoading ? 'Configuring System...' : 'Complete Installation'}
+                  {setupLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Initializing Platform & Keys...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Complete Installation & Deploy</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -2170,66 +2287,80 @@ export default function App() {
     )
   }
 
-  // 2. Login View
+  // 2. Modern Enterprise Login View
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-white text-2xl shadow-lg shadow-indigo-500/20">
-              M
-            </div>
+      <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.15),rgba(255,255,255,0))] text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-xl shadow-indigo-500/30 ring-1 ring-white/20 mb-4">
+            <Zap className="w-7 h-7 text-white" />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
             Mailvex Console
-          </h2>
-          <p className="mt-2 text-center text-sm text-slate-400">
-            Sign in to manage your email infrastructure
+          </h1>
+          <p className="mt-2 text-xs text-slate-400">
+            Sign in to manage carrier-grade email deliverability and tenants
           </p>
         </div>
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-slate-900 py-8 px-6 shadow-xl border border-slate-800 sm:rounded-2xl sm:px-10">
+          <div className="bg-slate-900/90 backdrop-blur-xl py-8 px-6 shadow-2xl border border-slate-800/80 rounded-2xl sm:px-10">
             {loginError && (
-              <div className="mb-4 bg-red-950/50 border border-red-500 text-red-300 text-sm p-3 rounded-lg">
-                {loginError}
+              <div className="mb-6 bg-rose-950/60 border border-rose-500/60 text-rose-300 text-xs p-3.5 rounded-xl flex items-center space-x-2.5">
+                <ShieldAlert className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span>{loginError}</span>
               </div>
             )}
 
-            <form className="space-y-6" onSubmit={handleLogin}>
+            <form className="space-y-4" onSubmit={handleLogin}>
               <div>
-                <label className="block text-sm font-medium text-slate-300">
-                  Email address
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Email Address
                 </label>
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="admin@mailvex.local"
+                    className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300">
+                <label className="block text-xs font-medium text-slate-300 mb-1">
                   Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                />
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                  />
+                </div>
               </div>
 
-              <div>
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl font-semibold text-xs tracking-wide uppercase text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-600/25 ring-1 ring-white/10 transition-all disabled:opacity-50"
                 >
-                  {loginLoading ? 'Signing in...' : 'Sign In'}
+                  {loginLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Authenticating...</span>
+                    </>
+                  ) : (
+                    <span>Sign In to Console</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -2241,55 +2372,62 @@ export default function App() {
 
   // 3. Authenticated Dashboard Shell
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Header Navigation */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between">
+      <header className="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center space-x-4">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white text-lg">
-            M
+          <div className="w-8 h-8 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-lg flex items-center justify-center shadow-md shadow-indigo-500/20">
+            <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-white">Mailvex</span>
+          <span className="text-base font-bold bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">Mailvex</span>
 
           {/* Tenant Switcher */}
-          <div className="relative inline-block text-left ml-6">
+          <div className="relative inline-flex items-center ml-6">
+            <Layers className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
             <select
               value={activeTenant?.id || ''}
               onChange={(e) => {
                 const selected = tenants.find((t) => t.id === e.target.value)
                 if (selected) setActiveTenant(selected)
               }}
-              className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              className="pl-8 pr-8 py-1.5 border border-slate-700 bg-slate-800/90 text-slate-200 text-xs rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.slug})
+                  {t.name} ({t.slug}) [{t.environment}]
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-slate-400">{user.email}</span>
+        {/* User Status & Controls */}
+        <div className="flex items-center space-x-3">
           {user.is_platform_admin && (
             <>
               <button
                 onClick={() => setImpModalOpen(true)}
-                className="px-2.5 py-1 text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg transition-colors flex items-center space-x-1"
+                className="flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors"
+                title="Platform Admin: Impersonate a tenant for troubleshooting"
               >
-                <span>🎭</span>
+                <Shield className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Impersonate Tenant</span>
               </button>
-              <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
-                Platform Admin
+              <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3 text-amber-400" />
+                <span>Platform Admin</span>
               </span>
             </>
           )}
+          <div className="text-xs text-slate-400 font-mono">
+            {user.email}
+          </div>
           <button
             onClick={() => setUser(null)}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
+            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800 transition-colors"
           >
-            Sign Out
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
           </button>
         </div>
       </header>
@@ -2324,7 +2462,7 @@ export default function App() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>🎭</span>
+                <Shield className="w-4 h-4 text-indigo-400" />
                 <span>Platform Admin Impersonation</span>
               </h3>
               <button
@@ -2359,7 +2497,7 @@ export default function App() {
                   rows={3}
                   value={targetImpReason}
                   onChange={(e) => setTargetImpReason(e.target.value)}
-                  placeholder="e.g. Investigating Zendesk Ticket #4892 - intermittent bounce delivery spikes"
+                  placeholder="e.g. Investigating intermittent bounce delivery spikes"
                   className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
                 />
               </div>
@@ -2379,15 +2517,15 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setImpModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg"
                 >
-                  Start Impersonation
+                  Begin Impersonation
                 </button>
               </div>
             </form>
@@ -2395,153 +2533,46 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <nav className="w-64 bg-slate-900/60 border-r border-slate-800 p-4 space-y-1">
-          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Navigation
+      {/* Main Body */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Modern Sidebar */}
+        <nav className="w-64 bg-slate-900/60 backdrop-blur border-r border-slate-800 p-3 space-y-1 overflow-y-auto">
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Control Center
           </div>
-          <button
-            onClick={() => setCurrentTab('dashboard')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'dashboard'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setCurrentTab('domains')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'domains'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Domains & DNS
-          </button>
-          <button
-            onClick={() => setCurrentTab('streams')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'streams'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Message Streams
-          </button>
-          <button
-            onClick={() => setCurrentTab('apikeys')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'apikeys'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            API Keys
-          </button>
-          <button
-            onClick={() => setCurrentTab('messages')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'messages'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Message Logs & Inspector
-          </button>
-          <button
-            onClick={() => setCurrentTab('templates')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'templates'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Templates
-          </button>
-          <button
-            onClick={() => setCurrentTab('suppressions')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'suppressions'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Suppressions
-          </button>
-          <button
-            onClick={() => setCurrentTab('reputation')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'reputation'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Reputation & Abuse
-          </button>
-          <button
-            onClick={() => setCurrentTab('analytics')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'analytics'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Analytics & Reports
-          </button>
-          <button
-            onClick={() => setCurrentTab('webhooks')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'webhooks'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Webhooks & Signing
-          </button>
-          <button
-            onClick={() => setCurrentTab('privacy_retention')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'privacy_retention'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Privacy & Retention
-          </button>
-          <button
-            onClick={() => setCurrentTab('inbound')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'inbound'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Inbound Routing
-          </button>
-          <button
-            onClick={() => setCurrentTab('alerts_warmup')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'alerts_warmup'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            Alerts, DNSBL & Warmup
-          </button>
-          <button
-            onClick={() => setCurrentTab('sso_compliance')}
-            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              currentTab === 'sso_compliance'
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            SSO & Compliance
-          </button>
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'domains', label: 'Domains & DNS', icon: Globe },
+            { id: 'streams', label: 'Message Streams', icon: GitFork },
+            { id: 'apikeys', label: 'API Keys', icon: Key },
+            { id: 'messages', label: 'Message Logs', icon: Inbox },
+            { id: 'templates', label: 'Templates', icon: FileCode },
+            { id: 'suppressions', label: 'Suppressions', icon: Ban },
+            { id: 'reputation', label: 'Reputation & Abuse', icon: ShieldAlert },
+            { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3 },
+            { id: 'webhooks', label: 'Webhooks & Signing', icon: Webhook },
+            { id: 'privacy_retention', label: 'Privacy & Retention', icon: Lock },
+            { id: 'inbound', label: 'Inbound Routing', icon: ArrowDownLeft },
+            { id: 'alerts_warmup', label: 'Alerts & Warmup', icon: Flame },
+            { id: 'sso_compliance', label: 'SSO & Deliverability', icon: ShieldCheck },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = currentTab === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentTab(item.id as any)}
+                className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all ${
+                  isActive
+                    ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-500/10'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                }`}
+              >
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </nav>
 
         {/* Workspace Body */}

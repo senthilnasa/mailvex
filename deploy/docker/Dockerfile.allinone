@@ -1,0 +1,59 @@
+#syntax=docker/dockerfile:1
+# ---------------------------------------------------------
+# Mailvex Homelab All-In-One Unified Image (Multi-arch)
+# Single container running API + SMTP Edge + Delivery Worker + Webhooks
+# Idles under 512MB RAM on Raspberry Pi (arm64) and x86_64 (§28.1)
+# ---------------------------------------------------------
+
+# Stage 1: Build Console Web UI
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
+WORKDIR /web
+COPY console/package*.json ./
+RUN npm ci
+COPY console/ ./
+RUN npm run build
+
+# Stage 2: Build All-in-One Go Supervisor & CLI
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS go-builder
+
+ARG TARGETOS TARGETARCH
+WORKDIR /src
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-w -s" -o /bin/mailvex-allinone ./cmd/allinone
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-w -s" -o /bin/mailvex ./cmd/mailvex
+
+# Stage 3: Final lightweight runtime
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata libcap curl && \
+    addgroup -S mailvex && adduser -S mailvex -G mailvex
+
+COPY --from=go-builder /bin/mailvex-allinone /usr/local/bin/mailvex-allinone
+COPY --from=go-builder /bin/mailvex /usr/local/bin/mailvex
+COPY --from=frontend-builder /web/dist /var/www/mailvex
+
+RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/mailvex-allinone
+
+USER mailvex
+WORKDIR /home/mailvex
+
+EXPOSE 8080 2525 25
+
+ENV MVX_PROFILE=homelab
+ENV PORT=8080
+ENV SMTP_PORT=2525
+
+HEALTHCHECK --interval=20s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/mailvex-allinone"]

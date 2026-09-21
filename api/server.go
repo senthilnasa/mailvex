@@ -29,6 +29,9 @@ type Server struct {
 }
 
 func NewServer(repo repository.Repository, auditService *audit.Service, enc *crypto.EnvelopeEncryption, logger *slog.Logger) *Server {
+	if enc == nil {
+		enc, _ = crypto.NewEnvelopeEncryption([]byte("mailvex-homelab-32byte-masterkek"))
+	}
 	store := storage.NewMemoryStorage()
 	s := &Server{
 		mux:          http.NewServeMux(),
@@ -60,6 +63,7 @@ func (s *Server) IngestEngine() *core.IngestionEngine {
 }
 
 func (s *Server) setupRoutes() {
+	s.mux = http.NewServeMux()
 	apiHandler := handlers.NewAPI(s.repo, s.audit, s.encryption)
 	apiHandler.SetIngestEngine(s.ingestEngine, s.storage)
 

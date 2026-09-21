@@ -1,0 +1,15 @@
+apiVersion: v2
+name: mailvex
+description: Enterprise Multi-Tenant Email Infrastructure Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - email
+  - deliverability
+  - smtp
+  - mailvex
+  - transactional
+maintainers:
+  - name: Mailvex Core Team
+    email: maintainers@mailvex.com

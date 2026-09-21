@@ -3,7 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/mailvex/mailvex/api/middleware"
@@ -51,6 +54,9 @@ type API struct {
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
+	if encryption == nil {
+		encryption, _ = crypto.NewEnvelopeEncryption([]byte("mailvex-homelab-32byte-masterkek"))
+	}
 	store := storage.NewMemoryStorage()
 	alertsEngine := alerts.NewEngine(repo, nil)
 	return &API{
@@ -136,6 +142,18 @@ type SetupRequest struct {
 	TenantName    string `json:"tenant_name"`
 }
 
+var nonAlphaNumRegex = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = nonAlphaNumRegex.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "default"
+	}
+	return s
+}
+
 // SetupExecuteHandler runs the initial installation wizard (steps 1–7)
 func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -157,108 +175,147 @@ func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Create Organization
-	orgID := crypto.NewULID(crypto.PrefixOrg)
-	org := &domain.Organization{
-		ID:        orgID,
-		Name:      req.OrgName,
-		Slug:      "default-org",
-		Status:    "active",
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	if err := a.repo.CreateOrganization(r.Context(), org); err != nil {
-		http.Error(w, `{"error":{"code":"org_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
-		return
+	if a.encryption == nil {
+		a.encryption, _ = crypto.NewEnvelopeEncryption([]byte("mailvex-homelab-32byte-masterkek"))
 	}
 
-	// 2. Create Platform Admin User
+	// 1. Resolve or Create Organization
+	orgSlug := slugify(req.OrgName)
+	if orgSlug == "" {
+		orgSlug = "default-org"
+	}
+
+	var orgID string
+	existingOrg, err := a.repo.GetOrganizationBySlug(r.Context(), orgSlug)
+	if err == nil && existingOrg != nil {
+		orgID = existingOrg.ID
+	} else {
+		orgID = crypto.NewULID(crypto.PrefixOrg)
+		org := &domain.Organization{
+			ID:        orgID,
+			Name:      req.OrgName,
+			Slug:      orgSlug,
+			Status:    "active",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := a.repo.CreateOrganization(r.Context(), org); err != nil && !errors.Is(err, repository.ErrAlreadyExists) {
+			http.Error(w, `{"error":{"code":"org_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 2. Resolve or Create Platform Admin User
 	pwdHash, err := crypto.HashPassword(req.AdminPassword)
 	if err != nil {
 		http.Error(w, `{"error":{"code":"hashing_failed","message":"Password hashing failed"}}`, http.StatusInternalServerError)
 		return
 	}
 
-	adminID := crypto.NewULID(crypto.PrefixUser)
-	adminUser := &domain.User{
-		ID:              adminID,
-		OrganizationID:  orgID,
-		Email:           req.AdminEmail,
-		PasswordHash:    pwdHash,
-		Status:          "active",
-		IsPlatformAdmin: true,
-		CreatedAt:       time.Now().UTC(),
-		UpdatedAt:       time.Now().UTC(),
-	}
-	if err := a.repo.CreateUser(r.Context(), adminUser); err != nil {
-		http.Error(w, `{"error":{"code":"user_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
-		return
-	}
-
-	// 3. Create First Tenant
-	tenantID := crypto.NewULID(crypto.PrefixTenant)
-	tenant := &domain.Tenant{
-		ID:             tenantID,
-		OrganizationID: orgID,
-		Name:           req.TenantName,
-		Slug:           "default-tenant",
-		Environment:    "live",
-		Status:         "active",
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
-	}
-	if err := a.repo.CreateTenant(r.Context(), tenant); err != nil {
-		http.Error(w, `{"error":{"code":"tenant_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
-		return
+	var adminID string
+	existingUser, err := a.repo.GetUserByEmail(r.Context(), req.AdminEmail)
+	if err == nil && existingUser != nil {
+		adminID = existingUser.ID
+	} else {
+		adminID = crypto.NewULID(crypto.PrefixUser)
+		adminUser := &domain.User{
+			ID:              adminID,
+			OrganizationID:  orgID,
+			Email:           req.AdminEmail,
+			PasswordHash:    pwdHash,
+			Status:          "active",
+			IsPlatformAdmin: true,
+			CreatedAt:       time.Now().UTC(),
+			UpdatedAt:       time.Now().UTC(),
+		}
+		if err := a.repo.CreateUser(r.Context(), adminUser); err != nil && !errors.Is(err, repository.ErrAlreadyExists) {
+			http.Error(w, `{"error":{"code":"user_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
+			return
+		}
 	}
 
-	// 4. Generate & Store Tenant DEK with Envelope Encryption
-	dek, err := a.encryption.GenerateDEK()
-	if err != nil {
-		http.Error(w, `{"error":{"code":"dek_failed","message":"Failed to generate tenant encryption key"}}`, http.StatusInternalServerError)
-		return
+	// 3. Resolve or Create First Tenant
+	tenantSlug := slugify(req.TenantName)
+	if tenantSlug == "" {
+		tenantSlug = "default-tenant"
 	}
-	encryptedDEK, err := a.encryption.EncryptDEK(dek)
-	if err != nil {
-		http.Error(w, `{"error":{"code":"encryption_failed","message":"Failed to wrap tenant encryption key"}}`, http.StatusInternalServerError)
-		return
-	}
-	tenantKey := &domain.TenantKey{
-		ID:           crypto.NewULID(crypto.PrefixAPIKey),
-		TenantID:     tenantID,
-		KeyVersion:   1,
-		EncryptedDEK: encryptedDEK,
-		KEKVersion:   "v1",
-		CreatedAt:    time.Now().UTC(),
-	}
-	_ = a.repo.SaveTenantKey(r.Context(), tenantKey)
 
-	// 5. Add Membership with role_tenant_owner
-	mem := &domain.TenantMembership{
-		ID:        crypto.NewULID(crypto.PrefixMembership),
-		TenantID:  tenantID,
-		UserID:    adminID,
-		RoleID:    "role_tenant_owner",
-		CreatedAt: time.Now().UTC(),
+	var tenantID string
+	existingTenant, err := a.repo.GetTenantBySlug(r.Context(), tenantSlug)
+	if err == nil && existingTenant != nil {
+		tenantID = existingTenant.ID
+	} else {
+		tenantID = crypto.NewULID(crypto.PrefixTenant)
+		tenant := &domain.Tenant{
+			ID:             tenantID,
+			OrganizationID: orgID,
+			Name:           req.TenantName,
+			Slug:           tenantSlug,
+			Environment:    "live",
+			Status:         "active",
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		if err := a.repo.CreateTenant(r.Context(), tenant); err != nil && !errors.Is(err, repository.ErrAlreadyExists) {
+			http.Error(w, `{"error":{"code":"tenant_create_failed","message":"`+err.Error()+`"}}`, http.StatusInternalServerError)
+			return
+		}
 	}
-	_ = a.repo.AddTenantMembership(r.Context(), mem)
+
+	// 4. Generate & Store Tenant DEK with Envelope Encryption if not present
+	existingKey, _ := a.repo.GetActiveTenantKey(r.Context(), tenantID)
+	if existingKey == nil {
+		dek, err := a.encryption.GenerateDEK()
+		if err == nil {
+			encryptedDEK, err := a.encryption.EncryptDEK(dek)
+			if err == nil {
+				tenantKey := &domain.TenantKey{
+					ID:           crypto.NewULID(crypto.PrefixAPIKey),
+					TenantID:     tenantID,
+					KeyVersion:   1,
+					EncryptedDEK: encryptedDEK,
+					KEKVersion:   "v1",
+					CreatedAt:    time.Now().UTC(),
+				}
+				_ = a.repo.SaveTenantKey(r.Context(), tenantKey)
+			}
+		}
+	}
+
+	// 5. Add Membership with role_tenant_owner if not exists
+	existingMembership, _ := a.repo.GetTenantMembership(r.Context(), tenantID, adminID)
+	if existingMembership == nil {
+		mem := &domain.TenantMembership{
+			ID:        crypto.NewULID(crypto.PrefixMembership),
+			TenantID:  tenantID,
+			UserID:    adminID,
+			RoleID:    "role_tenant_owner",
+			CreatedAt: time.Now().UTC(),
+		}
+		_ = a.repo.AddTenantMembership(r.Context(), mem)
+	}
 
 	// Create default message streams (§8.3, §10.6)
 	a.createDefaultStreams(r.Context(), tenantID)
 
-	// 6. Create System Tenant for platform internal mail
+	// 6. Resolve or Create System Tenant for platform internal mail
 	sysTenantID := "tenant_system"
-	sysTenant := &domain.Tenant{
-		ID:             sysTenantID,
-		OrganizationID: orgID,
-		Name:           "System Tenant",
-		Slug:           "system",
-		Environment:    "live",
-		Status:         "active",
-		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
+	existingSysTenant, _ := a.repo.GetTenantBySlug(r.Context(), "system")
+	if existingSysTenant != nil {
+		sysTenantID = existingSysTenant.ID
+	} else {
+		sysTenant := &domain.Tenant{
+			ID:             sysTenantID,
+			OrganizationID: orgID,
+			Name:           "System Tenant",
+			Slug:           "system",
+			Environment:    "live",
+			Status:         "active",
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		_ = a.repo.CreateTenant(r.Context(), sysTenant)
 	}
-	_ = a.repo.CreateTenant(r.Context(), sysTenant)
 
 	// Mark setup complete
 	_ = a.repo.SetSetting(r.Context(), "setup_completed", "true")
@@ -276,10 +333,10 @@ func (a *API) SetupExecuteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"message":         "Setup completed successfully",
-		"organization_id": orgID,
-		"admin_user_id":   adminID,
-		"tenant_id":       tenantID,
+		"message":          "Setup completed successfully",
+		"organization_id":  orgID,
+		"admin_user_id":    adminID,
+		"tenant_id":        tenantID,
 		"system_tenant_id": sysTenantID,
 	})
 }
