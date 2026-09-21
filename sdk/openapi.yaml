@@ -380,3 +380,127 @@ paths:
       responses:
         '200':
           description: Audit logs
+
+  /v1/abuse-reports:
+    get:
+      summary: List abuse and postmaster intake reports
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, resolved, escalated]
+      responses:
+        '200':
+          description: List of abuse reports
+
+  /v1/abuse-reports/{id}/resolve:
+    post:
+      summary: Resolve an abuse report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Resolved abuse report
+
+  /v1/abuse-reports/{id}/escalate:
+    post:
+      summary: Escalate an abuse report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Escalated abuse report
+
+  /v1/reports/dsn:
+    post:
+      summary: Ingest DSN bounce notification (RFC 3464)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                raw_mime:
+                  type: string
+                envelope_recipient:
+                  type: string
+      responses:
+        '200':
+          description: DSN processing outcome
+
+  /v1/reports/arf:
+    post:
+      summary: Ingest ARF feedback loop complaint (RFC 5965)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                raw_mime:
+                  type: string
+      responses:
+        '200':
+          description: ARF complaint processing outcome
+
+  /v1/reports/fbl:
+    get:
+      summary: List FBL complaint records
+      responses:
+        '200':
+          description: FBL reports list
+
+  /v1/reports/postmaster:
+    get:
+      summary: List Google Postmaster / SNDS snapshots
+      parameters:
+        - name: domain_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Snapshots list
+    post:
+      summary: Record provider reputation snapshot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domain_id:
+                  type: string
+                spam_rate:
+                  type: number
+                domain_reputation:
+                  type: string
+      responses:
+        '201':
+          description: Snapshot recorded

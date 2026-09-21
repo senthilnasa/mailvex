@@ -200,6 +200,33 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("POST /u/{token}", unsubHandler.HandleOneClick)
 	s.mux.HandleFunc("GET /u/{token}", unsubHandler.HandleHostedPage)
 
+	// Phase 6: Abuse Reports Management & Intake
+	s.mux.Handle("GET /v1/abuse-reports", authMiddleware(
+		middleware.RequirePermission(s.repo, "abuse.read")(http.HandlerFunc(apiHandler.ListAbuseReportsHandler)),
+	))
+	s.mux.Handle("GET /v1/abuse-reports/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "abuse.read")(http.HandlerFunc(apiHandler.GetAbuseReportHandler)),
+	))
+	s.mux.Handle("POST /v1/abuse-reports/{id}/resolve", authMiddleware(
+		middleware.RequirePermission(s.repo, "abuse.write")(http.HandlerFunc(apiHandler.ResolveAbuseReportHandler)),
+	))
+	s.mux.Handle("POST /v1/abuse-reports/{id}/escalate", authMiddleware(
+		middleware.RequirePermission(s.repo, "abuse.write")(http.HandlerFunc(apiHandler.EscalateAbuseReportHandler)),
+	))
+
+	// Phase 6: Inbound Reports Webhook Ingestion & Provider Snapshots
+	s.mux.HandleFunc("POST /v1/reports/dsn", apiHandler.IngestDSNReportHandler)
+	s.mux.HandleFunc("POST /v1/reports/arf", apiHandler.IngestARFReportHandler)
+	s.mux.Handle("GET /v1/reports/fbl", authMiddleware(
+		middleware.RequirePermission(s.repo, "reports.read")(http.HandlerFunc(apiHandler.ListFBLReportsHandler)),
+	))
+	s.mux.Handle("GET /v1/reports/postmaster", authMiddleware(
+		middleware.RequirePermission(s.repo, "reports.read")(http.HandlerFunc(apiHandler.ListPostmasterSnapshotsHandler)),
+	))
+	s.mux.Handle("POST /v1/reports/postmaster", authMiddleware(
+		middleware.RequirePermission(s.repo, "reports.read")(http.HandlerFunc(apiHandler.SavePostmasterSnapshotHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

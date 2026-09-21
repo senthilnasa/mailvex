@@ -15,6 +15,7 @@ import (
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/domain"
 	"github.com/mailvex/mailvex/core/repository"
+	"github.com/mailvex/mailvex/core/reports"
 )
 
 var (
@@ -27,6 +28,7 @@ var (
 type Backend struct {
 	repo       repository.Repository
 	ingest     *core.IngestionEngine
+	reports    *reports.ReportProcessor
 	mu         sync.Mutex
 	authFails  map[string]int       // ip -> fail count
 	blockedIPs map[string]time.Time // ip -> unblock time
@@ -36,9 +38,14 @@ func NewBackend(repo repository.Repository, ingest *core.IngestionEngine) *Backe
 	return &Backend{
 		repo:       repo,
 		ingest:     ingest,
+		reports:    reports.NewReportProcessor(repo, nil, nil),
 		authFails:  make(map[string]int),
 		blockedIPs: make(map[string]time.Time),
 	}
+}
+
+func (b *Backend) SetReportProcessor(p *reports.ReportProcessor) {
+	b.reports = p
 }
 
 func (b *Backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -174,26 +181,36 @@ func (s *Session) Rcpt(to string, opts *gosmtp.RcptOptions) error {
 	}
 
 	// Open Relay Prevention (§4):
-	// Unauthenticated sessions may ONLY deliver to verified inbound domains hosted on Mailvex
+	// Unauthenticated sessions may ONLY deliver to verified inbound domains hosted on Mailvex,
+	// or administrative / feedback loop mailboxes (RFC 5321 §4.5.1, RFC 3464, RFC 5965)
 	parts := strings.Split(to, "@")
 	if len(parts) != 2 {
 		return ErrRelayingDenied
 	}
+	localPart := strings.ToLower(parts[0])
 	rcptDomain := strings.ToLower(parts[1])
 
+	isSpecial := strings.HasPrefix(localPart, "bounce+") ||
+		strings.HasPrefix(localPart, "unsubscribe+") ||
+		localPart == "fbl" ||
+		localPart == "abuse" ||
+		localPart == "postmaster"
+
 	dom, err := s.backend.repo.GetDomainByName(ctx, rcptDomain)
-	if err != nil || (dom.Status != "verified" && dom.Status != "degraded") {
+	if !isSpecial && (err != nil || (dom.Status != "verified" && dom.Status != "degraded")) {
 		// External destination without auth -> RELAYING DENIED
 		return ErrRelayingDenied
 	}
 
 	// Allowed inbound destination on Mailvex
-	s.tenantID = dom.TenantID
+	if dom != nil {
+		s.tenantID = dom.TenantID
+	}
 	s.to = append(s.to, to)
 	return nil
 }
 
-// Data handles DATA command: ingests message into Core pipeline
+// Data handles DATA command: ingests message into Core pipeline or Report Processor
 func (s *Session) Data(r io.Reader) error {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -201,6 +218,32 @@ func (s *Session) Data(r io.Reader) error {
 	}
 
 	ctx := context.Background()
+
+	// Route special report / admin recipients (§18.1)
+	if s.backend.reports != nil {
+		for _, rcpt := range s.to {
+			rcptLower := strings.ToLower(rcpt)
+			parts := strings.Split(rcptLower, "@")
+			if len(parts) == 2 {
+				local := parts[0]
+				switch {
+				case strings.HasPrefix(local, "bounce+"):
+					_, _ = s.backend.reports.ProcessInboundDSN(ctx, raw, rcpt)
+					return nil
+				case strings.HasPrefix(local, "unsubscribe+"):
+					_ = s.backend.reports.ProcessMailtoUnsubscribe(ctx, rcpt, raw)
+					return nil
+				case local == "fbl":
+					_, _ = s.backend.reports.ProcessInboundARF(ctx, raw)
+					return nil
+				case local == "abuse" || local == "postmaster":
+					_, _ = s.backend.reports.ProcessAbuseIntake(ctx, s.from, rcpt, "Abuse Notification", raw)
+					return nil
+				}
+			}
+		}
+	}
+
 	var credID *string
 	if s.cred != nil {
 		credID = &s.cred.ID

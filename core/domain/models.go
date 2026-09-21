@@ -435,5 +435,67 @@ type DeadLetterMessage struct {
 	CreatedAt        time.Time `json:"created_at"`
 }
 
+type FBLReport struct {
+	ID              string     `json:"id"`
+	TenantID        string     `json:"tenant_id"`
+	MessageID       *string    `json:"message_id,omitempty"`
+	RecipientID     *string    `json:"recipient_id,omitempty"`
+	FeedbackType    string     `json:"feedback_type"`
+	UserAgent       *string    `json:"user_agent,omitempty"`
+	ReportedDomain  *string    `json:"reported_domain,omitempty"`
+	OriginalHeaders *string    `json:"original_headers,omitempty"`
+	ArrivalDate     *time.Time `json:"arrival_date,omitempty"`
+	RawMIMERef      *string    `json:"raw_mime_ref,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+type UnmatchedBounce struct {
+	ID         string    `json:"id"`
+	Sender     *string   `json:"sender,omitempty"`
+	Recipient  *string   `json:"recipient,omitempty"`
+	Subject    *string   `json:"subject,omitempty"`
+	RawMIMERef *string   `json:"raw_mime_ref,omitempty"`
+	ParseError *string   `json:"parse_error,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type AbuseReport struct {
+	ID         string     `json:"id"`
+	TenantID   *string    `json:"tenant_id,omitempty"`
+	DomainID   *string    `json:"domain_id,omitempty"`
+	MessageID  *string    `json:"message_id,omitempty"`
+	Sender     string     `json:"sender"`
+	Recipient  string     `json:"recipient"`
+	Subject    *string    `json:"subject,omitempty"`
+	Status     string     `json:"status"` // pending, resolved, escalated
+	Notes      *string    `json:"notes,omitempty"`
+	RawMIMERef *string    `json:"raw_mime_ref,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+}
+
+type IPReputationSnapshot struct {
+	ID         string    `json:"id"`
+	IPID       string    `json:"ip_id"`
+	Source     string    `json:"source"` // snds, postmaster, dnsbl
+	SampleDate string    `json:"sample_date"`
+	Score      float64   `json:"score"`
+	SampleData string    `json:"sample_data,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type PostmasterSnapshot struct {
+	ID               string    `json:"id"`
+	DomainID         string    `json:"domain_id"`
+	SampleDate       string    `json:"sample_date"`
+	SpamRate         float64   `json:"spam_rate"`
+	DomainReputation string    `json:"domain_reputation"` // bad, low, medium, high
+	IPReputation     string    `json:"ip_reputation"`
+	DKIMSuccessRate  float64   `json:"dkim_success_rate"`
+	SPFSuccessRate   float64   `json:"spf_success_rate"`
+	DMARCSuccessRate float64   `json:"dmarc_success_rate"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
 
 

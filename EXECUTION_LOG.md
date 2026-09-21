@@ -220,5 +220,56 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 ---
 
 ### Phase 6: Feedback Loops & Inbound DSN
+- **Status:** Completed & Verified
+- **Components Implemented:**
+  - `migrations/000006_fbl_dsn_abuse`: Added tables for `fbl_reports`, `unmatched_bounces`, `abuse_reports`, `ip_reputation_snapshots`, and `postmaster_snapshots`.
+  - `core/domain`: Added models `FBLReport`, `UnmatchedBounce`, `AbuseReport`, `IPReputationSnapshot`, and `PostmasterSnapshot`.
+  - `core/repository`: Added repository methods for FBL reports, unmatched bounces, abuse intake queue (listing, status transitions to resolved/escalated), and reputation snapshots.
+  - `core/crypto/verp`: Implemented HMAC-SHA256 signed VERP token generator, token verifier, Return-Path address formatter, and parser (`bounce+<token>@<domain>`).
+  - `core/reports/dsn`: RFC 3464 MIME delivery-status parser with auto-reply/out-of-office filtering (`Auto-Submitted`, `X-Autoreply`, `Precedence: auto_reply`), per-recipient status parsing, diagnostic-code extraction, response classification via `worker.Classifier`, and heuristic fallback for non-standard bounces.
+  - `core/reports/arf`: RFC 5965 ARF feedback report parser extracting `Feedback-Type: abuse`, original message headers, `Feedback-ID: <tenant>:<stream>:<campaign>:mailvex`, `Message-ID`, and reported domain.
+  - `core/reports/processor`: High-level `ReportProcessor` handling:
+    - Inbound DSN: drops auto-replies, resolves recipient via VERP, marks recipient status (`bounced` on 5xx, `deferred` on 4xx), records delivery attempt, emits `message.bounced`/`message.deferred`, automatically records `hard_bounce` suppression, and stores unresolved bounces in `unmatched_bounces`.
+    - Inbound ARF: saves `fbl_reports` row, emits `message.complained`, and immediately records `complaint` suppression.
+    - Mailto Unsubscribe: verifies token signature, records `unsubscribe` suppression, and emits `message.unsubscribed`.
+    - Abuse Intake: ingests inbound mail to `abuse@*` and `postmaster@*` (RFC 5321 §4.5.1) into platform abuse queue.
+  - `smtp/server`: Updated SMTP edge to accept incoming report/admin traffic without authentication (`bounce+*`, `unsubscribe+*`, `fbl@*`, `abuse@*`, `postmaster@*`) and dispatch to `ReportProcessor`.
+  - `api/handlers/abuse`: Added endpoints:
+    - `GET /v1/abuse-reports`: Filterable abuse reports queue.
+    - `GET /v1/abuse-reports/{id}`: Single abuse report inspection.
+    - `POST /v1/abuse-reports/{id}/resolve`: Mark resolved with notes.
+    - `POST /v1/abuse-reports/{id}/escalate`: Mark escalated with notes.
+    - `POST /v1/reports/dsn`: Webhook DSN report ingestion.
+    - `POST /v1/reports/arf`: Webhook ARF report ingestion.
+    - `GET /v1/reports/fbl`: Tenant feedback loop complaints.
+    - `GET /v1/reports/postmaster` & `POST /v1/reports/postmaster`: Google Postmaster / SNDS snapshots.
+  - `console`: Added **Reputation & Abuse** tab with:
+    - Provider reputation metrics cards (Google Postmaster spam rate & domain rep, Microsoft SNDS filter status & trap hits, Yahoo CFL alignment).
+    - Interactive Abuse Intake Queue with status filters (Pending, Resolved, Escalated) and action buttons (Resolve, Escalate).
+    - Inbound ARF Feedback Loop table.
+    - ISP Reputation integration setup guides (Google Postmaster, Microsoft SNDS/JMRP, Yahoo CFL).
+  - `sdk/openapi.yaml`: Updated with all Phase 6 endpoints.
+- **Verification & Test Results:**
+  - `core/reports/reports_test.go`:
+    - `TestRFC3464DSNHardBounce` PASS (multipart/report parsed, recipient resolved via VERP, marked bounced, hard_bounce auto-suppressed, DLQ written).
+    - `TestRFC3464DSNSoftBounce` PASS (4.2.2 mailbox full parsed, marked deferred, no auto-suppression).
+    - `TestAutoReplyDetectionAndFiltering` PASS (RFC 3834 `Auto-Submitted`, `X-Autoreply`, `Precedence: auto_reply`, and "Out of Office" subjects detected and filtered without bouncing or suppressing).
+    - `TestUnmatchedBounceStored` PASS (unmatched bounce recorded in `unmatched_bounces` table).
+    - `TestRFC5965ARFFeedbackReport` PASS (ARF abuse report parsed, `Feedback-ID` correlated, `fbl_reports` saved, complaint suppression recorded).
+    - `TestMailtoUnsubscribe` PASS (HMAC token verified, address suppressed as `unsubscribe` via `mailto`, `message.unsubscribed` emitted).
+    - `TestAbusePostmasterIntake` PASS (inbound abuse report stored, domain correlated, status updated to resolved).
+  - `api/abuse_test.go`:
+    - `TestAbuseReportLifecycle` PASS (list abuse reports, get report, resolve with notes, escalate with notes).
+    - `TestReportIngestionWebhookEndpoints` PASS (POST /v1/reports/dsn, POST /v1/reports/arf, GET /v1/reports/fbl, POST & GET /v1/reports/postmaster).
+  - `core/crypto/verp_test.go`:
+    - `TestVERPTokenGenerationAndVerification` PASS (HMAC token generation, verification, and tamper detection).
+    - `TestVERPAddressFormattingAndParsing` PASS (VERP address format and angle bracket extraction).
+  - `go test -count=1 ./...`: 100% PASS across all 20 packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 7: Analytics & Reporting
 - **Status:** Pending
 

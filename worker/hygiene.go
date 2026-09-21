@@ -98,7 +98,7 @@ func SanitizeAndDecorateMIME(rawMIME []byte, params HygieneParams) ([]byte, erro
 	}
 	verp := params.VERPToken
 	if verp == "" {
-		verp = params.RecipientID
+		verp = crypto.GenerateVERPToken(params.RecipientID, params.HMACSecret)
 	}
 	returnPath := fmt.Sprintf("<bounce+%s@%s>", verp, bounceDom)
 	hdr.Set("Return-Path", returnPath)

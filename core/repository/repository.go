@@ -169,6 +169,21 @@ type Repository interface {
 	RecordDeliveryAttempt(ctx context.Context, attempt *domain.DeliveryAttempt) error
 	GetRecipient(ctx context.Context, recipientID string) (*domain.MessageRecipient, error)
 	AddMessageEvent(ctx context.Context, evt *domain.MessageEvent) error
+
+	// Phase 6: Feedback Loops, Inbound DSN, Abuse Reports, Reputation
+	SaveFBLReport(ctx context.Context, report *domain.FBLReport) error
+	ListFBLReports(ctx context.Context, tenantID string, limit int) ([]*domain.FBLReport, error)
+	SaveUnmatchedBounce(ctx context.Context, bounce *domain.UnmatchedBounce) error
+	ListUnmatchedBounces(ctx context.Context, limit int) ([]*domain.UnmatchedBounce, error)
+	SaveAbuseReport(ctx context.Context, report *domain.AbuseReport) error
+	ListAbuseReports(ctx context.Context, status string, limit int) ([]*domain.AbuseReport, error)
+	GetAbuseReport(ctx context.Context, id string) (*domain.AbuseReport, error)
+	UpdateAbuseReportStatus(ctx context.Context, id, status string, notes *string) error
+	SaveIPReputationSnapshot(ctx context.Context, snap *domain.IPReputationSnapshot) error
+	ListIPReputationSnapshots(ctx context.Context, ipID string, limit int) ([]*domain.IPReputationSnapshot, error)
+	SavePostmasterSnapshot(ctx context.Context, snap *domain.PostmasterSnapshot) error
+	ListPostmasterSnapshots(ctx context.Context, domainID string, limit int) ([]*domain.PostmasterSnapshot, error)
+	GetRecipientByTokenOrID(ctx context.Context, tokenOrID string) (*domain.MessageRecipient, *domain.Message, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -217,6 +232,13 @@ type MemoryRepository struct {
 	providerMXRules  []*domain.ProviderMXRule
 	deadLetters      []*domain.DeadLetterMessage
 	deliveryAttempts []*domain.DeliveryAttempt
+
+	// Phase 6 collections
+	fblReports       []*domain.FBLReport
+	unmatchedBounces []*domain.UnmatchedBounce
+	abuseReports     map[string]*domain.AbuseReport
+	ipReputations    []*domain.IPReputationSnapshot
+	postmasterSnaps  []*domain.PostmasterSnapshot
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -256,6 +278,11 @@ func NewMemoryRepository() *MemoryRepository {
 		providerMXRules:  make([]*domain.ProviderMXRule, 0),
 		deadLetters:      make([]*domain.DeadLetterMessage, 0),
 		deliveryAttempts: make([]*domain.DeliveryAttempt, 0),
+		fblReports:       make([]*domain.FBLReport, 0),
+		unmatchedBounces: make([]*domain.UnmatchedBounce, 0),
+		abuseReports:     make(map[string]*domain.AbuseReport),
+		ipReputations:    make([]*domain.IPReputationSnapshot, 0),
+		postmasterSnaps:  make([]*domain.PostmasterSnapshot, 0),
 	}
 
 	// Seed default IP pool
@@ -313,6 +340,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"webhooks.read", "webhooks.write", "webhooks.replay", "webhooks.secret.rotate",
 		"inbound.read", "inbound.write",
 		"analytics.read", "reports.read",
+		"abuse.read", "abuse.write",
 		"audit.read",
 		"settings.read", "settings.write",
 		"retention.write", "privacy.erase", "privacy.export",
@@ -342,7 +370,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"suppressions.read", "suppressions.write", "suppressions.import",
 		"templates.read", "templates.write", "templates.publish",
 		"webhooks.read", "webhooks.write", "webhooks.replay",
-		"analytics.read", "audit.read", "settings.read", "settings.write",
+		"analytics.read", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
 }
@@ -1775,6 +1803,197 @@ func (r *MemoryRepository) AddMessageEvent(ctx context.Context, evt *domain.Mess
 	defer r.mu.Unlock()
 	r.events[evt.MessageID] = append(r.events[evt.MessageID], evt)
 	return nil
+}
+
+// Phase 6 Methods
+
+func (r *MemoryRepository) SaveFBLReport(ctx context.Context, report *domain.FBLReport) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fblReports = append(r.fblReports, report)
+	return nil
+}
+
+func (r *MemoryRepository) ListFBLReports(ctx context.Context, tenantID string, limit int) ([]*domain.FBLReport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.FBLReport
+	for i := len(r.fblReports) - 1; i >= 0; i-- {
+		rep := r.fblReports[i]
+		if rep.TenantID == tenantID {
+			res = append(res, rep)
+			if len(res) >= limit {
+				break
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) SaveUnmatchedBounce(ctx context.Context, bounce *domain.UnmatchedBounce) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unmatchedBounces = append(r.unmatchedBounces, bounce)
+	return nil
+}
+
+func (r *MemoryRepository) ListUnmatchedBounces(ctx context.Context, limit int) ([]*domain.UnmatchedBounce, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.UnmatchedBounce
+	for i := len(r.unmatchedBounces) - 1; i >= 0; i-- {
+		res = append(res, r.unmatchedBounces[i])
+		if len(res) >= limit {
+			break
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) SaveAbuseReport(ctx context.Context, report *domain.AbuseReport) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.abuseReports[report.ID] = report
+	return nil
+}
+
+func (r *MemoryRepository) ListAbuseReports(ctx context.Context, status string, limit int) ([]*domain.AbuseReport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.AbuseReport
+	for _, rep := range r.abuseReports {
+		if status == "" || rep.Status == status {
+			res = append(res, rep)
+		}
+	}
+	// sort descending by CreatedAt
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].CreatedAt.After(res[j].CreatedAt)
+	})
+	if len(res) > limit {
+		res = res[:limit]
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) GetAbuseReport(ctx context.Context, id string) (*domain.AbuseReport, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rep, ok := r.abuseReports[id]
+	if !ok {
+		return nil, errors.New("abuse report not found")
+	}
+	return rep, nil
+}
+
+func (r *MemoryRepository) UpdateAbuseReportStatus(ctx context.Context, id, status string, notes *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rep, ok := r.abuseReports[id]
+	if !ok {
+		return errors.New("abuse report not found")
+	}
+	rep.Status = status
+	if notes != nil {
+		rep.Notes = notes
+	}
+	if status == "resolved" {
+		now := time.Now().UTC()
+		rep.ResolvedAt = &now
+	}
+	return nil
+}
+
+func (r *MemoryRepository) SaveIPReputationSnapshot(ctx context.Context, snap *domain.IPReputationSnapshot) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ipReputations = append(r.ipReputations, snap)
+	return nil
+}
+
+func (r *MemoryRepository) ListIPReputationSnapshots(ctx context.Context, ipID string, limit int) ([]*domain.IPReputationSnapshot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.IPReputationSnapshot
+	for i := len(r.ipReputations) - 1; i >= 0; i-- {
+		snap := r.ipReputations[i]
+		if snap.IPID == ipID {
+			res = append(res, snap)
+			if len(res) >= limit {
+				break
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) SavePostmasterSnapshot(ctx context.Context, snap *domain.PostmasterSnapshot) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.postmasterSnaps = append(r.postmasterSnaps, snap)
+	return nil
+}
+
+func (r *MemoryRepository) ListPostmasterSnapshots(ctx context.Context, domainID string, limit int) ([]*domain.PostmasterSnapshot, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	var res []*domain.PostmasterSnapshot
+	for i := len(r.postmasterSnaps) - 1; i >= 0; i-- {
+		snap := r.postmasterSnaps[i]
+		if snap.DomainID == domainID {
+			res = append(res, snap)
+			if len(res) >= limit {
+				break
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *MemoryRepository) GetRecipientByTokenOrID(ctx context.Context, tokenOrID string) (*domain.MessageRecipient, *domain.Message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for msgID, rcpts := range r.recipients {
+		for _, rcpt := range rcpts {
+			if rcpt.ID == tokenOrID || rcpt.Address == tokenOrID {
+				msg := r.messages[msgID]
+				return rcpt, msg, nil
+			}
+		}
+	}
+
+	// Also check if tokenOrID matches message ID
+	if msg, ok := r.messages[tokenOrID]; ok {
+		if rcpts, ok := r.recipients[tokenOrID]; ok && len(rcpts) > 0 {
+			return rcpts[0], msg, nil
+		}
+		return nil, msg, nil
+	}
+
+	return nil, nil, errors.New("recipient or message not found")
 }
 
 
