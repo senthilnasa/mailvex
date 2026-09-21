@@ -5,6 +5,7 @@ interface Tenant {
   name: string
   slug: string
   environment: string
+  organization_id?: string
 }
 
 interface User {
@@ -319,12 +320,73 @@ interface AlertNotification {
   created_at: string
 }
 
+// Phase 12: SSO, Impersonation & Compliance types
+interface SSOProvider {
+  id: string
+  org_id: string
+  tenant_id?: string
+  name: string
+  provider_type: string
+  issuer_url?: string
+  client_id?: string
+  idp_metadata_url?: string
+  sp_entity_id?: string
+  sp_acs_url?: string
+  allowed_domains: string[]
+  default_role: string
+  enforce_sso: boolean
+  is_active: boolean
+  created_at: string
+}
+
+interface ImpersonationSession {
+  id: string
+  actor_user_id: string
+  target_tenant_id: string
+  reason: string
+  access_type: string
+  is_support_masking: boolean
+  started_at: string
+  ended_at?: string
+}
+
+interface ComplianceCheck {
+  id: string
+  tenant_id: string
+  domain_name: string
+  overall_score: number
+  spf_status: string
+  spf_details?: string
+  dkim_status: string
+  dkim_details?: string
+  dmarc_status: string
+  dmarc_details?: string
+  fcrdns_status: string
+  fcrdns_details?: string
+  tls_status: string
+  tls_details?: string
+  dnsbl_status: string
+  dnsbl_details?: string
+  unsubscribe_status: string
+  unsubscribe_details?: string
+  checked_at: string
+}
+
+interface FCrDNSResult {
+  ip_address: string
+  ptr_hostnames: string[]
+  forward_ips: string[]
+  is_confirmed: boolean
+  confirmed_domain?: string
+  details: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -451,6 +513,35 @@ export default function App() {
   const [newChannelURL, setNewChannelURL] = useState('')
   const [alertsActionMsg, setAlertsActionMsg] = useState<string | null>(null)
 
+  // Phase 12: SSO, Impersonation & Compliance state
+  const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([])
+  const [newSSOName, setNewSSOName] = useState('')
+  const [newSSOType, setNewSSOType] = useState<'oidc' | 'saml'>('oidc')
+  const [newSSOIssuer, setNewSSOIssuer] = useState('')
+  const [newSSOClientID, setNewSSOClientID] = useState('')
+  const [newSSODomains, setNewSSODomains] = useState('')
+  const [newSSORole, setNewSSORole] = useState('developer')
+  const [newSSOEnforce, setNewSSOEnforce] = useState(false)
+  const [ssoActionMsg, setSSOActionMsg] = useState<string | null>(null)
+
+  const [impersonationSessions, setImpersonationSessions] = useState<ImpersonationSession[]>([])
+  const [isImpersonating, setIsImpersonating] = useState(false)
+  const [impersonatedTenant, setImpersonatedTenant] = useState<Tenant | null>(null)
+  const [impersonationReason, setImpersonationReason] = useState('')
+  const [isSupportMasking, setIsSupportMasking] = useState(false)
+  const [impModalOpen, setImpModalOpen] = useState(false)
+  const [targetImpTenantID, setTargetImpTenantID] = useState('')
+  const [targetImpReason, setTargetImpReason] = useState('')
+  const [targetImpSupportMode, setTargetImpSupportMode] = useState(false)
+
+  const [complianceResult, setComplianceResult] = useState<ComplianceCheck | null>(null)
+  const [complianceLoading, setComplianceLoading] = useState(false)
+  const [complianceDomain, setComplianceDomain] = useState('')
+  const [testFCrDNSIP, setTestFCrDNSIP] = useState('')
+  const [fcrdnsResult, setFCrDNSResult] = useState<FCrDNSResult | null>(null)
+  const [fcrdnsChecking, setFCrDNSChecking] = useState(false)
+
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -491,6 +582,7 @@ export default function App() {
       loadInboundRoutes()
       loadInboundMessages()
       loadPhase11Data()
+      loadPhase12Data()
     }
   }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
 
@@ -835,6 +927,196 @@ export default function App() {
         loadPhase11Data()
       }
     } catch {}
+  }
+
+  const loadPhase12Data = async () => {
+    if (!user) return
+    const headers: Record<string, string> = {
+      'X-User-ID': user.id,
+    }
+    if (activeTenant) {
+      headers['X-Tenant-ID'] = activeTenant.id
+    }
+    try {
+      const ssoRes = await fetch('/v1/auth/sso/providers', { headers })
+      if (ssoRes.ok) {
+        const d = await ssoRes.json()
+        setSSOProviders(d.data || [])
+      }
+
+      if (user.is_platform_admin) {
+        const impRes = await fetch('/v1/admin/impersonate/sessions?limit=25', { headers })
+        if (impRes.ok) {
+          const d = await impRes.json()
+          setImpersonationSessions(d.data || [])
+        }
+      }
+
+      if (activeTenant && domains.length > 0) {
+        const targetDom = complianceDomain || domains[0].name
+        const compRes = await fetch(`/v1/compliance/check?domain=${encodeURIComponent(targetDom)}`, { headers })
+        if (compRes.ok) {
+          const d = await compRes.json()
+          setComplianceResult(d.data || null)
+        }
+      }
+    } catch {}
+  }
+
+  const handleCreateSSOProvider = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !newSSOName.trim()) return
+    const orgId = activeTenant?.organization_id || 'org_default'
+    try {
+      const domainsArr = newSSODomains.split(',').map((s) => s.trim()).filter(Boolean)
+      const res = await fetch('/v1/auth/sso/providers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant?.id || '',
+        },
+        body: JSON.stringify({
+          org_id: orgId,
+          name: newSSOName.trim(),
+          provider_type: newSSOType,
+          issuer_url: newSSOIssuer.trim() || undefined,
+          client_id: newSSOClientID.trim() || undefined,
+          allowed_domains: domainsArr,
+          default_role: newSSORole,
+          enforce_sso: newSSOEnforce,
+          sp_acs_url: window.location.origin + (newSSOType === 'oidc' ? '/v1/auth/sso/oidc/callback' : '/v1/auth/sso/saml/acs'),
+          sp_entity_id: window.location.origin + '/v1/auth/sso/saml/metadata',
+        }),
+      })
+      if (res.ok) {
+        setNewSSOName('')
+        setNewSSOIssuer('')
+        setNewSSOClientID('')
+        setNewSSODomains('')
+        setSSOActionMsg('SSO Provider registered successfully.')
+        loadPhase12Data()
+        setTimeout(() => setSSOActionMsg(null), 4000)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Failed to register SSO Provider')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleDeleteSSOProvider = async (id: string) => {
+    if (!user || !activeTenant) return
+    if (!confirm('Are you sure you want to delete this SSO provider?')) return
+    try {
+      const res = await fetch(`/v1/auth/sso/providers/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase12Data()
+      }
+    } catch {}
+  }
+
+  const handleStartImpersonation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !user.is_platform_admin || !targetImpTenantID || !targetImpReason.trim()) return
+    try {
+      const res = await fetch('/v1/admin/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant?.id || '',
+        },
+        body: JSON.stringify({
+          target_tenant_id: targetImpTenantID,
+          reason: targetImpReason.trim(),
+          access_type: 'read_only',
+          is_support_masking: targetImpSupportMode,
+        }),
+      })
+      if (res.ok) {
+        const target = tenants.find((t) => t.id === targetImpTenantID) || { id: targetImpTenantID, name: targetImpTenantID, slug: '', environment: 'live', status: 'active', organization_id: 'org_default', created_at: '', updated_at: '' }
+        setIsImpersonating(true)
+        setImpersonatedTenant(target)
+        setActiveTenant(target)
+        setImpersonationReason(targetImpReason.trim())
+        setIsSupportMasking(targetImpSupportMode)
+        setImpModalOpen(false)
+        setSSOActionMsg(`Impersonating ${target.name}. All actions recorded to platform audit log.`)
+        loadPhase12Data()
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Impersonation failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleExitImpersonation = async () => {
+    setIsImpersonating(false)
+    setImpersonatedTenant(null)
+    setImpersonationReason('')
+    setIsSupportMasking(false)
+    if (tenants.length > 0) {
+      setActiveTenant(tenants[0])
+    }
+    setSSOActionMsg('Exited tenant impersonation.')
+    loadPhase12Data()
+    setTimeout(() => setSSOActionMsg(null), 4000)
+  }
+
+  const handleRunComplianceCheck = async (domainName: string) => {
+    if (!user || !activeTenant) return
+    setComplianceLoading(true)
+    try {
+      const res = await fetch(`/v1/compliance/check?domain=${encodeURIComponent(domainName)}`, {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setComplianceResult(d.data || null)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Compliance evaluation failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setComplianceLoading(false)
+    }
+  }
+
+  const handleRunFCrDNSCheck = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !activeTenant || !testFCrDNSIP.trim()) return
+    setFCrDNSChecking(true)
+    try {
+      const res = await fetch('/v1/health/fcrdns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ ip_address: testFCrDNSIP.trim() }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setFCrDNSResult(d.data || null)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'FCrDNS check failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setFCrDNSChecking(false)
+    }
   }
 
   const loadInboundRoutes = async () => {
@@ -1990,9 +2272,18 @@ export default function App() {
         <div className="flex items-center space-x-4">
           <span className="text-sm text-slate-400">{user.email}</span>
           {user.is_platform_admin && (
-            <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
-              Platform Admin
-            </span>
+            <>
+              <button
+                onClick={() => setImpModalOpen(true)}
+                className="px-2.5 py-1 text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg transition-colors flex items-center space-x-1"
+              >
+                <span>🎭</span>
+                <span>Impersonate Tenant</span>
+              </button>
+              <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
+                Platform Admin
+              </span>
+            </>
           )}
           <button
             onClick={() => setUser(null)}
@@ -2002,6 +2293,107 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* Sticky Impersonation Warning Banner (§7.4) */}
+      {isImpersonating && impersonatedTenant && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-6 py-2 flex items-center justify-between text-xs text-amber-200">
+          <div className="flex items-center space-x-3">
+            <span className="font-bold uppercase tracking-wider bg-amber-500/30 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 text-[10px]">
+              ⚠️ Impersonation Active
+            </span>
+            <span>Viewing as Tenant: <strong>{impersonatedTenant.name}</strong></span>
+            <span className="text-amber-400/80 italic font-mono">"{impersonationReason}"</span>
+            {isSupportMasking && (
+              <span className="bg-blue-950 text-blue-400 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                🔒 Support Masking Active
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleExitImpersonation}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-xs transition-colors"
+          >
+            Exit Impersonation
+          </button>
+        </div>
+      )}
+
+      {/* Impersonate Modal */}
+      {impModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <span>🎭</span>
+                <span>Platform Admin Impersonation</span>
+              </h3>
+              <button
+                onClick={() => setImpModalOpen(false)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Access customer tenant environments to troubleshoot configuration or delivery issues. Every request is audited with your user ID and mandatory reason.
+            </p>
+            <form onSubmit={handleStartImpersonation} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Target Tenant</label>
+                <select
+                  required
+                  value={targetImpTenantID}
+                  onChange={(e) => setTargetImpTenantID(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                >
+                  <option value="">Select Tenant...</option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Mandatory Reason for Access</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={targetImpReason}
+                  onChange={(e) => setTargetImpReason(e.target.value)}
+                  placeholder="e.g. Investigating Zendesk Ticket #4892 - intermittent bounce delivery spikes"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="supportModeToggle"
+                  checked={targetImpSupportMode}
+                  onChange={(e) => setTargetImpSupportMode(e.target.checked)}
+                  className="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="supportModeToggle" className="text-xs text-slate-300">
+                  Enable Support Privacy Masking (masks message body content §7.4)
+                </label>
+              </div>
+              <div className="pt-3 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setImpModalOpen(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                >
+                  Start Impersonation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
@@ -2140,6 +2532,16 @@ export default function App() {
           >
             Alerts, DNSBL & Warmup
           </button>
+          <button
+            onClick={() => setCurrentTab('sso_compliance')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'sso_compliance'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            SSO & Compliance
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -2162,6 +2564,7 @@ export default function App() {
                   {currentTab === 'privacy_retention' && 'Suppression Privacy & Data Retention'}
                   {currentTab === 'inbound' && 'Inbound Email Routing & Processing'}
                   {currentTab === 'alerts_warmup' && 'Reputation, DNSBL, Warmup & Alert Center'}
+                  {currentTab === 'sso_compliance' && 'SSO, Impersonation & Compliance'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -2170,7 +2573,7 @@ export default function App() {
               </div>
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-sm text-emerald-400 font-medium">Phase 9 Active</span>
+                <span className="text-sm text-emerald-400 font-medium">Phase 12 Active</span>
               </div>
             </div>
 
@@ -5100,6 +5503,537 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                       ))
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Phase 12: SSO, Impersonation & Compliance Tab */}
+            {currentTab === 'sso_compliance' && (
+              <div className="space-y-8 mt-6">
+                {ssoActionMsg && (
+                  <div className="p-3 bg-indigo-950/60 border border-indigo-500/40 rounded-lg text-xs text-indigo-300 flex justify-between items-center shadow-sm">
+                    <span>{ssoActionMsg}</span>
+                    <button onClick={() => setSSOActionMsg(null)} className="text-indigo-400 hover:text-white text-xs">✕</button>
+                  </div>
+                )}
+
+                {/* Section 1: Single Sign-On (OIDC & SAML 2.0) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+                    <div>
+                      <h2 className="text-lg font-semibold text-white">Single Sign-On (OIDC & SAML 2.0)</h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Enterprise identity federation (§7.2) with automated Just-in-Time (JIT) provisioning and domain auto-join.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <a
+                        href="/v1/auth/sso/saml/metadata"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition"
+                      >
+                        Download SP Metadata XML
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Form to Register Identity Provider */}
+                  <form onSubmit={handleCreateSSOProvider} className="bg-slate-950/60 p-4 rounded-lg border border-slate-800 mb-6">
+                    <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-4">Register Identity Provider</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Provider Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={newSSOName}
+                          onChange={(e) => setNewSSOName(e.target.value)}
+                          placeholder="e.g. Okta Corporate / Google Workspace"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Protocol Type</label>
+                        <select
+                          value={newSSOType}
+                          onChange={(e) => setNewSSOType(e.target.value as 'oidc' | 'saml')}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="oidc">OpenID Connect (OIDC 1.0)</option>
+                          <option value="saml">SAML 2.0 Web SSO</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">
+                          {newSSOType === 'oidc' ? 'Issuer URL' : 'IDP Metadata URL'}
+                        </label>
+                        <input
+                          type="text"
+                          value={newSSOIssuer}
+                          onChange={(e) => setNewSSOIssuer(e.target.value)}
+                          placeholder={newSSOType === 'oidc' ? 'https://accounts.google.com' : 'https://idp.example.com/metadata.xml'}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">
+                          {newSSOType === 'oidc' ? 'Client ID' : 'Entity ID / App ID'}
+                        </label>
+                        <input
+                          type="text"
+                          value={newSSOClientID}
+                          onChange={(e) => setNewSSOClientID(e.target.value)}
+                          placeholder="e.g. mailvex-client-prod"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Auto-Join Domains (comma separated)</label>
+                        <input
+                          type="text"
+                          value={newSSODomains}
+                          onChange={(e) => setNewSSODomains(e.target.value)}
+                          placeholder="e.g. acme.com, acme.co.uk"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Default JIT Role</label>
+                        <select
+                          value={newSSORole}
+                          onChange={(e) => setNewSSORole(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="developer">Developer</option>
+                          <option value="admin">Admin</option>
+                          <option value="analyst">Analyst</option>
+                          <option value="support">Support (Masked Body)</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-850">
+                      <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newSSOEnforce}
+                          onChange={(e) => setNewSSOEnforce(e.target.checked)}
+                          className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Enforce SSO (Block password logins for matching domain users)</span>
+                      </label>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded transition"
+                      >
+                        Register SSO Provider
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* SSO Providers List */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                        <tr>
+                          <th className="p-3">Name</th>
+                          <th className="p-3">Type</th>
+                          <th className="p-3">Allowed Domains</th>
+                          <th className="p-3">Default Role</th>
+                          <th className="p-3">Enforce SSO</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {ssoProviders.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-4 text-center text-slate-500">
+                              No SSO identity providers configured for this tenant.
+                            </td>
+                          </tr>
+                        ) : (
+                          ssoProviders.map((p) => (
+                            <tr key={p.id} className="hover:bg-slate-850/50 transition">
+                              <td className="p-3 font-medium text-white">{p.name}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                  p.provider_type === 'oidc' ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50' : 'bg-purple-900/40 text-purple-300 border border-purple-700/50'
+                                }`}>
+                                  {p.provider_type}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                {p.allowed_domains && p.allowed_domains.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {p.allowed_domains.map((d, i) => (
+                                      <span key={i} className="px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px]">
+                                        @{d}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 italic">None</span>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono text-[11px] text-indigo-300">{p.default_role}</td>
+                              <td className="p-3">
+                                {p.enforce_sso ? (
+                                  <span className="text-emerald-400 font-medium">Enforced</span>
+                                ) : (
+                                  <span className="text-slate-500">Optional</span>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+                                  Active
+                                </span>
+                              </td>
+                              <td className="p-3 text-right">
+                                <button
+                                  onClick={() => handleDeleteSSOProvider(p.id)}
+                                  className="text-xs text-rose-400 hover:text-rose-300 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 2: Platform Admin Impersonation & Audit Trail (§7.4) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+                    <div>
+                      <h2 className="text-lg font-semibold text-white">Platform Admin Impersonation & Audit (§7.4)</h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Secure tenant impersonation with mandatory justification, immutable audit logging, and support role body privacy masking.
+                      </p>
+                    </div>
+                    <div>
+                      {isImpersonating ? (
+                        <button
+                          onClick={handleExitImpersonation}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg shadow-sm transition"
+                        >
+                          Exit Impersonation Mode
+                        </button>
+                      ) : user?.is_platform_admin ? (
+                        <button
+                          onClick={() => setImpModalOpen(true)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition"
+                        >
+                          Start Impersonation Session
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-500">Requires Platform Admin</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Active Impersonation Status Widget */}
+                  {isImpersonating ? (
+                    <div className="mb-6 p-4 bg-amber-950/30 border border-amber-500/40 rounded-lg flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+                          <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">Active Impersonation Session</span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-1">
+                          Tenant: <strong className="text-white">{impersonatedTenant?.name}</strong> (<code className="text-amber-200">{impersonatedTenant?.id}</code>)
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Reason: <em className="text-slate-200">"{impersonationReason}"</em> | Privacy Masking: <strong className="text-slate-200">{isSupportMasking ? 'Enabled (Body Masked)' : 'Full Read'}</strong>
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleExitImpersonation}
+                        className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded transition"
+                      >
+                        Exit Now
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mb-6 p-3 bg-slate-950/40 border border-slate-800 rounded-lg flex items-center justify-between text-xs text-slate-400">
+                      <span>Currently operating in standard identity context: <strong className="text-slate-200">{user?.email}</strong></span>
+                      <span className="text-slate-500 font-mono text-[11px]">User ID: {user?.id}</span>
+                    </div>
+                  )}
+
+                  {/* Impersonation Audit Log Table */}
+                  <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Impersonation Session Audit Trail</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                        <tr>
+                          <th className="p-3">Actor Admin</th>
+                          <th className="p-3">Target Tenant ID</th>
+                          <th className="p-3">Reason</th>
+                          <th className="p-3">Mode</th>
+                          <th className="p-3">Body Masking</th>
+                          <th className="p-3">Started At</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {impersonationSessions.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-4 text-center text-slate-500">
+                              No impersonation sessions recorded.
+                            </td>
+                          </tr>
+                        ) : (
+                          impersonationSessions.map((s) => (
+                            <tr key={s.id} className="hover:bg-slate-850/50 transition">
+                              <td className="p-3 font-mono text-[11px] text-slate-300">{s.actor_user_id}</td>
+                              <td className="p-3 font-mono text-[11px] text-indigo-300">{s.target_tenant_id}</td>
+                              <td className="p-3 text-white max-w-xs truncate">{s.reason}</td>
+                              <td className="p-3">
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] uppercase font-mono">
+                                  {s.access_type}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                {s.is_support_masking ? (
+                                  <span className="px-1.5 py-0.5 bg-amber-950/60 text-amber-400 border border-amber-800/40 rounded text-[10px] font-semibold">
+                                    🔒 Masked
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 text-[11px]">Full</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-400">{new Date(s.started_at).toLocaleString()}</td>
+                              <td className="p-3">
+                                {!s.ended_at ? (
+                                  <span className="px-2 py-0.5 bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 rounded-full text-[10px] font-semibold">
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 text-[11px]">Ended</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 3: Deliverability Compliance Checklist (§22) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+                    <div>
+                      <h2 className="text-lg font-semibold text-white">Deliverability Compliance Checklist (§22)</h2>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Automated 100-point deliverability audit evaluating SPF, DKIM, DMARC, FCrDNS, STARTTLS, DNSBL, and RFC 8058 List-Unsubscribe compliance.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={complianceDomain || (domains.length > 0 ? domains[0].name : '')}
+                        onChange={(e) => {
+                          setComplianceDomain(e.target.value)
+                          handleRunComplianceCheck(e.target.value)
+                        }}
+                        className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        {domains.map((d) => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleRunComplianceCheck(complianceDomain || (domains.length > 0 ? domains[0].name : ''))}
+                        disabled={complianceLoading || domains.length === 0}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition"
+                      >
+                        {complianceLoading ? 'Auditing...' : 'Run Audit'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Compliance Score Header */}
+                  {complianceResult ? (
+                    <div className="space-y-6">
+                      <div className="p-5 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Deliverability Compliance Score</span>
+                          <h3 className="text-2xl font-extrabold text-white mt-1 flex items-center space-x-3">
+                            <span className={complianceResult.overall_score >= 80 ? 'text-emerald-400' : complianceResult.overall_score >= 60 ? 'text-amber-400' : 'text-rose-400'}>
+                              {complianceResult.overall_score} / 100
+                            </span>
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase border ${
+                              complianceResult.overall_score >= 80
+                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
+                                : complianceResult.overall_score >= 60
+                                ? 'bg-amber-950/60 text-amber-400 border-amber-800/40'
+                                : 'bg-rose-950/60 text-rose-400 border-rose-800/40'
+                            }`}>
+                              {complianceResult.overall_score >= 80 ? 'Production Ready' : complianceResult.overall_score >= 60 ? 'Acceptable' : 'High Risk'}
+                            </span>
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Domain evaluated: <strong className="text-white">{complianceResult.domain_name}</strong> | Last audit: {new Date(complianceResult.checked_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="w-20 h-20 rounded-full border-4 border-slate-800 flex items-center justify-center bg-slate-900">
+                          <span className="text-lg font-bold text-white">{complianceResult.overall_score}%</span>
+                        </div>
+                      </div>
+
+                      {/* 7 Pillars Breakdown Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* SPF */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">SPF Alignment</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.spf_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.spf_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.spf_details || 'SPF record authorizes sending hosts.'}</p>
+                        </div>
+
+                        {/* DKIM */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">DKIM Cryptographic Key</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.dkim_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.dkim_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.dkim_details || '2048-bit RSA selector active.'}</p>
+                        </div>
+
+                        {/* DMARC */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">DMARC Policy Enforcement</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.dmarc_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.dmarc_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.dmarc_details || 'DMARC policy defined with RUA aggregation.'}</p>
+                        </div>
+
+                        {/* FCrDNS */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">FCrDNS Bidirectional Sync</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.fcrdns_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.fcrdns_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.fcrdns_details || 'PTR record matches forward A record.'}</p>
+                        </div>
+
+                        {/* TLS */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">TLS 1.3 / STARTTLS</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.tls_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.tls_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.tls_details || 'Encrypted outbound delivery verified.'}</p>
+                        </div>
+
+                        {/* DNSBL */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">DNSBL Reputation</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.dnsbl_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.dnsbl_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.dnsbl_details || 'No active listings on major blocklists.'}</p>
+                        </div>
+
+                        {/* RFC 8058 Unsubscribe */}
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-4 md:col-span-2 lg:col-span-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-white">RFC 8058 One-Click List-Unsubscribe & Header Compliance</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              complianceResult.unsubscribe_status === 'pass' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
+                            }`}>{complianceResult.unsubscribe_status}</span>
+                          </div>
+                          <p className="text-xs text-slate-400">{complianceResult.unsubscribe_details || 'List-Unsubscribe and List-Unsubscribe-Post headers configured on marketing streams.'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-slate-500 text-xs bg-slate-950/40 rounded-xl border border-slate-850">
+                      {domains.length === 0 ? 'Add and verify a domain to inspect deliverability compliance.' : 'Select a domain above and click "Run Audit" to calculate the 100-point deliverability compliance index.'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 4: Live Diagnostic Probe (FCrDNS Bidirectional Verification) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+                  <div className="pb-4 border-b border-slate-800 mb-6">
+                    <h2 className="text-lg font-semibold text-white">Live Diagnostic: FCrDNS Bidirectional Verification</h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Verify Forward-Confirmed Reverse DNS (§22): checks that an IP's PTR query resolves to a hostname whose forward A/AAAA query returns the original IP.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleRunFCrDNSCheck} className="flex items-center space-x-3 mb-6">
+                    <input
+                      type="text"
+                      required
+                      value={testFCrDNSIP}
+                      onChange={(e) => setTestFCrDNSIP(e.target.value)}
+                      placeholder="Enter Sending MTA IP (e.g. 198.51.100.1)"
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={fcrdnsChecking}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded transition"
+                    >
+                      {fcrdnsChecking ? 'Verifying...' : 'Verify FCrDNS'}
+                    </button>
+                  </form>
+
+                  {fcrdnsResult && (
+                    <div className={`p-4 rounded-lg border text-xs ${
+                      fcrdnsResult.is_confirmed
+                        ? 'bg-emerald-950/30 border-emerald-700/50 text-emerald-200'
+                        : 'bg-rose-950/30 border-rose-700/50 text-rose-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold uppercase tracking-wider">
+                          FCrDNS Status: {fcrdnsResult.is_confirmed ? 'Confirmed (Pass)' : 'Mismatch / Failed'}
+                        </span>
+                        <span className="font-mono text-[11px] text-slate-400">IP: {fcrdnsResult.ip_address}</span>
+                      </div>
+                      <p className="text-xs mb-3 text-slate-300">{fcrdnsResult.details}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] font-mono">
+                        <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                          <span className="text-slate-400 block mb-1">PTR Hostnames:</span>
+                          {fcrdnsResult.ptr_hostnames && fcrdnsResult.ptr_hostnames.length > 0 ? (
+                            fcrdnsResult.ptr_hostnames.map((h, i) => <div key={i} className="text-indigo-300">{h}</div>)
+                          ) : (
+                            <span className="text-slate-500">None</span>
+                          )}
+                        </div>
+                        <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                          <span className="text-slate-400 block mb-1">Forward Resolved IPs:</span>
+                          {fcrdnsResult.forward_ips && fcrdnsResult.forward_ips.length > 0 ? (
+                            fcrdnsResult.forward_ips.map((ip, i) => <div key={i} className="text-emerald-300">{ip}</div>)
+                          ) : (
+                            <span className="text-slate-500">None</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

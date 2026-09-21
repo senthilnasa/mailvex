@@ -17,11 +17,11 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 | **Phase 6** | Async Bounces, Complaints, Unsubscribe Intake | ✅ Completed | DSN hard/soft bounce, ARF FBL complaints, VERP, abuse queue | 2026-09-21 |
 | **Phase 7** | Analytics & Reporting: Rollups, Histograms, ISP Breakdown, CSV | ✅ Completed | Pre-aggregated rollups, latency histogram, provider breakdown, CSV exporter | 2026-09-21 |
 | **Phase 8** | Webhooks Service: Signing, Replay Protection, Retries | ✅ Completed | HMAC signing, 24h secret rotation overlap, replay defense, circuit breaker | 2026-09-21 |
-| **Phase 9** | Templates Engine & Management | ⏳ Next | Mustache rendering, syntax validation, draft/publish lifecycle | - |
-| **Phase 10** | Suppression UI/API, Privacy (GDPR/DPDP), Retention | ⏳ Pending | Erasure report & partition purge tests | - |
-| **Phase 11** | Inbound Email, Routing & Local Mailboxes | ⏳ Pending | Inbound route & push notify tests | - |
-| **Phase 12** | Reputation, Health, Alerts, SSO (OIDC/SAML) | ⏳ Pending | Alert evaluation & SSO auth tests | - |
-| **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI | ⏳ Pending | Backup/restore test, load tests | - |
+| **Phase 9** | Suppression Import/Export, GDPR/DPDP Article 17/15, Rolling Data Retention | ✅ Completed | Import/export CSV, Erasure report & partition purge tests | 2026-09-21 |
+| **Phase 10** | Open & Click Tracking, Bot Filtering, Inbound Email Routing | ✅ Completed | Bot filtering, HMAC tracking redirect, inbound MX routing | 2026-09-21 |
+| **Phase 11** | Reputation, DNSBL, Warmup & Alert Center | ✅ Completed | DNSBL reverse queries, ramp schedules, multi-channel dispatch | 2026-09-21 |
+| **Phase 12** | SSO (OIDC/SAML), Impersonation, Support Privacy, Deliverability Compliance | ✅ Completed | OIDC/SAML SP metadata, JIT provisioning, support body masking, FCrDNS/TLS audit | 2026-09-21 |
+| **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI | ⏳ Next | Security audit (§23), Vault KEK adapter, backup/restore CLI | - |
 | **Phase 14** | Packaging & Release: Multi-arch Docker, SDKs, CLI | ⏳ Pending | Container build & verification | - |
 
 ---
@@ -529,6 +529,67 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
   - `console`: Production build succeeded (`npm run build`).
 
 ---
+
+### Phase 12: SSO (OIDC/SAML), Platform Admin Impersonation, Support Body Masking, FCrDNS/TLS Checks & Deliverability Compliance (§7.2, §7.4, §22)
+- **Status:** Completed (2026-09-21)
+- **Key Modules & Artifacts Implemented:**
+  - `migrations/000012_sso_impersonation_compliance.up.sql` & `down.sql`:
+    - `sso_providers`: Org & tenant level identity provider configurations, OIDC/SAML metadata URLs, allowed auto-join domains array, default JIT role, and strict SSO enforcement flag.
+    - `impersonation_sessions`: Audit trail of platform admin tenant impersonations with mandatory reason justification, actor identity, access type, support role privacy masking status, and start/end timestamps.
+    - `compliance_checks`: Automated 100-point deliverability scorecard records and 7-pillar breakdown logs.
+  - `core/domain/models.go` & `core/crypto/ulid.go`:
+    - Models `SSOProvider`, `ImpersonationSession`, `ComplianceCheck`, `FCrDNSResult`, `TLSCheckResult`.
+    - ULID prefixes: `sso_`, `imps_`, `comp_`.
+  - `core/auth/`:
+    - `sso.go`: OpenID Connect (OIDC 1.0) authorization URL generator, token callback handler, SAML 2.0 Service Provider EntityDescriptor XML generator, AuthnRequest generator, SAML Response assertion parser, Just-in-Time (JIT) provisioning, and domain auto-join validation.
+    - `impersonation.go`: Platform admin impersonation session manager, mandatory reason validation, immutable audit log recorder, and Support role message body privacy masking engine (`MaskMessageBody`).
+    - Unit tests: `sso_test.go`, `impersonation_test.go` (100% PASS).
+  - `core/health/`:
+    - `compliance.go`: Bidirectional FCrDNS verification engine (IP -> PTR query -> A/AAAA query matching original IP), remote MTA STARTTLS & cipher suite probe, and automated 100-point deliverability compliance checklist evaluator (SPF, DKIM, DMARC, FCrDNS, TLS, DNSBL, RFC 8058 Unsubscribe).
+    - Unit tests: `compliance_test.go` (100% PASS).
+  - `core/repository/`:
+    - Repository methods for SSO provider CRUD, domain auto-join resolution, impersonation session management with audit logging, and compliance check records.
+    - Seeded standard tenant roles: `admin`, `developer`, `analyst`, `support`, `viewer` (with `support` intentionally lacking `messages.body.read` permission for §7.4 masking).
+  - `api/middleware/middleware.go`:
+    - Dynamic impersonation context injection via `X-Impersonate-Tenant-ID` and `X-Impersonate-Reason` headers.
+    - Context keys: `IsImpersonatingKey`, `ImpersonatedTenantIDKey`, `ImpersonatorUserIDKey`, `IsSupportRoleKey` (when `X-Support-Mode: true` or user role is `support`). Response header `X-Impersonating: true`.
+  - `api/handlers/messages.go`:
+    - Updated `GetMessageBodyHandler` to return `[MASKED - SUPPORT ROLE ACCESS]` when `IsSupportRoleKey` is active.
+  - `api/handlers/sso_impersonation.go`:
+    - Handlers for SSO provider CRUD, SAML SP metadata (`/v1/auth/sso/saml/metadata`), SAML ACS (`/v1/auth/sso/saml/acs`), OIDC callback (`/v1/auth/sso/oidc/callback`), Impersonation start/exit/sessions, Compliance audit (`/v1/compliance/check`), FCrDNS (`/v1/health/fcrdns`), and TLS (`/v1/health/tls`).
+  - `api/server.go`: Wired Phase 12 engines and mounted all endpoints with RBAC & platform admin authentication.
+  - `console`: Added **SSO & Compliance** tab and impersonation UX:
+    - Impersonation session modal and sticky banner (`🔒 IMPERSONATING TENANT [name]`).
+    - Message Inspector body preview shows privacy notice when viewed under support role or support impersonation.
+    - Single Sign-On (OIDC/SAML) provider registration form and active providers table.
+    - SP Metadata XML download link.
+    - Impersonation sessions audit trail table.
+    - Deliverability Compliance Checklist score gauge (0-100) and 7-pillar breakdown cards (SPF, DKIM, DMARC, FCrDNS, TLS, DNSBL, Unsubscribe).
+    - Live FCrDNS bidirectional verification probe tool.
+  - `sdk/openapi.yaml`: Complete OpenAPI 3.0 path definitions for all Phase 12 endpoints.
+- **Verification & Test Results:**
+  - `core/auth/sso_test.go`:
+    - `TestSSOOIDCAuthorizationURL` PASS.
+    - `TestSSOSAMLMetadataGeneration` PASS (XML structure, EntityDescriptor, AssertionConsumerService binding).
+    - `TestSSOSAMLAuthnRequest` PASS.
+    - `TestSSOProvisionJITUserWithDomainAutoJoin` PASS.
+  - `core/auth/impersonation_test.go`:
+    - `TestPlatformAdminImpersonationLifecycle` PASS (start session with mandatory reason, audit trail, end session).
+    - `TestSupportRoleMessageBodyMasking` PASS (privacy redaction for support role).
+  - `core/health/compliance_test.go`:
+    - `TestFCrDNSBidirectionalVerification` PASS (PTR -> A match, mismatch detection).
+    - `TestDeliverabilityComplianceChecklist` PASS (100-point scoring algorithm, pillar evaluations).
+    - `TestTLSVerification` PASS.
+  - `api/sso_impersonation_test.go`:
+    - `TestSSOEndpoints` PASS (create provider, list, get, delete, SAML metadata XML, OIDC callback).
+    - `TestPlatformAdminImpersonationEndpoints` PASS (start impersonation, audit listing, body masking in message inspector, exit).
+    - `TestComplianceAndHealthEndpoints` PASS (compliance checklist check, FCrDNS check, TLS check).
+  - `go test -count=1 ./...`: 100% PASS across all 28 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
 
 
 

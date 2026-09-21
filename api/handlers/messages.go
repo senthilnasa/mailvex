@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mailvex/mailvex/api/middleware"
+	"github.com/mailvex/mailvex/core/auth"
 	"github.com/mailvex/mailvex/core/domain"
 )
 
@@ -143,9 +144,14 @@ func (a *API) GetMessageBodyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bodyStr := string(rawBody)
+	isSupport, _ := r.Context().Value(middleware.IsSupportRoleKey).(bool)
+	bodyStr = auth.MaskMessageBody(bodyStr, isSupport)
+
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":   msg.ID,
-		"body": string(rawBody),
+		"id":     msg.ID,
+		"body":   bodyStr,
+		"masked": isSupport,
 	})
 }
 

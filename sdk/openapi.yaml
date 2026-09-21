@@ -1273,3 +1273,180 @@ paths:
         '200':
           description: Notification marked as read
 
+  # Phase 12: SSO, Impersonation & Compliance
+  /v1/auth/sso/providers:
+    get:
+      summary: List SSO Identity Providers for active organization / tenant
+      responses:
+        '200':
+          description: List of SSO providers
+    post:
+      summary: Register a new SSO Identity Provider (OIDC 1.0 or SAML 2.0)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, provider_type]
+              properties:
+                name: { type: string }
+                provider_type: { type: string, enum: [oidc, saml] }
+                issuer_url: { type: string }
+                client_id: { type: string }
+                idp_metadata_url: { type: string }
+                allowed_domains: { type: array, items: { type: string } }
+                default_role: { type: string, default: developer }
+                enforce_sso: { type: boolean }
+      responses:
+        '201':
+          description: SSO Provider created
+
+  /v1/auth/sso/providers/{id}:
+    get:
+      summary: Get details of an SSO Provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSO Provider details
+    delete:
+      summary: Delete an SSO Provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSO Provider deleted
+
+  /v1/auth/sso/saml/metadata:
+    get:
+      summary: Download SAML 2.0 Service Provider (SP) EntityDescriptor XML Metadata
+      responses:
+        '200':
+          description: SAML 2.0 SP Metadata XML
+          content:
+            application/xml:
+              schema: { type: string }
+
+  /v1/auth/sso/saml/acs:
+    post:
+      summary: SAML 2.0 Assertion Consumer Service (ACS) endpoint
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [SAMLResponse]
+              properties:
+                SAMLResponse: { type: string }
+                RelayState: { type: string }
+      responses:
+        '200':
+          description: SAML Authentication successful, returns session token
+
+  /v1/auth/sso/oidc/callback:
+    get:
+      summary: OIDC Authorization Code Flow callback endpoint
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OIDC Authentication successful, returns session token
+
+  /v1/admin/impersonate:
+    post:
+      summary: Platform Admin start tenant impersonation session (§7.4)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_tenant_id, reason]
+              properties:
+                target_tenant_id: { type: string }
+                reason: { type: string }
+                access_type: { type: string, enum: [read_only, full_admin], default: read_only }
+                is_support_masking: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Impersonation session initialized
+
+  /v1/admin/impersonate/exit:
+    post:
+      summary: Terminate active tenant impersonation session
+      responses:
+        '200':
+          description: Impersonation session ended
+
+  /v1/admin/impersonate/sessions:
+    get:
+      summary: List recent platform admin impersonation sessions and audit trail
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Array of impersonation sessions
+
+  /v1/compliance/check:
+    get:
+      summary: Execute automated 100-point deliverability compliance checklist audit (§22)
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deliverability compliance scorecard and 7-pillar breakdown
+
+  /v1/health/fcrdns:
+    post:
+      summary: Verify Forward-Confirmed reverse DNS (FCrDNS) for an MTA IP address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip_address]
+              properties:
+                ip_address: { type: string }
+      responses:
+        '200':
+          description: FCrDNS verification result
+
+  /v1/health/tls:
+    post:
+      summary: Test remote host STARTTLS and cipher suite support
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host: { type: string }
+                port: { type: integer, default: 25 }
+      responses:
+        '200':
+          description: TLS and STARTTLS probe result
+
+

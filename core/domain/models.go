@@ -854,3 +854,85 @@ type ReputationOverview struct {
 	ActiveAlertsCount  int     `json:"active_alerts_count"`
 }
 
+// Phase 12 Models: SSO, Impersonation, Compliance
+
+type SSOProvider struct {
+	ID               string    `json:"id"`
+	OrgID            string    `json:"org_id"`
+	TenantID         *string   `json:"tenant_id,omitempty"`
+	Name             string    `json:"name"`
+	ProviderType     string    `json:"provider_type"` // oidc, saml
+	IssuerURL        string    `json:"issuer_url,omitempty"`
+	ClientID         string    `json:"client_id,omitempty"`
+	ClientSecretEnc  string    `json:"-"`
+	IDPMetadataURL   string    `json:"idp_metadata_url,omitempty"`
+	IDPMetadataXML   string    `json:"idp_metadata_xml,omitempty"`
+	SPEntityID       string    `json:"sp_entity_id,omitempty"`
+	SPACSURL         string    `json:"sp_acs_url,omitempty"`
+	AllowedDomains   []string  `json:"allowed_domains"`
+	DefaultRole      string    `json:"default_role"` // admin, developer, analyst, support, viewer
+	AttributeMapping string    `json:"attribute_mapping,omitempty"`
+	EnforceSSO       bool      `json:"enforce_sso"`
+	IsActive         bool      `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type ImpersonationSession struct {
+	ID               string     `json:"id"`
+	ActorUserID      string     `json:"actor_user_id"`
+	TargetTenantID   string     `json:"target_tenant_id"`
+	Reason           string     `json:"reason"`
+	AccessType       string     `json:"access_type"` // read_only, read_write
+	IsSupportMasking bool       `json:"is_support_masking"`
+	IPAddress        string     `json:"ip_address"`
+	UserAgent        string     `json:"user_agent"`
+	StartedAt        time.Time  `json:"started_at"`
+	EndedAt          *time.Time `json:"ended_at,omitempty"`
+}
+
+type ComplianceCheck struct {
+	ID                string    `json:"id"`
+	TenantID          string    `json:"tenant_id"`
+	DomainID          *string   `json:"domain_id,omitempty"`
+	DomainName        string    `json:"domain_name"`
+	OverallScore      int       `json:"overall_score"` // 0 to 100
+	SPFStatus         string    `json:"spf_status"`    // pass, warn, fail
+	SPFDetails        string    `json:"spf_details,omitempty"`
+	DKIMStatus        string    `json:"dkim_status"`
+	DKIMDetails       string    `json:"dkim_details,omitempty"`
+	DMARCStatus       string    `json:"dmarc_status"`
+	DMARCDetails      string    `json:"dmarc_details,omitempty"`
+	FCrDNSStatus      string    `json:"fcrdns_status"`
+	FCrDNSDetails     string    `json:"fcrdns_details,omitempty"`
+	TLSStatus         string    `json:"tls_status"`
+	TLSDetails        string    `json:"tls_details,omitempty"`
+	DNSBLStatus       string    `json:"dnsbl_status"`
+	DNSBLDetails      string    `json:"dnsbl_details,omitempty"`
+	UnsubscribeStatus string    `json:"unsubscribe_status"`
+	UnsubscribeDetails string   `json:"unsubscribe_details,omitempty"`
+	CheckedAt         time.Time `json:"checked_at"`
+}
+
+type FCrDNSResult struct {
+	IPAddress       string   `json:"ip_address"`
+	PTRHostnames    []string `json:"ptr_hostnames"`
+	ForwardIPs      []string `json:"forward_ips"`
+	IsConfirmed     bool     `json:"is_confirmed"`
+	ConfirmedDomain string   `json:"confirmed_domain,omitempty"`
+	Details         string   `json:"details"`
+}
+
+type TLSCheckResult struct {
+	Host               string    `json:"host"`
+	Port               int       `json:"port"`
+	SupportsSTARTTLS   bool      `json:"supports_starttls"`
+	TLSVersion         string    `json:"tls_version,omitempty"`
+	CipherSuite        string    `json:"cipher_suite,omitempty"`
+	CertValid          bool      `json:"cert_valid"`
+	CertIssuer         string    `json:"cert_issuer,omitempty"`
+	CertExpirationDate time.Time `json:"cert_expiration_date,omitempty"`
+	Details            string    `json:"details"`
+}
+
+

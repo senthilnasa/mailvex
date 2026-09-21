@@ -16,11 +16,15 @@ import (
 type contextKey string
 
 const (
-	RequestIDKey   contextKey = "request_id"
-	UserKey        contextKey = "user"
-	TenantIDKey    contextKey = "tenant_id"
-	APIKeyKey      contextKey = "api_key"
-	EnvironmentKey contextKey = "environment"
+	RequestIDKey            contextKey = "request_id"
+	UserKey                 contextKey = "user"
+	TenantIDKey             contextKey = "tenant_id"
+	APIKeyKey               contextKey = "api_key"
+	EnvironmentKey          contextKey = "environment"
+	IsImpersonatingKey      contextKey = "is_impersonating"
+	ImpersonatedTenantIDKey contextKey = "impersonated_tenant_id"
+	ImpersonatorUserIDKey   contextKey = "impersonator_user_id"
+	IsSupportRoleKey        contextKey = "is_support_role"
 )
 
 // RequestID adds a unique req_... identifier to each request context and response header
@@ -141,14 +145,63 @@ func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 
 			// Tenant context resolution
 			tenantID := r.Header.Get("X-Tenant-ID")
-			if tenantID != "" {
+
+			// Check for Platform Admin Impersonation header
+			impersonateTenantID := r.Header.Get("X-Impersonate-Tenant-ID")
+			if impersonateTenantID != "" {
 				if !user.IsPlatformAdmin {
-					_, err := repo.GetTenantMembership(r.Context(), tenantID, user.ID)
+					http.Error(w, `{"error":{"code":"impersonation_forbidden","message":"Only platform administrators can impersonate tenants"}}`, http.StatusForbidden)
+					return
+				}
+				reason := strings.TrimSpace(r.Header.Get("X-Impersonate-Reason"))
+				if reason == "" {
+					http.Error(w, `{"error":{"code":"impersonation_reason_required","message":"An explicit reason is required to impersonate a tenant"}}`, http.StatusBadRequest)
+					return
+				}
+				targetTenant, err := repo.GetTenant(r.Context(), impersonateTenantID)
+				if err != nil || targetTenant == nil {
+					http.Error(w, `{"error":{"code":"tenant_not_found","message":"Target tenant not found"}}`, http.StatusNotFound)
+					return
+				}
+
+				tenantID = impersonateTenantID
+				w.Header().Set("X-Impersonating", "true")
+				w.Header().Set("X-Impersonated-Tenant-ID", impersonateTenantID)
+				ctx = context.WithValue(ctx, IsImpersonatingKey, true)
+				ctx = context.WithValue(ctx, ImpersonatedTenantIDKey, impersonateTenantID)
+				ctx = context.WithValue(ctx, ImpersonatorUserIDKey, user.ID)
+
+				// Check support mode
+				if strings.EqualFold(r.Header.Get("X-Support-Mode"), "true") {
+					ctx = context.WithValue(ctx, IsSupportRoleKey, true)
+				}
+
+				// Record audit trail
+				_ = repo.RecordAuditLog(r.Context(), &domain.AuditLog{
+					ID:                 crypto.NewULID(crypto.PrefixAudit),
+					TenantID:           &impersonateTenantID,
+					ActorUserID:        &user.ID,
+					ImpersonatorUserID: &user.ID,
+					Action:             "admin.impersonated_request",
+					ResourceType:       "tenant",
+					ResourceID:         impersonateTenantID,
+					Reason:             &reason,
+					OccurredAt:         time.Now().UTC(),
+				})
+			} else if tenantID != "" {
+				if !user.IsPlatformAdmin {
+					mem, err := repo.GetTenantMembership(r.Context(), tenantID, user.ID)
 					if err != nil {
 						http.Error(w, `{"error":{"code":"cross_tenant_forbidden","message":"Not a member of this tenant"}}`, http.StatusForbidden)
 						return
 					}
+					if mem != nil && mem.RoleID == "support" {
+						ctx = context.WithValue(ctx, IsSupportRoleKey, true)
+					}
 				}
+			}
+
+			if tenantID != "" {
 				ctx = context.WithValue(ctx, TenantIDKey, tenantID)
 			}
 

@@ -266,6 +266,23 @@ type Repository interface {
 	ListAlertNotifications(ctx context.Context, tenantID *string, unreadOnly bool, limit int) ([]*domain.AlertNotification, error)
 	MarkAlertNotificationRead(ctx context.Context, tenantID *string, id string) error
 	GetReputationOverview(ctx context.Context, tenantID string) (*domain.ReputationOverview, error)
+
+	// Phase 12: SSO, Impersonation & Compliance
+	CreateSSOProvider(ctx context.Context, p *domain.SSOProvider) error
+	GetSSOProvider(ctx context.Context, id string) (*domain.SSOProvider, error)
+	GetSSOProviderByDomain(ctx context.Context, domainName string) (*domain.SSOProvider, error)
+	ListSSOProviders(ctx context.Context, orgID string) ([]*domain.SSOProvider, error)
+	UpdateSSOProvider(ctx context.Context, p *domain.SSOProvider) error
+	DeleteSSOProvider(ctx context.Context, id string) error
+
+	CreateImpersonationSession(ctx context.Context, s *domain.ImpersonationSession) error
+	GetActiveImpersonationSession(ctx context.Context, actorID, tenantID string) (*domain.ImpersonationSession, error)
+	EndImpersonationSession(ctx context.Context, id string) error
+	ListImpersonationSessions(ctx context.Context, actorID string, limit, offset int) ([]*domain.ImpersonationSession, error)
+
+	SaveComplianceCheck(ctx context.Context, c *domain.ComplianceCheck) error
+	GetLatestComplianceCheck(ctx context.Context, tenantID, domainName string) (*domain.ComplianceCheck, error)
+	ListComplianceChecks(ctx context.Context, tenantID string, limit int) ([]*domain.ComplianceCheck, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -350,6 +367,11 @@ type MemoryRepository struct {
 	alertIncidents       map[string]*domain.AlertIncident
 	notificationChannels map[string]*domain.NotificationChannel
 	alertNotifications   []*domain.AlertNotification
+
+	// Phase 12 collections
+	ssoProviders          map[string]*domain.SSOProvider
+	impersonationSessions []*domain.ImpersonationSession
+	complianceChecks      []*domain.ComplianceCheck
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -413,6 +435,9 @@ func NewMemoryRepository() *MemoryRepository {
 		alertIncidents:       make(map[string]*domain.AlertIncident),
 		notificationChannels: make(map[string]*domain.NotificationChannel),
 		alertNotifications:   make([]*domain.AlertNotification, 0),
+		ssoProviders:          make(map[string]*domain.SSOProvider),
+		impersonationSessions: make([]*domain.ImpersonationSession, 0),
+		complianceChecks:      make([]*domain.ComplianceCheck, 0),
 	}
 
 	// Seed default IP pool
@@ -508,6 +533,28 @@ func (m *MemoryRepository) seedDefaults() {
 		"reputation.read", "dnsbl.read", "dnsbl.check", "warmup.read", "warmup.write", "alerts.read", "alerts.write",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
+
+	// Standard tenant roles (§7)
+	stdRoles := []struct {
+		id    string
+		name  string
+		perms []string
+	}{
+		{id: "admin", name: "Admin", perms: tenantPerms},
+		{id: "role_admin", name: "Admin", perms: tenantPerms},
+		{id: "developer", name: "Developer", perms: []string{"messages.read", "messages.body.read", "send.email", "api_keys.read", "api_keys.create", "webhooks.read", "webhooks.write", "templates.read", "templates.write", "domains.read", "streams.read"}},
+		{id: "role_developer", name: "Developer", perms: []string{"messages.read", "messages.body.read", "send.email", "api_keys.read", "api_keys.create", "webhooks.read", "webhooks.write", "templates.read", "templates.write", "domains.read", "streams.read"}},
+		{id: "analyst", name: "Analyst", perms: []string{"analytics.read", "analytics.export", "reports.read", "reputation.read", "domains.read"}},
+		{id: "role_analyst", name: "Analyst", perms: []string{"analytics.read", "analytics.export", "reports.read", "reputation.read", "domains.read"}},
+		{id: "support", name: "Support", perms: []string{"messages.read", "domains.read", "suppressions.read", "abuse.read", "analytics.read"}}, // notice: NO messages.body.read
+		{id: "role_support", name: "Support", perms: []string{"messages.read", "domains.read", "suppressions.read", "abuse.read", "analytics.read"}},
+		{id: "viewer", name: "Viewer", perms: []string{"domains.read", "analytics.read", "reputation.read"}},
+		{id: "role_viewer", name: "Viewer", perms: []string{"domains.read", "analytics.read", "reputation.read"}},
+	}
+	for _, sr := range stdRoles {
+		m.roles[sr.id] = &domain.Role{ID: sr.id, Name: sr.name, Scope: "tenant", IsSystem: true, CreatedAt: time.Now()}
+		m.rolePerms[sr.id] = sr.perms
+	}
 
 	// Seed DNSBL Providers (§22.2)
 	delistSpamhaus := "https://check.spamhaus.org/"
@@ -3801,6 +3848,204 @@ func (r *MemoryRepository) GetReputationOverview(ctx context.Context, tenantID s
 
 	return overview, nil
 }
+
+// Phase 12: SSO, Impersonation & Compliance Implementations
+
+func (r *MemoryRepository) CreateSSOProvider(ctx context.Context, p *domain.SSOProvider) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if p.ID == "" {
+		p.ID = crypto.NewULID(crypto.PrefixSSOProvider)
+	}
+	now := time.Now().UTC()
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = now
+	}
+	p.UpdatedAt = now
+
+	r.ssoProviders[p.ID] = p
+	return nil
+}
+
+func (r *MemoryRepository) GetSSOProvider(ctx context.Context, id string) (*domain.SSOProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, exists := r.ssoProviders[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	cp := *p
+	return &cp, nil
+}
+
+func (r *MemoryRepository) GetSSOProviderByDomain(ctx context.Context, domainName string) (*domain.SSOProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	dLower := strings.ToLower(strings.TrimPrefix(domainName, "@"))
+	for _, p := range r.ssoProviders {
+		if !p.IsActive {
+			continue
+		}
+		for _, allowed := range p.AllowedDomains {
+			aLower := strings.ToLower(strings.TrimPrefix(allowed, "@"))
+			if aLower == dLower {
+				cp := *p
+				return &cp, nil
+			}
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) ListSSOProviders(ctx context.Context, orgID string) ([]*domain.SSOProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	list := make([]*domain.SSOProvider, 0)
+	for _, p := range r.ssoProviders {
+		if orgID == "" || p.OrgID == orgID {
+			cp := *p
+			list = append(list, &cp)
+		}
+	}
+	return list, nil
+}
+
+func (r *MemoryRepository) UpdateSSOProvider(ctx context.Context, p *domain.SSOProvider) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, exists := r.ssoProviders[p.ID]
+	if !exists {
+		return ErrNotFound
+	}
+	p.CreatedAt = existing.CreatedAt
+	p.UpdatedAt = time.Now().UTC()
+	r.ssoProviders[p.ID] = p
+	return nil
+}
+
+func (r *MemoryRepository) DeleteSSOProvider(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.ssoProviders[id]; !exists {
+		return ErrNotFound
+	}
+	delete(r.ssoProviders, id)
+	return nil
+}
+
+func (r *MemoryRepository) CreateImpersonationSession(ctx context.Context, s *domain.ImpersonationSession) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if s.ID == "" {
+		s.ID = crypto.NewULID(crypto.PrefixImpersonationSession)
+	}
+	if s.StartedAt.IsZero() {
+		s.StartedAt = time.Now().UTC()
+	}
+	r.impersonationSessions = append([]*domain.ImpersonationSession{s}, r.impersonationSessions...)
+	return nil
+}
+
+func (r *MemoryRepository) GetActiveImpersonationSession(ctx context.Context, actorID, tenantID string) (*domain.ImpersonationSession, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, s := range r.impersonationSessions {
+		if s.ActorUserID == actorID && s.TargetTenantID == tenantID && s.EndedAt == nil {
+			cp := *s
+			return &cp, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) EndImpersonationSession(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now().UTC()
+	for _, s := range r.impersonationSessions {
+		if s.ID == id && s.EndedAt == nil {
+			s.EndedAt = &now
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) ListImpersonationSessions(ctx context.Context, actorID string, limit, offset int) ([]*domain.ImpersonationSession, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	filtered := make([]*domain.ImpersonationSession, 0)
+	for _, s := range r.impersonationSessions {
+		if actorID == "" || s.ActorUserID == actorID {
+			cp := *s
+			filtered = append(filtered, &cp)
+		}
+	}
+
+	if offset >= len(filtered) {
+		return []*domain.ImpersonationSession{}, nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[offset:end], nil
+}
+
+func (r *MemoryRepository) SaveComplianceCheck(ctx context.Context, c *domain.ComplianceCheck) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if c.ID == "" {
+		c.ID = crypto.NewULID(crypto.PrefixComplianceCheck)
+	}
+	if c.CheckedAt.IsZero() {
+		c.CheckedAt = time.Now().UTC()
+	}
+	r.complianceChecks = append([]*domain.ComplianceCheck{c}, r.complianceChecks...)
+	return nil
+}
+
+func (r *MemoryRepository) GetLatestComplianceCheck(ctx context.Context, tenantID, domainName string) (*domain.ComplianceCheck, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, c := range r.complianceChecks {
+		if c.TenantID == tenantID && strings.EqualFold(c.DomainName, domainName) {
+			cp := *c
+			return &cp, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (r *MemoryRepository) ListComplianceChecks(ctx context.Context, tenantID string, limit int) ([]*domain.ComplianceCheck, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	list := make([]*domain.ComplianceCheck, 0)
+	for _, c := range r.complianceChecks {
+		if c.TenantID == tenantID {
+			cp := *c
+			list = append(list, &cp)
+			if limit > 0 && len(list) >= limit {
+				break
+			}
+		}
+	}
+	return list, nil
+}
+
 
 
 

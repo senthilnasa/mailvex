@@ -48,6 +48,9 @@ const (
 	PrefixAlertIncident     = "inc_"
 	PrefixNotifChannel      = "nchan_"
 	PrefixAlertNotif        = "anot_"
+	PrefixSSOProvider       = "sso_"
+	PrefixImpersonationSession = "imps_"
+	PrefixComplianceCheck   = "comp_"
 )
 
 // NewULID generates a new ULID string with the given prefix

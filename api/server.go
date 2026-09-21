@@ -409,6 +409,48 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.MarkAlertNotificationReadHandler)),
 	))
 
+	// Phase 12: SSO, Impersonation & Deliverability Compliance (§7.2, §7.4, §22)
+	s.mux.Handle("GET /v1/auth/sso/providers", authMiddleware(
+		middleware.RequirePermission(s.repo, "org.read")(http.HandlerFunc(apiHandler.ListSSOProvidersHandler)),
+	))
+	s.mux.Handle("POST /v1/auth/sso/providers", authMiddleware(
+		middleware.RequirePermission(s.repo, "org.sso.write")(http.HandlerFunc(apiHandler.CreateSSOProviderHandler)),
+	))
+	s.mux.Handle("GET /v1/auth/sso/providers/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "org.read")(http.HandlerFunc(apiHandler.GetSSOProviderHandler)),
+	))
+	s.mux.Handle("DELETE /v1/auth/sso/providers/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "org.sso.write")(http.HandlerFunc(apiHandler.DeleteSSOProviderHandler)),
+	))
+
+	// Public SSO Callback & Metadata Endpoints (No bearer auth required)
+	s.mux.HandleFunc("GET /v1/auth/sso/saml/metadata", apiHandler.GetSAMLMetadataHandler)
+	s.mux.HandleFunc("POST /v1/auth/sso/saml/acs", apiHandler.PostSAMLACSHandler)
+	s.mux.HandleFunc("POST /v1/auth/sso/oidc/callback", apiHandler.PostOIDCCallbackHandler)
+
+	// Platform Admin Tenant Impersonation (§7.4)
+	s.mux.Handle("POST /v1/admin/impersonate", authMiddleware(
+		middleware.RequirePermission(s.repo, "impersonate.write")(http.HandlerFunc(apiHandler.StartImpersonationHandler)),
+	))
+	s.mux.Handle("POST /v1/admin/impersonate/exit", authMiddleware(
+		middleware.RequirePermission(s.repo, "impersonate.write")(http.HandlerFunc(apiHandler.ExitImpersonationHandler)),
+	))
+	s.mux.Handle("GET /v1/admin/impersonate/sessions", authMiddleware(
+		middleware.RequirePermission(s.repo, "impersonate.read")(http.HandlerFunc(apiHandler.ListImpersonationSessionsHandler)),
+	))
+
+	// Deliverability Compliance & Health Checks
+	s.mux.Handle("GET /v1/compliance/check", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.GetComplianceCheckHandler)),
+	))
+	s.mux.Handle("POST /v1/health/fcrdns", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.PostFCrDNSCheckHandler)),
+	))
+	s.mux.Handle("POST /v1/health/tls", authMiddleware(
+		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.PostTLSCheckHandler)),
+	))
+
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

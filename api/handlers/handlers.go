@@ -18,7 +18,9 @@ import (
 	"github.com/mailvex/mailvex/core/reports"
 	"github.com/mailvex/mailvex/core/retention"
 	"github.com/mailvex/mailvex/core/alerts"
+	"github.com/mailvex/mailvex/core/auth"
 	"github.com/mailvex/mailvex/core/dnsbl"
+	"github.com/mailvex/mailvex/core/health"
 	"github.com/mailvex/mailvex/core/storage"
 	"github.com/mailvex/mailvex/core/tracking"
 	"github.com/mailvex/mailvex/core/warmup"
@@ -26,42 +28,52 @@ import (
 )
 
 type API struct {
-	repo       repository.Repository
-	audit      *audit.Service
-	encryption *crypto.EnvelopeEncryption
-	ingest     *core.IngestionEngine
-	storage    storage.Storage
-	reports    *reports.ReportProcessor
-	analytics  *analytics.Engine
-	webhooks   *webhooks.Dispatcher
-	privacy    *privacy.PrivacyService
-	retention  *retention.RetentionService
-	tracking   *tracking.TrackingEngine
-	inbound    *inbound.InboundEngine
-	dnsbl      *dnsbl.Checker
-	warmup     *warmup.Manager
-	alerts     *alerts.Engine
+	repo             repository.Repository
+	audit            *audit.Service
+	encryption       *crypto.EnvelopeEncryption
+	ingest           *core.IngestionEngine
+	storage          storage.Storage
+	reports          *reports.ReportProcessor
+	analytics        *analytics.Engine
+	webhooks         *webhooks.Dispatcher
+	privacy          *privacy.PrivacyService
+	retention        *retention.RetentionService
+	tracking         *tracking.TrackingEngine
+	inbound          *inbound.InboundEngine
+	dnsbl            *dnsbl.Checker
+	warmup           *warmup.Manager
+	alerts           *alerts.Engine
+	ssoEngine        *auth.SSOEngine
+	impersonationMgr *auth.ImpersonationManager
+	complianceEval   *health.ComplianceEvaluator
+	fcrdnsEval       *health.FCrDNSEvaluator
+	tlsChecker       *health.TLSChecker
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
 	store := storage.NewMemoryStorage()
 	alertsEngine := alerts.NewEngine(repo, nil)
 	return &API{
-		repo:       repo,
-		audit:      auditService,
-		encryption: encryption,
-		storage:    store,
-		ingest:     core.NewIngestionEngine(repo, store),
-		reports:    reports.NewReportProcessor(repo, nil, nil),
-		analytics:  analytics.NewEngine(repo),
-		webhooks:   webhooks.NewDispatcher(repo, nil),
-		privacy:    privacy.NewPrivacyService(repo),
-		retention:  retention.NewRetentionService(repo),
-		tracking:   tracking.NewTrackingEngine(nil, repo),
-		inbound:    inbound.NewInboundEngine(repo),
-		dnsbl:      dnsbl.NewChecker(repo, nil),
-		warmup:     warmup.NewManager(repo),
-		alerts:     alertsEngine,
+		repo:             repo,
+		audit:            auditService,
+		encryption:       encryption,
+		storage:          store,
+		ingest:           core.NewIngestionEngine(repo, store),
+		reports:          reports.NewReportProcessor(repo, nil, nil),
+		analytics:        analytics.NewEngine(repo),
+		webhooks:         webhooks.NewDispatcher(repo, nil),
+		privacy:          privacy.NewPrivacyService(repo),
+		retention:        retention.NewRetentionService(repo),
+		tracking:         tracking.NewTrackingEngine(nil, repo),
+		inbound:          inbound.NewInboundEngine(repo),
+		dnsbl:            dnsbl.NewChecker(repo, nil),
+		warmup:           warmup.NewManager(repo),
+		alerts:           alertsEngine,
+		ssoEngine:        auth.NewSSOEngine(repo),
+		impersonationMgr: auth.NewImpersonationManager(repo),
+		complianceEval:   health.NewComplianceEvaluator(repo, nil),
+		fcrdnsEval:       health.NewFCrDNSEvaluator(nil),
+		tlsChecker:       health.NewTLSChecker(),
 	}
 }
 
