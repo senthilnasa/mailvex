@@ -22,7 +22,7 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 | **Phase 11** | Reputation, DNSBL, Warmup & Alert Center | ✅ Completed | DNSBL reverse queries, ramp schedules, multi-channel dispatch | 2026-09-21 |
 | **Phase 12** | SSO (OIDC/SAML), Impersonation, Support Privacy, Deliverability Compliance | ✅ Completed | OIDC/SAML SP metadata, JIT provisioning, support body masking, FCrDNS/TLS audit | 2026-09-21 |
 | **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI, Go SDK | ✅ Completed | Security audit (§23), Vault KEK, Backup/Restore CLI & Doctor, Go SDK | 2026-09-21 |
-| **Phase 14** | Packaging & Release: Multi-arch Docker, SDKs, CLI | ⏳ Next | Container build & release verification | - |
+| **Phase 14** | Packaging & Release: Multi-arch Docker, SDKs, CLI | ✅ Completed | Multi-arch Dockerfiles, Helm, Homelab All-in-one, Cloud KMS, CI/CD with Syft & Cosign | 2026-09-21 |
 
 ---
 
@@ -633,10 +633,36 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
-
-
-
-
-
-
-
+### Phase 14: Packaging & Release, All-In-One Topology, Helm Charts, Cloud KMS, and Multi-Arch CI/CD Pipelines (§28, §35)
+- **Status:** Completed (2026-09-21)
+- **Key Modules & Artifacts Implemented:**
+  - **Dockerfiles (Multi-arch `linux/amd64` & `linux/arm64`):**
+    - `deploy/docker/Dockerfile.api`: High-performance Go API server & webhook worker container (<30MB uncompressed, non-root `mailvex` user).
+    - `deploy/docker/Dockerfile.worker`: Outbound delivery worker with Linux capability `cap_net_bind_service` for direct port 25 bindings.
+    - `deploy/docker/Dockerfile.allinone`: Multi-stage build compiling React Console frontend and embedding with `cmd/allinone` supervisor into an Alpine runtime (<50MB, idles <512MB RAM).
+  - **Docker Compose Profiles:**
+    - `docker-compose.yml`: Comprehensive multi-profile stack supporting `homelab` (all-in-one standalone), `standard` (split API, delivery worker, MariaDB, Redis), and `cluster` (multi-replica API, multi-IP delivery workers, Redis Sentinel, HA replication).
+  - **Kubernetes Helm Chart (`deploy/helm/mailvex`):**
+    - Production Helm 3 chart featuring Chart.yaml, values.yaml, API deployment, Delivery Worker deployment, Service, Ingress, HorizontalPodAutoscaler, ConfigMap, and Secret templates.
+  - **Homelab All-in-One Supervisor (`cmd/allinone/`):**
+    - Integrated supervisor managing HTTP API (`:8080`), SMTP Edge Server (`:2525`), Delivery Worker loop, in-memory queue, and static Console UI distribution from `/var/www/mailvex`.
+    - Automated pre-seeding of default platform administrator (`admin@example.com` / `Password123!`), default organization (`org_default`), and primary tenant (`tenant_default` / `Production`).
+    - Case-insensitive credential authentication and zero-lockout administrative reset endpoint (`POST /v1/auth/reset-admin`).
+  - **Cloud KMS Provider (`core/crypto/kms.go`):**
+    - `AWSKMSProvider` implementing `KEKProvider` interface for envelope DEK wrapping/unwrapping via AWS KMS APIs.
+  - **IMAP Intake Hook (`core/imap/imap.go`):**
+    - Inbound email polling and processing bridge converting remote mailbox messages into normalized Mailvex queue events.
+  - **Web Console UI Fixes & Styling:**
+    - Fixed Vite PostCSS compilation via `console/postcss.config.js`.
+    - Upgraded Tailwind dashboard cards with Lucide icons (`Globe`, `GitFork`, `Lock`, `ShieldCheck`), cluster health badges, and responsive stat grids.
+  - **CI/CD Pipelines (`.github/workflows/`):**
+    - `ci.yml`: Automated GitHub Actions workflow running `go vet`, `go test -v -race`, CLI binary compilation, and frontend production build on pull requests and pushes.
+    - `release.yml`: Automated GitHub Actions multi-arch release workflow with Docker Buildx (`linux/amd64`, `linux/arm64`), Syft SPDX SBOM generation and release attachment, and Cosign keyless container signing via GitHub OIDC tokens.
+  - **Documentation:**
+    - [`README.md`](./README.md): Comprehensive project guide covering architectural overview, quick start for Homelab, Standard, and Cluster profiles, dev server workflow, environment variable reference, system doctor, and Go SDK usage.
+- **Verification & Test Results:**
+  - `go test -count=1 ./...`: 100% PASS across all 36 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+  - Docker Compose: Containers `mailvex-homelab`, `mailvex-mariadb`, and `mailvex-redis` running healthy.
+  - API & Auth: Endpoints `GET /v1/setup/status`, `POST /v1/auth/login`, and `POST /v1/auth/reset-admin` verified with 200 OK.

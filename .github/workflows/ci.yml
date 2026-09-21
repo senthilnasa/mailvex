@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test-backend:
+    name: Backend Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Download Go Modules
+        run: go mod download
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Run Go Tests
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Test CLI Compilation
+        run: |
+          go build -v -o /tmp/mailvex ./cmd/mailvex
+          go build -v -o /tmp/mailvex-allinone ./cmd/allinone
+          /tmp/mailvex version
+
+  build-frontend:
+    name: Console Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: console
+        run: npm ci
+
+      - name: Build Web Console
+        working-directory: console
+        run: npm run build
