@@ -10,6 +10,7 @@ import (
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/dns"
+	"github.com/mailvex/mailvex/core/metrics"
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/storage"
 )
@@ -62,9 +63,10 @@ func (s *Server) setupRoutes() {
 	apiHandler := handlers.NewAPI(s.repo, s.audit, s.encryption)
 	apiHandler.SetIngestEngine(s.ingestEngine, s.storage)
 
-	// Public Health Probes
+	// Public Health & Observability Probes
 	s.mux.HandleFunc("GET /health", apiHandler.HealthHandler)
 	s.mux.HandleFunc("GET /ready", apiHandler.ReadyHandler)
+	s.mux.Handle("GET /metrics", metrics.Handler())
 
 	// Setup Wizard (Pre-auth)
 	s.mux.HandleFunc("GET /v1/setup", apiHandler.SetupStatusHandler)

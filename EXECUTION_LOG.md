@@ -21,8 +21,8 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 | **Phase 10** | Open & Click Tracking, Bot Filtering, Inbound Email Routing | ✅ Completed | Bot filtering, HMAC tracking redirect, inbound MX routing | 2026-09-21 |
 | **Phase 11** | Reputation, DNSBL, Warmup & Alert Center | ✅ Completed | DNSBL reverse queries, ramp schedules, multi-channel dispatch | 2026-09-21 |
 | **Phase 12** | SSO (OIDC/SAML), Impersonation, Support Privacy, Deliverability Compliance | ✅ Completed | OIDC/SAML SP metadata, JIT provisioning, support body masking, FCrDNS/TLS audit | 2026-09-21 |
-| **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI | ⏳ Next | Security audit (§23), Vault KEK adapter, backup/restore CLI | - |
-| **Phase 14** | Packaging & Release: Multi-arch Docker, SDKs, CLI | ⏳ Pending | Container build & verification | - |
+| **Phase 13** | Production Hardening: Security Review, Vault KEK, Backup CLI, Go SDK | ✅ Completed | Security audit (§23), Vault KEK, Backup/Restore CLI & Doctor, Go SDK | 2026-09-21 |
+| **Phase 14** | Packaging & Release: Multi-arch Docker, SDKs, CLI | ⏳ Next | Container build & release verification | - |
 
 ---
 
@@ -589,6 +589,50 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
   - `console`: Production build succeeded (`npm run build`).
 
 ---
+
+### Phase 13: Production Hardening, Vault KEK Adapter, Backup/Restore CLI & Doctor, Observability Exporter, and Official Go SDK (§23, §28, §34)
+- **Status:** Completed (2026-09-21)
+- **Key Modules & Artifacts Implemented:**
+  - `core/crypto/vault.go` & `vault_test.go`:
+    - `KEKProvider` pluggable interface (`WrapDEK`, `UnwrapDEK`, `KeyID`).
+    - `LocalKEKProvider` using 256-bit AES-GCM master key.
+    - `VaultTransitKEKProvider` integrating with HashiCorp Vault Transit Secrets Engine (`/v1/transit/encrypt/<key>`, `/v1/transit/decrypt/<key>`) with token, namespace, and custom TLS timeout.
+    - `RotateDEK`: Zero-downtime tenant Data Encryption Key re-encryption tool verifying ciphertext integrity before and after rotation.
+  - `core/scanner/scanner.go` & `scanner_test.go`:
+    - Content scanning hook supporting ClamAV (`INSTREAM` chunked TCP protocol) and Rspamd (`/checkv2` HTTP protocol).
+    - Policy enforcement engine (`reject`, `quarantine`, `flag`, `passthrough`).
+    - Sequential scanner `Pipeline` with threat short-circuiting.
+  - `core/metrics/metrics.go` & `metrics_test.go`:
+    - High-performance, thread-safe Prometheus MetricRegistry supporting Counters, Gauges, and Histograms.
+    - Exported metrics: `mailvex_messages_queued_total`, `mailvex_messages_delivered_total`, `mailvex_messages_bounced_total`, `mailvex_messages_failed_total`, `mailvex_queue_depth`, `mailvex_bounce_rate`, `mailvex_complaint_rate`, `mailvex_delivery_duration_seconds`, `mailvex_smtp_transaction_seconds`.
+    - HTTP handler mounted at `GET /metrics`.
+  - `deploy/grafana/mailvex_dashboard.json`:
+    - Production Grafana dashboard definition with Queue Depth, Delivery Throughput, Bounce/Complaint Rates, and p95/p99 Delivery Latency.
+  - `cmd/mailvex/`:
+    - `backup.go`: Cryptographically signed backup archive engine (`CreateBackup` / `RestoreBackup`) with deterministic HMAC-SHA256 manifest verification over all tables (`tenants`, `organizations`, `domains`, `suppressions`).
+    - `doctor.go`: Automated environmental diagnostics (`mailvex doctor`) inspecting OS runtime, DB connectivity, master KEK, public DNS resolution, critical ports (25, 587, 8080), and local storage.
+    - `main.go`: CLI commands: `backup create`, `backup restore`, `doctor`, `migrate status`, `migrate verify`, `version`.
+    - `cli_test.go`: 100% PASS on backup creation, HMAC tamper rejection, restoration, and doctor diagnostic suite.
+  - `sdk/go/mailvex/`:
+    - Official typed Go client library (`Client`) supporting API key authentication, exponential backoff retries with jitter, idempotency keys, and typed methods for sending, batch sending, message inspection, domains, suppressions, and webhook signature verification (`VerifyWebhookSignature`).
+    - `client_test.go`: 100% PASS.
+  - Production Documentation:
+    - `docs/ha.md`: High Availability architecture, active-active API nodes, Redis Sentinel / Cluster, MariaDB replication, multi-IP host networking, outbox fairness, and disaster recovery.
+    - `docs/upgrade.md`: Zero-downtime rolling upgrades procedure and migration rollback playbook.
+    - `docs/security_audit.md`: Formal verification against the §23 security checklist (envelope encryption, CSP, HSTS, timing attack prevention, SSRF webhook mitigation, CRLF filtering, JIT domain validation).
+- **Verification & Test Results:**
+  - `core/crypto/vault_test.go`: 100% PASS.
+  - `core/scanner/scanner_test.go`: 100% PASS.
+  - `core/metrics/metrics_test.go`: 100% PASS.
+  - `cmd/mailvex/cli_test.go`: 100% PASS.
+  - `sdk/go/mailvex/client_test.go`: 100% PASS.
+  - `go test -count=1 ./...`: 100% PASS across all 32 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+  - Binary compilation: `go build ./cmd/mailvex` builds executable cleanly.
+
+---
+
 
 
 
