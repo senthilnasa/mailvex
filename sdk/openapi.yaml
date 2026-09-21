@@ -451,6 +451,107 @@ paths:
         '204':
           description: Suppression removed
 
+  /suppressions/import:
+    post:
+      summary: Bulk import suppressions via CSV or JSON
+      responses:
+        '200':
+          description: Suppression import summary
+
+  /suppressions/export:
+    get:
+      summary: Export active suppressions as CSV or JSON
+      parameters:
+        - name: stream_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [csv, json]
+      responses:
+        '200':
+          description: Exported suppressions stream
+
+  /privacy/erasure:
+    post:
+      summary: Execute GDPR Article 17 / DPDP Right-to-be-Forgotten personal data erasure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Privacy erasure record
+
+  /privacy/export:
+    post:
+      summary: Generate GDPR Article 15 personal data portability export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Personal data export report
+
+  /privacy/requests:
+    get:
+      summary: List logged privacy requests
+      responses:
+        '200':
+          description: Privacy requests list
+
+  /retention:
+    get:
+      summary: Retrieve data retention policy
+      responses:
+        '200':
+          description: Retention policy
+    put:
+      summary: Update data retention policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message_retention_days:
+                  type: integer
+                events_retention_days:
+                  type: integer
+                attempts_retention_days:
+                  type: integer
+                raw_mime_retention_days:
+                  type: integer
+      responses:
+        '200':
+          description: Updated retention policy
+
+  /retention/purge:
+    post:
+      summary: Trigger immediate retention purge for tenant
+      responses:
+        '200':
+          description: Retention purge summary
+
   /u/{token}:
     get:
       summary: Hosted unsubscribe confirmation page

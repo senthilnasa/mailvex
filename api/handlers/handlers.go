@@ -12,8 +12,10 @@ import (
 	"github.com/mailvex/mailvex/core/audit"
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/domain"
+	"github.com/mailvex/mailvex/core/privacy"
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/reports"
+	"github.com/mailvex/mailvex/core/retention"
 	"github.com/mailvex/mailvex/core/storage"
 	"github.com/mailvex/mailvex/core/webhooks"
 )
@@ -27,6 +29,8 @@ type API struct {
 	reports    *reports.ReportProcessor
 	analytics  *analytics.Engine
 	webhooks   *webhooks.Dispatcher
+	privacy    *privacy.PrivacyService
+	retention  *retention.RetentionService
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
@@ -40,6 +44,8 @@ func NewAPI(repo repository.Repository, auditService *audit.Service, encryption 
 		reports:    reports.NewReportProcessor(repo, nil, nil),
 		analytics:  analytics.NewEngine(repo),
 		webhooks:   webhooks.NewDispatcher(repo, nil),
+		privacy:    privacy.NewPrivacyService(repo),
+		retention:  retention.NewRetentionService(repo),
 	}
 }
 

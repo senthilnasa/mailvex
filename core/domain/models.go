@@ -626,3 +626,52 @@ type WebhookDelivery struct {
 	DurationMS   int       `json:"duration_ms"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+type SuppressionImport struct {
+	ID            string    `json:"id"`
+	TenantID      string    `json:"tenant_id"`
+	Filename      string    `json:"filename"`
+	TotalRows     int       `json:"total_rows"`
+	ImportedRows  int       `json:"imported_rows"`
+	DuplicateRows int       `json:"duplicate_rows"`
+	Status        string    `json:"status"` // completed, failed
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type PrivacyRequest struct {
+	ID            string     `json:"id"`
+	TenantID      string     `json:"tenant_id"`
+	Type          string     `json:"type"` // erasure, export
+	EmailAddress  string     `json:"email_address"`
+	Status        string     `json:"status"` // completed, failed
+	ResultSummary *string    `json:"result_summary,omitempty"`
+	RequestedAt   time.Time  `json:"requested_at"`
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+}
+
+type RetentionPolicy struct {
+	ID                    string    `json:"id"`
+	TenantID              string    `json:"tenant_id"`
+	MessageRetentionDays  int       `json:"message_retention_days"`  // default 30
+	EventsRetentionDays   int       `json:"events_retention_days"`   // default 90
+	AttemptsRetentionDays int       `json:"attempts_retention_days"` // default 30
+	RawMIMERetentionDays  int       `json:"raw_mime_retention_days"` // default 7
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+type PrivacyExportReport struct {
+	EmailAddress string              `json:"email_address"`
+	GeneratedAt  time.Time           `json:"generated_at"`
+	Messages     []*MessageRecipient `json:"messages"`
+	Events       []*MessageEvent     `json:"events"`
+	Suppressions []*Suppression      `json:"suppressions"`
+}
+
+type RetentionPurgeSummary struct {
+	TenantID            string    `json:"tenant_id"`
+	PurgedAt            time.Time `json:"purged_at"`
+	PurgedMessagesCount int       `json:"purged_messages_count"`
+	PurgedEventsCount   int       `json:"purged_events_count"`
+	PurgedAttemptsCount int       `json:"purged_attempts_count"`
+	PurgedRawMIMECount  int       `json:"purged_raw_mime_count"`
+}

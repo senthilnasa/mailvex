@@ -26,12 +26,15 @@ const (
 	PrefixIP           = "ip_"
 	PrefixPool         = "pool_"
 	PrefixStream       = "stream_"
-	PrefixSuppression  = "sup_"
-	PrefixRequest      = "req_"
-	PrefixAudit        = "aud_"
-	PrefixMembership   = "mem_"
-	PrefixTemplate     = "tmpl_"
-	PrefixTemplateVer  = "tmplver_"
+	PrefixSuppression       = "sup_"
+	PrefixSuppressionImport = "supimp_"
+	PrefixPrivacyRequest    = "priv_"
+	PrefixRetentionPolicy   = "retpol_"
+	PrefixRequest           = "req_"
+	PrefixAudit             = "aud_"
+	PrefixMembership        = "mem_"
+	PrefixTemplate          = "tmpl_"
+	PrefixTemplateVer       = "tmplver_"
 )
 
 // NewULID generates a new ULID string with the given prefix

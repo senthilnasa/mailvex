@@ -165,12 +165,42 @@ interface WebhookDeliveryItem {
   created_at: string
 }
 
+interface PrivacyRequestItem {
+  id: string
+  tenant_id: string
+  type: string
+  email_address: string
+  status: string
+  result_summary?: string
+  requested_at: string
+  completed_at?: string
+}
+
+interface RetentionPolicyItem {
+  id: string
+  tenant_id: string
+  message_retention_days: number
+  events_retention_days: number
+  attempts_retention_days: number
+  raw_mime_retention_days: number
+  updated_at: string
+}
+
+interface RetentionPurgeResult {
+  tenant_id: string
+  purged_at: string
+  purged_messages_count: number
+  purged_events_count: number
+  purged_attempts_count: number
+  purged_raw_mime_count: number
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -238,6 +268,26 @@ export default function App() {
   const [deliveriesModalOpen, setDeliveriesModalOpen] = useState(false)
   const [webhookActionMsg, setWebhookActionMsg] = useState<string | null>(null)
 
+  // Phase 9: Suppression Import/Export, Privacy & Retention state
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importCSVText, setImportCSVText] = useState('')
+  const [importStatusMsg, setImportStatusMsg] = useState<string | null>(null)
+  const [privacyRequests, setPrivacyRequests] = useState<PrivacyRequestItem[]>([])
+  const [privacyEmail, setPrivacyEmail] = useState('')
+  const [privacyActionMsg, setPrivacyActionMsg] = useState<string | null>(null)
+  const [privacyExportReport, setPrivacyExportReport] = useState<any | null>(null)
+  const [retentionPolicy, setRetentionPolicy] = useState<RetentionPolicyItem>({
+    id: '',
+    tenant_id: '',
+    message_retention_days: 30,
+    events_retention_days: 90,
+    attempts_retention_days: 30,
+    raw_mime_retention_days: 7,
+    updated_at: '',
+  })
+  const [retentionMsg, setRetentionMsg] = useState<string | null>(null)
+  const [purgeResult, setPurgeResult] = useState<RetentionPurgeResult | null>(null)
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -273,8 +323,173 @@ export default function App() {
       loadPostmasterSnaps()
       loadAnalytics()
       loadWebhooks()
+      loadPrivacyRequests()
+      loadRetentionPolicy()
     }
   }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
+
+  const loadPrivacyRequests = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/privacy/requests', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPrivacyRequests(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadRetentionPolicy = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/retention', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRetentionPolicy(data)
+      }
+    } catch {}
+  }
+
+  const handleImportSuppressions = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !importCSVText.trim()) return
+    setImportStatusMsg(null)
+    try {
+      const res = await fetch('/v1/suppressions/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/csv',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: importCSVText,
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setImportStatusMsg(`Import completed: ${data.imported_rows} rows added, ${data.duplicate_rows} duplicates ignored.`)
+        setImportCSVText('')
+        loadSuppressions()
+      } else {
+        setImportStatusMsg(`Import failed: ${data.error?.message || 'Unknown error'}`)
+      }
+    } catch (err: any) {
+      setImportStatusMsg(`Error: ${err.message}`)
+    }
+  }
+
+  const handleExportSuppressions = () => {
+    if (!activeTenant || !user) return
+    window.open(`/v1/suppressions/export?format=csv`, '_blank')
+  }
+
+  const handlePrivacyErasure = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !privacyEmail.trim()) return
+    setPrivacyActionMsg(null)
+    try {
+      const res = await fetch('/v1/privacy/erasure', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ email: privacyEmail.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPrivacyActionMsg(`Erasure complete: ${data.result_summary || 'PII anonymized'}`)
+        setPrivacyEmail('')
+        loadPrivacyRequests()
+        loadSuppressions()
+      } else {
+        setPrivacyActionMsg(`Erasure error: ${data.error?.message || 'Request failed'}`)
+      }
+    } catch (err: any) {
+      setPrivacyActionMsg(`Error: ${err.message}`)
+    }
+  }
+
+  const handlePrivacyExport = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !privacyEmail.trim()) return
+    setPrivacyActionMsg(null)
+    try {
+      const res = await fetch('/v1/privacy/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ email: privacyEmail.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPrivacyExportReport(data)
+        setPrivacyActionMsg(`Export report ready for ${data.email_address}`)
+        loadPrivacyRequests()
+      } else {
+        setPrivacyActionMsg(`Export error: ${data.error?.message || 'Request failed'}`)
+      }
+    } catch (err: any) {
+      setPrivacyActionMsg(`Error: ${err.message}`)
+    }
+  }
+
+  const handleUpdateRetentionPolicy = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user) return
+    setRetentionMsg(null)
+    try {
+      const res = await fetch('/v1/retention', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify(retentionPolicy),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRetentionPolicy(data)
+        setRetentionMsg('Data retention policy updated successfully.')
+      } else {
+        setRetentionMsg(`Update error: ${data.error?.message || 'Failed'}`)
+      }
+    } catch (err: any) {
+      setRetentionMsg(`Error: ${err.message}`)
+    }
+  }
+
+  const handleExecutePurge = async () => {
+    if (!activeTenant || !user) return
+    setRetentionMsg(null)
+    try {
+      const res = await fetch('/v1/retention/purge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPurgeResult(data)
+        setRetentionMsg(`Automated purge completed: ${data.purged_messages_count} messages, ${data.purged_events_count} events, ${data.purged_attempts_count} attempts, and ${data.purged_raw_mime_count} raw MIME references cleaned.`)
+      } else {
+        setRetentionMsg(`Purge error: ${data.error?.message || 'Purge failed'}`)
+      }
+    } catch (err: any) {
+      setRetentionMsg(`Error: ${err.message}`)
+    }
+  }
 
   const loadWebhooks = async () => {
     if (!activeTenant || !user) return
@@ -1268,6 +1483,16 @@ export default function App() {
           >
             Webhooks & Signing
           </button>
+          <button
+            onClick={() => setCurrentTab('privacy_retention')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'privacy_retention'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Privacy & Retention
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -1287,6 +1512,7 @@ export default function App() {
                   {currentTab === 'reputation' && 'Reputation, Feedback Loops & Abuse Queue'}
                   {currentTab === 'analytics' && 'Analytics & Deliverability Reporting'}
                   {currentTab === 'webhooks' && 'Webhooks, Signatures & Replay Defense'}
+                  {currentTab === 'privacy_retention' && 'Suppression Privacy & Data Retention'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -1295,7 +1521,7 @@ export default function App() {
               </div>
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-sm text-emerald-400 font-medium">Phase 2 Active</span>
+                <span className="text-sm text-emerald-400 font-medium">Phase 9 Active</span>
               </div>
             </div>
 
@@ -2013,12 +2239,26 @@ export default function App() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                   <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
                     <span>Suppressed Recipients ({suppressionsList.length})</span>
-                    <button
-                      onClick={loadSuppressions}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
-                    >
-                      Refresh
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => setImportModalOpen(true)}
+                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition-colors"
+                      >
+                        Import CSV
+                      </button>
+                      <button
+                        onClick={handleExportSuppressions}
+                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition-colors"
+                      >
+                        Export CSV
+                      </button>
+                      <button
+                        onClick={loadSuppressions}
+                        className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                      >
+                        Refresh
+                      </button>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-300">
@@ -2080,6 +2320,64 @@ export default function App() {
                     </table>
                   </div>
                 </div>
+
+                {/* Import CSV Modal */}
+                {importModalOpen && (
+                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h4 className="text-md font-semibold text-white">Bulk Import Suppressions (CSV)</h4>
+                        <button
+                          onClick={() => setImportModalOpen(false)}
+                          className="text-slate-400 hover:text-slate-200 text-sm"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {importStatusMsg && (
+                        <div className={`p-3 rounded-lg text-xs font-medium ${
+                          importStatusMsg.startsWith('Import completed')
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            : 'bg-rose-950 text-rose-400 border border-rose-800'
+                        }`}>
+                          {importStatusMsg}
+                        </div>
+                      )}
+
+                      <form onSubmit={handleImportSuppressions} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            CSV Content (format: email,type,reason)
+                          </label>
+                          <textarea
+                            rows={6}
+                            required
+                            placeholder={"email,type,reason\nbounced@example.com,hard_bounce,Mailbox inactive\nunsub@example.com,unsubscribe,User opted out"}
+                            value={importCSVText}
+                            onChange={(e) => setImportCSVText(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 text-slate-200 font-mono text-xs px-3 py-2 rounded-lg"
+                          />
+                        </div>
+                        <div className="flex justify-end space-x-3 pt-2 border-t border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setImportModalOpen(false)}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+                          >
+                            Upload & Process
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2835,6 +3133,287 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {currentTab === 'privacy_retention' && (
+              <div className="mt-6 space-y-8">
+                {/* Status Messages */}
+                {privacyActionMsg && (
+                  <div className="p-4 bg-slate-900 border border-indigo-500/30 rounded-xl flex items-center justify-between text-xs text-indigo-300">
+                    <div className="flex items-center space-x-2">
+                      <span>🛡️</span>
+                      <span>{privacyActionMsg}</span>
+                    </div>
+                    <button
+                      onClick={() => setPrivacyActionMsg(null)}
+                      className="text-slate-400 hover:text-white text-base ml-4"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {retentionMsg && (
+                  <div className="p-4 bg-slate-900 border border-emerald-500/30 rounded-xl flex items-center justify-between text-xs text-emerald-300">
+                    <div className="flex items-center space-x-2">
+                      <span>🧹</span>
+                      <span>{retentionMsg}</span>
+                    </div>
+                    <button
+                      onClick={() => setRetentionMsg(null)}
+                      className="text-slate-400 hover:text-white text-base ml-4"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {/* Section 1: GDPR / DPDP Privacy Engine */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Erasure Card */}
+                  <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">🗑️</span>
+                      <h2 className="text-base font-semibold text-white">Right to be Forgotten (GDPR Art. 17)</h2>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Irreversibly pseudonymizes all message recipient records, wipes message bodies and raw MIME blobs,
+                      and securely one-way hashes suppression entries to protect user privacy without risking future re-sends.
+                    </p>
+                    <form onSubmit={handlePrivacyErasure} className="space-y-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Target Email Address</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="user@example.com"
+                          value={privacyEmail}
+                          onChange={(e) => setPrivacyEmail(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Execute Privacy Erasure
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Data Portability / Export Card */}
+                  <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">📦</span>
+                      <h2 className="text-base font-semibold text-white">Data Portability Export (GDPR Art. 15)</h2>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Generates a full machine-readable personal data report compiling all recipient delivery history,
+                      associated engagement events, and active suppression records.
+                    </p>
+                    <form onSubmit={handlePrivacyExport} className="space-y-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Subject Email Address</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="user@example.com"
+                          value={privacyEmail}
+                          onChange={(e) => setPrivacyEmail(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Generate Export Report
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Privacy Export Inspection Preview */}
+                {privacyExportReport && (
+                  <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-white">
+                        Personal Data Export for: <span className="font-mono text-indigo-400">{privacyExportReport.email_address}</span>
+                      </h3>
+                      <button
+                        onClick={() => setPrivacyExportReport(null)}
+                        className="text-slate-400 hover:text-white text-xs"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="p-3 bg-slate-800/60 rounded-lg">
+                        <div className="text-xs text-slate-400">Messages</div>
+                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.messages?.length || 0}</div>
+                      </div>
+                      <div className="p-3 bg-slate-800/60 rounded-lg">
+                        <div className="text-xs text-slate-400">Events</div>
+                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.events?.length || 0}</div>
+                      </div>
+                      <div className="p-3 bg-slate-800/60 rounded-lg">
+                        <div className="text-xs text-slate-400">Suppressions</div>
+                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.suppressions?.length || 0}</div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto max-h-60">
+                      <pre className="text-xs font-mono text-slate-300">
+                        {JSON.stringify(privacyExportReport, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 2: Data Retention & Automated Purge Policy */}
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">Data Retention Policies (§23)</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Configure rolling retention windows to automatically prune stale data and stay fully compliant with privacy laws.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleExecutePurge}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center space-x-1.5"
+                    >
+                      <span>⚡</span>
+                      <span>Run Immediate Purge</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleUpdateRetentionPolicy} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Message Retention (Days)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={retentionPolicy.message_retention_days}
+                          onChange={(e) => setRetentionPolicy({ ...retentionPolicy, message_retention_days: parseInt(e.target.value) || 30 })}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Events Retention (Days)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={retentionPolicy.events_retention_days}
+                          onChange={(e) => setRetentionPolicy({ ...retentionPolicy, events_retention_days: parseInt(e.target.value) || 90 })}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Attempts Retention (Days)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={retentionPolicy.attempts_retention_days}
+                          onChange={(e) => setRetentionPolicy({ ...retentionPolicy, attempts_retention_days: parseInt(e.target.value) || 30 })}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1">Raw MIME Retention (Days)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          required
+                          value={retentionPolicy.raw_mime_retention_days}
+                          onChange={(e) => setRetentionPolicy({ ...retentionPolicy, raw_mime_retention_days: parseInt(e.target.value) || 7 })}
+                          className="w-full px-3 py-2 text-xs border border-slate-700 bg-slate-800 text-slate-200 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Save Retention Policy
+                      </button>
+                    </div>
+                  </form>
+
+                  {purgeResult && (
+                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 text-xs">
+                      <div className="text-slate-400 mb-2 font-medium">Last Purge Summary ({new Date(purgeResult.purged_at).toLocaleString()}):</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>Messages Purged: <span className="font-semibold text-emerald-400">{purgeResult.purged_messages_count}</span></div>
+                        <div>Events Purged: <span className="font-semibold text-emerald-400">{purgeResult.purged_events_count}</span></div>
+                        <div>Attempts Purged: <span className="font-semibold text-emerald-400">{purgeResult.purged_attempts_count}</span></div>
+                        <div>Raw MIME Cleared: <span className="font-semibold text-emerald-400">{purgeResult.purged_raw_mime_count}</span></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 3: Privacy Requests Audit Log */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
+                    <span>Privacy Requests History ({privacyRequests.length})</span>
+                    <button
+                      onClick={loadPrivacyRequests}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-3">Request ID</th>
+                          <th className="px-4 py-3">Type</th>
+                          <th className="px-4 py-3">Subject Email</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3">Summary</th>
+                          <th className="px-4 py-3">Requested At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {privacyRequests.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                              No privacy requests processed yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          privacyRequests.map((req) => (
+                            <tr key={req.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-3 font-mono text-white">{req.id}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  req.type === 'erasure'
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : 'bg-indigo-950 text-indigo-400 border border-indigo-800'
+                                }`}>
+                                  {req.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-mono">{req.email_address}</td>
+                              <td className="px-4 py-3">
+                                <span className="text-emerald-400 font-semibold">{req.status}</span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{req.result_summary || '—'}</td>
+                              <td className="px-4 py-3 text-slate-500">{new Date(req.requested_at).toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
           </div>

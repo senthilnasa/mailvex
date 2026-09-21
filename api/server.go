@@ -276,6 +276,32 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "webhooks.read")(http.HandlerFunc(apiHandler.ListWebhookDeliveriesHandler)),
 	))
 
+	// Phase 9: Suppression Management, Privacy & Retention Engine (§20, §23)
+	s.mux.Handle("POST /v1/suppressions/import", authMiddleware(
+		middleware.RequirePermission(s.repo, "suppressions.import")(http.HandlerFunc(apiHandler.ImportSuppressionsHandler)),
+	))
+	s.mux.Handle("GET /v1/suppressions/export", authMiddleware(
+		middleware.RequirePermission(s.repo, "suppressions.read")(http.HandlerFunc(apiHandler.ExportSuppressionsHandler)),
+	))
+	s.mux.Handle("POST /v1/privacy/erasure", authMiddleware(
+		middleware.RequirePermission(s.repo, "privacy.erase")(http.HandlerFunc(apiHandler.PrivacyErasureHandler)),
+	))
+	s.mux.Handle("POST /v1/privacy/export", authMiddleware(
+		middleware.RequirePermission(s.repo, "privacy.export")(http.HandlerFunc(apiHandler.PrivacyExportHandler)),
+	))
+	s.mux.Handle("GET /v1/privacy/requests", authMiddleware(
+		middleware.RequirePermission(s.repo, "privacy.read")(http.HandlerFunc(apiHandler.ListPrivacyRequestsHandler)),
+	))
+	s.mux.Handle("GET /v1/retention", authMiddleware(
+		middleware.RequirePermission(s.repo, "retention.read")(http.HandlerFunc(apiHandler.GetRetentionPolicyHandler)),
+	))
+	s.mux.Handle("PUT /v1/retention", authMiddleware(
+		middleware.RequirePermission(s.repo, "retention.write")(http.HandlerFunc(apiHandler.UpdateRetentionPolicyHandler)),
+	))
+	s.mux.Handle("POST /v1/retention/purge", authMiddleware(
+		middleware.RequirePermission(s.repo, "retention.write")(http.HandlerFunc(apiHandler.ExecuteRetentionPurgeHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

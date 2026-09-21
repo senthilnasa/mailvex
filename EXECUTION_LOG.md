@@ -368,8 +368,60 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
-### Phase 9: Templates Engine & Management
-- **Status:** Pending
+### Phase 9: Suppression Management, Privacy & Retention Engine
+- **Status:** Completed & Verified (2026-09-21)
+- **Components Implemented:**
+  - `migrations/000009_suppression_privacy_retention`:
+    - `suppression_imports`: Tracking bulk suppression imports with filename, row counters (total, imported, duplicates), and status.
+    - `privacy_requests`: GDPR/DPDP Article 15/17 compliance records (erasure, export, status, result summary, requested/completed timestamps).
+    - `retention_policies`: Per-tenant rolling data retention configuration (message retention days, events retention days, attempts retention days, raw MIME retention days).
+  - `core/domain`: Added models `SuppressionImport`, `PrivacyRequest`, `RetentionPolicy`, `PrivacyExportReport`, `RetentionPurgeSummary`.
+  - `core/crypto`: Added ULID prefixes `PrefixSuppressionImport` (`supimp_`), `PrefixPrivacyRequest` (`priv_`), `PrefixRetentionPolicy` (`retpol_`).
+  - `core/privacy`:
+    - `PrivacyService`: High-level service for handling GDPR Article 17 (Right-to-be-Forgotten erasure) and Article 15 (Data Portability export).
+    - `RequestErasure`: Irreversibly pseudonymizes recipient addresses, wipes message bodies (`BodyRef`) and MIME artifacts (`RawMIMERef`), and replaces suppression addresses with salted one-way SHA-256 hashes (`erased-hash-...`) so the tenant cannot identify the cleartext email while preventing accidental re-sending (§20).
+    - `RequestExport`: Aggregates all recipient delivery histories, engagement events, and active suppressions for a subject email.
+  - `core/retention`:
+    - `RetentionService`: Manages per-tenant retention policies and executes automated data purges.
+    - `ExecutePurge`: Drops message and recipient rows past message retention cutoff, trims events past events retention cutoff, drops delivery attempts past attempts cutoff, and clears raw MIME references older than raw MIME cutoff.
+  - `core/repository`: Added repository methods `ImportSuppressions`, `ExportSuppressions`, `CreatePrivacyRequest`, `GetPrivacyRequest`, `ListPrivacyRequests`, `ExecutePrivacyErasure`, `ExecutePrivacyExport`, `GetRetentionPolicy`, `UpdateRetentionPolicy`, `ExecuteRetentionPurge`.
+  - `api/handlers`:
+    - `POST /v1/suppressions/import`: Multipart CSV file upload or JSON payload bulk import with duplicate detection.
+    - `GET /v1/suppressions/export`: CSV or JSON export with optional stream filter.
+    - `POST /v1/privacy/erasure`: GDPR right-to-be-forgotten erasure endpoint.
+    - `POST /v1/privacy/export`: GDPR data portability export endpoint.
+    - `GET /v1/privacy/requests`: List logged privacy compliance requests.
+    - `GET /v1/retention`: Retrieve tenant retention policy (with 30d/90d/30d/7d defaults).
+    - `PUT /v1/retention`: Update retention policy.
+    - `POST /v1/retention/purge`: Trigger immediate tenant data purge.
+  - `api/server`: Mounted all Phase 9 routes with strict RBAC permission middleware (`suppressions.import`, `suppressions.read`, `privacy.erase`, `privacy.export`, `privacy.read`, `retention.read`, `retention.write`).
+  - `console`:
+    - **Suppressions Tab**: Added "Import CSV" modal with live preview/counters and "Export CSV" instant download.
+    - **Privacy & Retention Tab**:
+      - GDPR Article 17 Right-to-be-Forgotten erasure form.
+      - GDPR Article 15 Data Portability export form with interactive JSON preview.
+      - Data Retention policy form (Message, Events, Attempts, Raw MIME days).
+      - Immediate purge execution button with live summary counter.
+      - Privacy Requests Audit Log table.
+  - `sdk/openapi.yaml`: Documented all Phase 9 endpoints.
+- **Verification & Test Results:**
+  - `core/privacy/privacy_test.go`:
+    - `TestPrivacyExportAndErasure` PASS (verified export compiles messages/events/suppressions, erasure pseudonymizes recipient addresses, wipes message bodies and raw MIME blobs, and converts suppression entries to one-way hashes).
+  - `core/retention/retention_test.go`:
+    - `TestRetentionPolicyAndPurge` PASS (verified default policies, policy update validation, and automated purge removing stale messages/events past cutoff while keeping fresh records intact).
+  - `api/privacy_retention_test.go`:
+    - `TestSuppressionImportAndExportEndpoints` PASS (multipart CSV upload, duplicate tracking, CSV download streaming).
+    - `TestPrivacyErasureAndExportEndpoints` PASS (GDPR erasure and export HTTP endpoints, audit logging).
+    - `TestRetentionPolicyAndPurgeEndpoints` PASS (GET/PUT retention policies, immediate purge execution).
+  - `go test -count=1 ./...`: 100% PASS across all 24 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+### Phase 10: Advanced Templates & Inbound Mail Routing
+- **Status:** In Progress
+
 
 
 
