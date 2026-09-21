@@ -469,6 +469,68 @@ This log tracks the complete implementation of **Mailvex** as specified in [`MAI
 
 ---
 
+### Phase 11: Reputation, DNSBL, Warmup Engine, Alert Rules & Multi-Channel Notifications
+- **Status:** Completed & Verified
+- **Components Implemented:**
+  - `migrations/000011_reputation_dnsbl_warmup_alerts.up.sql` & `down.sql`:
+    - Tables: `dnsbl_providers`, `dnsbl_results`, `warmup_plans`, `warmup_plan_days`, `ip_warmup_states`, `alert_rules`, `alert_incidents`, `notification_channels`, `alert_rule_channels`, `alert_notifications`.
+  - `core/crypto/ulid.go`:
+    - Prefixes: `PrefixDNSBLProvider` (`dnsbl_`), `PrefixDNSBLResult` (`dres_`), `PrefixWarmupPlan` (`wplan_`), `PrefixWarmupPlanDay` (`wpday_`), `PrefixIPWarmupState` (`wstate_`), `PrefixAlertRule` (`arule_`), `PrefixAlertIncident` (`inc_`), `PrefixNotifChannel` (`nchan_`), `PrefixAlertNotif` (`anot_`).
+  - `core/domain/models.go`:
+    - Domain models: `DNSBLProvider`, `DNSBLResult`, `WarmupPlan`, `WarmupPlanDay`, `IPWarmupState`, `AlertRule`, `AlertIncident`, `NotificationChannel`, `AlertNotification`, `ReputationOverview`.
+  - `core/dnsbl`:
+    - DNSBL lookup engine with IPv4 (reverse octet) and IPv6 (reverse nibble 32-label) address construction.
+    - Return code interpretation: `127.0.0.2` (direct spammer), `127.0.0.3` (dialup/open relay), `127.0.0.4` (open proxy), `127.0.0.10-11` (PBL/end-user IP).
+    - Provider delist URL generator and NXDOMAIN clean status verification.
+  - `core/warmup`:
+    - Staged warmup ramp engine (§11.5) with automated volume doubling schedule (Day 1: 50/day up to Day 30: 1,000,000/day).
+    - Per-provider daily limits (Google, Microsoft, Yahoo/AOL).
+    - Automated hold enforcement: freezes IP ramp if rolling bounce rate > 5% or complaint rate > 0.1%. Manual advance, force advance, hold, and resume controls.
+  - `core/alerts`:
+    - Multi-channel notification dispatcher (§22.3) supporting Slack incoming webhooks, Microsoft Teams connectors, PagerDuty Events API v2, signed generic HTTP webhooks (HMAC-SHA256), and in-app notifications.
+    - Threshold evaluation engine for bounce rates, complaint rates, DNSBL blocklistings, queue depths, and delivery rate degradation.
+    - Cooldown deduplication preventing notification storms and automated incident auto-resolution when metrics recover.
+  - `core/repository`:
+    - Thread-safe repository methods with pre-seeded providers (Spamhaus ZEN, Barracuda BRBL, SpamCop, UCEPROTECT-1) and default 30-day warmup ramp plan.
+    - RBAC permissions seeded: `reputation.read`, `dnsbl.read`, `dnsbl.check`, `warmup.read`, `warmup.write`, `alerts.read`, `alerts.write`.
+  - `api/handlers`:
+    - `GET /v1/reputation/overview`: Health status summary (`blocked`, `warning`, `measured`, `unknown`).
+    - `GET /v1/dnsbl/providers`, `POST /v1/dnsbl/check`, `GET /v1/dnsbl/results`: DNSBL inspection.
+    - `GET /v1/warmup/plans`, `POST /v1/warmup/plans`, `GET /v1/warmup/plans/{id}`: Warmup schedules.
+    - `GET /v1/warmup/ips`, `POST /v1/warmup/ips`, `POST /v1/warmup/ips/{id}/advance`, `POST /v1/warmup/ips/{id}/hold`, `POST /v1/warmup/ips/{id}/resume`: Warmup lifecycle.
+    - `GET /v1/alerts/rules`, `POST /v1/alerts/rules`, `DELETE /v1/alerts/rules/{id}`, `POST /v1/alerts/evaluate`: Rules and on-demand trigger.
+    - `GET /v1/alerts/incidents`, `POST /v1/alerts/incidents/{id}/acknowledge`, `POST /v1/alerts/incidents/{id}/resolve`: Incident triage.
+    - `GET /v1/alerts/channels`, `POST /v1/alerts/channels`, `DELETE /v1/alerts/channels/{id}`, `POST /v1/alerts/channels/{id}/test`: Multi-channel dispatch.
+    - `GET /v1/alerts/notifications`, `POST /v1/alerts/notifications/{id}/read`: In-app notification center.
+  - `api/server`: Mounted all Phase 11 endpoints with RBAC middleware.
+  - `console`: Added **Alerts, DNSBL & Warmup** tab featuring:
+    - Reputation overview cards and health badge indicators.
+    - On-demand DNSBL blocklist monitor with status indicators and delist portal links.
+    - IP warmup ramp visual progress bar, provider caps, and advance/hold controls.
+    - Alert Rules form with cooldown duration, active rules table, and Incidents Log with acknowledge/resolve actions.
+    - Multi-channel notification management with test dispatch.
+    - In-app notification feed with read/unread tracking.
+  - `sdk/openapi.yaml`: Complete OpenAPI 3.0 path definitions for all Phase 11 endpoints.
+- **Verification & Test Results:**
+  - `core/dnsbl/dnsbl_test.go`:
+    - `TestReverseIPFormat` PASS (IPv4 reverse octet and IPv6 reverse nibble formatting).
+    - `TestDNSBLResolution` PASS (DNSBL lookup, return code interpretation, NXDOMAIN clean detection).
+  - `core/warmup/warmup_test.go`:
+    - `TestIPWarmupLifecycleAndLimits` PASS (enrollment, daily caps, provider caps, automated hold on bounce > 5%, force advance, manual hold/resume, completion).
+  - `core/alerts/alerts_test.go`:
+    - `TestMultiChannelAlertDispatch` PASS (Slack, Teams, PagerDuty Events v2, HMAC signed generic webhook, in-app notifications).
+    - `TestAlertRuleEvaluationAndResolution` PASS (threshold firing, cooldown suppression, auto-resolution).
+  - `api/reputation_alerts_test.go`:
+    - `TestReputationAndDNSBLEndpoints` PASS (overview stats, DNSBL check and result listing).
+    - `TestWarmupEndpoints` PASS (plans, IP enrollment, advance, hold, resume).
+    - `TestAlertRulesAndChannelsEndpoints` PASS (rule CRUD, evaluate, channel test, notification read).
+  - `go test -count=1 ./...`: 100% PASS across all 27 Go packages.
+  - `go vet ./...`: 0 warnings, clean.
+  - `console`: Production build succeeded (`npm run build`).
+
+---
+
+
 
 
 

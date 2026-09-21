@@ -39,6 +39,15 @@ const (
 	PrefixTrackingEvent     = "te_"
 	PrefixInboundRoute      = "inr_"
 	PrefixInboundMessage    = "inm_"
+	PrefixDNSBLProvider     = "dnsbl_"
+	PrefixDNSBLResult       = "dres_"
+	PrefixWarmupPlan        = "wplan_"
+	PrefixWarmupPlanDay     = "wpday_"
+	PrefixIPWarmupState     = "wstate_"
+	PrefixAlertRule         = "arule_"
+	PrefixAlertIncident     = "inc_"
+	PrefixNotifChannel      = "nchan_"
+	PrefixAlertNotif        = "anot_"
 )
 
 // NewULID generates a new ULID string with the given prefix

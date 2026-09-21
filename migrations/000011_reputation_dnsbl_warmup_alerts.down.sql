@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS alert_notifications;
+DROP TABLE IF EXISTS alert_rule_channels;
+DROP TABLE IF EXISTS notification_channels;
+DROP TABLE IF EXISTS alert_incidents;
+DROP TABLE IF EXISTS alert_rules;
+DROP TABLE IF EXISTS ip_warmup_states;
+DROP TABLE IF EXISTS warmup_plan_days;
+DROP TABLE IF EXISTS warmup_plans;
+DROP TABLE IF EXISTS dnsbl_results;
+DROP TABLE IF EXISTS dnsbl_providers;

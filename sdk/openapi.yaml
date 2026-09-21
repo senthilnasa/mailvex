@@ -977,3 +977,299 @@ paths:
           description: Inbound message detail
         '404':
           description: Inbound message not found
+
+  /v1/reputation/overview:
+    get:
+      summary: Get tenant reputation overview and deliverability health status
+      responses:
+        '200':
+          description: Reputation status, bounce/complaint rates, DNSBL listings, and active incidents
+
+  /v1/dnsbl/providers:
+    get:
+      summary: List supported DNSBL blocklist providers
+      responses:
+        '200':
+          description: Array of DNSBL providers
+
+  /v1/dnsbl/check:
+    post:
+      summary: Query an IP address against DNSBL blocklists on demand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip_address]
+              properties:
+                ip_address: { type: string }
+      responses:
+        '200':
+          description: DNSBL check results per provider
+
+  /v1/dnsbl/results:
+    get:
+      summary: List recent DNSBL check results
+      responses:
+        '200':
+          description: Array of recent DNSBL results
+
+  /v1/warmup/plans:
+    get:
+      summary: List warmup ramp schedules
+      responses:
+        '200':
+          description: Array of warmup plans
+    post:
+      summary: Create a custom warmup plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, total_days, days]
+              properties:
+                name: { type: string }
+                total_days: { type: integer }
+                days:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Warmup plan created
+
+  /v1/warmup/plans/{id}:
+    get:
+      summary: Get warmup plan details and daily schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Warmup plan with daily ramp tiers
+
+  /v1/warmup/ips:
+    get:
+      summary: List IP addresses currently enrolled in warmup
+      responses:
+        '200':
+          description: Array of IP warmup states
+    post:
+      summary: Enroll an IP address into a warmup plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip_address, ip_address_id, plan_id]
+              properties:
+                ip_address: { type: string }
+                ip_address_id: { type: string }
+                plan_id: { type: string }
+      responses:
+        '201':
+          description: IP enrolled in warmup
+
+  /v1/warmup/ips/{id}/advance:
+    post:
+      summary: Advance warmup stage to the next day
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force: { type: boolean }
+      responses:
+        '200':
+          description: Warmup day advanced or held if health thresholds exceeded
+
+  /v1/warmup/ips/{id}/hold:
+    post:
+      summary: Manually place IP warmup on hold
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: IP warmup placed on hold
+
+  /v1/warmup/ips/{id}/resume:
+    post:
+      summary: Resume IP warmup from hold
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: IP warmup resumed
+
+  /v1/alerts/rules:
+    get:
+      summary: List configured alert rules
+      responses:
+        '200':
+          description: Array of alert rules
+    post:
+      summary: Create an alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, metric_type, comparison_operator, threshold, severity]
+              properties:
+                name: { type: string }
+                metric_type: { type: string, enum: [bounce_rate, complaint_rate, dnsbl_listed, queue_depth, delivery_rate] }
+                comparison_operator: { type: string, enum: ['>', '>=', '<', '<='] }
+                threshold: { type: number }
+                severity: { type: string, enum: [info, warning, critical] }
+                cooldown_minutes: { type: integer }
+                channel_ids: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Alert rule created
+
+  /v1/alerts/rules/{id}:
+    delete:
+      summary: Delete an alert rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Alert rule deleted
+
+  /v1/alerts/evaluate:
+    post:
+      summary: Run an on-demand evaluation of all alert rules
+      responses:
+        '200':
+          description: Incidents generated or resolved
+
+  /v1/alerts/incidents:
+    get:
+      summary: List alert incidents
+      responses:
+        '200':
+          description: Array of alert incidents
+
+  /v1/alerts/incidents/{id}/acknowledge:
+    post:
+      summary: Acknowledge an active incident
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Incident acknowledged
+
+  /v1/alerts/incidents/{id}/resolve:
+    post:
+      summary: Resolve an incident manually
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Incident resolved
+
+  /v1/alerts/channels:
+    get:
+      summary: List configured notification channels
+      responses:
+        '200':
+          description: Array of notification channels
+    post:
+      summary: Create a notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type, config]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [slack, teams, pagerduty, webhook] }
+                config: { type: object }
+      responses:
+        '201':
+          description: Notification channel created
+
+  /v1/alerts/channels/{id}:
+    delete:
+      summary: Delete a notification channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Notification channel deleted
+
+  /v1/alerts/channels/{id}/test:
+    post:
+      summary: Dispatch a test notification through a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Test notification dispatched
+
+  /v1/alerts/notifications:
+    get:
+      summary: List in-app notifications
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Array of in-app alert notifications
+
+  /v1/alerts/notifications/{id}/read:
+    post:
+      summary: Mark an in-app notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Notification marked as read
+

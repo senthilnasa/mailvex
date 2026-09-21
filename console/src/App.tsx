@@ -221,12 +221,110 @@ interface InboundMessage {
   created_at: string
 }
 
+interface ReputationOverview {
+  tenant_id: string
+  overall_status: string
+  bounce_rate: number
+  complaint_rate: number
+  delivery_rate: number
+  total_sent_7d: number
+  dnsbl_listings_count: number
+  warming_ips_count: number
+  active_alerts_count: number
+}
+
+interface DNSBLProvider {
+  id: string
+  name: string
+  query_pattern: string
+  delist_url?: string
+  check_interval_seconds: number
+  is_enabled: boolean
+}
+
+interface DNSBLResult {
+  id: string
+  ip_address: string
+  provider_name?: string
+  is_listed: boolean
+  response_code?: string
+  return_meaning?: string
+  delist_url?: string
+  checked_at: string
+}
+
+interface WarmupPlan {
+  id: string
+  name: string
+  description?: string
+  total_days: number
+  is_default: boolean
+}
+
+interface IPWarmupState {
+  id: string
+  ip_address_id: string
+  ip_address: string
+  plan_id: string
+  current_day: number
+  current_day_volume: number
+  provider_volume?: Record<string, number>
+  status: string
+  held_reason?: string
+  started_at: string
+  last_advanced_at?: string
+}
+
+interface AlertRule {
+  id: string
+  tenant_id?: string
+  name: string
+  metric_type: string
+  comparison_operator: string
+  threshold: number
+  duration_minutes: number
+  cooldown_minutes: number
+  severity: string
+  is_enabled: boolean
+}
+
+interface AlertIncident {
+  id: string
+  rule_id: string
+  metric_type: string
+  severity: string
+  status: string
+  triggered_value: number
+  threshold: number
+  summary: string
+  fired_at: string
+  resolved_at?: string
+}
+
+interface NotificationChannel {
+  id: string
+  name: string
+  type: string
+  config: string
+  is_enabled: boolean
+}
+
+interface AlertNotification {
+  id: string
+  incident_id: string
+  title: string
+  message: string
+  severity: string
+  is_read: boolean
+  created_at: string
+}
+
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound'>('dashboard')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup'>('dashboard')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -327,6 +425,32 @@ export default function App() {
   const [testInboundResult, setTestInboundResult] = useState<any | null>(null)
   const [inboundActionMsg, setInboundActionMsg] = useState<string | null>(null)
 
+  // Phase 11: Reputation, DNSBL, Warmup & Alerts state
+  const [reputationOverview, setReputationOverview] = useState<ReputationOverview | null>(null)
+  const [dnsblProviders, setDNSBLProviders] = useState<DNSBLProvider[]>([])
+  const [dnsblResults, setDNSBLResults] = useState<DNSBLResult[]>([])
+  const [testDNSBLIP, setTestDNSBLIP] = useState('')
+  const [dnsblChecking, setDNSBLChecking] = useState(false)
+  const [warmupPlans, setWarmupPlans] = useState<WarmupPlan[]>([])
+  const [warmupStates, setWarmupStates] = useState<IPWarmupState[]>([])
+  const [newWarmupIP, setNewWarmupIP] = useState('')
+  const [newWarmupIPID, setNewWarmupIPID] = useState('')
+  const [newWarmupPlanID, setNewWarmupPlanID] = useState('wplan_default')
+  const [alertRules, setAlertRules] = useState<AlertRule[]>([])
+  const [alertIncidents, setAlertIncidents] = useState<AlertIncident[]>([])
+  const [notificationChannels, setNotificationChannels] = useState<NotificationChannel[]>([])
+  const [alertNotifications, setAlertNotifications] = useState<AlertNotification[]>([])
+  const [newRuleName, setNewRuleName] = useState('')
+  const [newRuleMetric, setNewRuleMetric] = useState('bounce_rate')
+  const [newRuleOp, setNewRuleOp] = useState('>')
+  const [newRuleThreshold, setNewRuleThreshold] = useState(0.05)
+  const [newRuleSeverity, setNewRuleSeverity] = useState('warning')
+  const [newRuleCooldown, setNewRuleCooldown] = useState(60)
+  const [newChannelName, setNewChannelName] = useState('')
+  const [newChannelType, setNewChannelType] = useState('slack')
+  const [newChannelURL, setNewChannelURL] = useState('')
+  const [alertsActionMsg, setAlertsActionMsg] = useState<string | null>(null)
+
   // Setup form states
   const [profile, setProfile] = useState('standard')
   const [adminEmail, setAdminEmail] = useState('')
@@ -366,8 +490,352 @@ export default function App() {
       loadRetentionPolicy()
       loadInboundRoutes()
       loadInboundMessages()
+      loadPhase11Data()
     }
   }, [activeTenant, currentTab, abuseStatusFilter, analyticsRange])
+
+  const loadPhase11Data = async () => {
+    if (!activeTenant || !user) return
+    const headers = { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id }
+    try {
+      const repRes = await fetch('/v1/reputation/overview', { headers })
+      if (repRes.ok) setReputationOverview(await repRes.json())
+
+      const provRes = await fetch('/v1/dnsbl/providers', { headers })
+      if (provRes.ok) {
+        const d = await provRes.json()
+        setDNSBLProviders(d.data || [])
+      }
+
+      const resRes = await fetch('/v1/dnsbl/results?limit=25', { headers })
+      if (resRes.ok) {
+        const d = await resRes.json()
+        setDNSBLResults(d.data || [])
+      }
+
+      const planRes = await fetch('/v1/warmup/plans', { headers })
+      if (planRes.ok) {
+        const d = await planRes.json()
+        setWarmupPlans(d.data || [])
+      }
+
+      const stateRes = await fetch('/v1/warmup/ips', { headers })
+      if (stateRes.ok) {
+        const d = await stateRes.json()
+        setWarmupStates(d.data || [])
+      }
+
+      const ruleRes = await fetch('/v1/alerts/rules', { headers })
+      if (ruleRes.ok) {
+        const d = await ruleRes.json()
+        setAlertRules(d.data || [])
+      }
+
+      const incRes = await fetch('/v1/alerts/incidents?limit=25', { headers })
+      if (incRes.ok) {
+        const d = await incRes.json()
+        setAlertIncidents(d.data || [])
+      }
+
+      const chanRes = await fetch('/v1/alerts/channels', { headers })
+      if (chanRes.ok) {
+        const d = await chanRes.json()
+        setNotificationChannels(d.data || [])
+      }
+
+      const notifRes = await fetch('/v1/alerts/notifications?limit=25', { headers })
+      if (notifRes.ok) {
+        const d = await notifRes.json()
+        setAlertNotifications(d.data || [])
+      }
+    } catch {}
+  }
+
+  const handleRunDNSBLCheck = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !testDNSBLIP.trim()) return
+    setDNSBLChecking(true)
+    try {
+      const res = await fetch('/v1/dnsbl/check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ ip: testDNSBLIP.trim(), ip_address_id: 'ip_' + testDNSBLIP.trim() }),
+      })
+      if (res.ok) {
+        setAlertsActionMsg(`DNSBL check completed for ${testDNSBLIP.trim()}.`)
+        loadPhase11Data()
+        setTimeout(() => setAlertsActionMsg(null), 4000)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Check failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setDNSBLChecking(false)
+    }
+  }
+
+  const handleEnrollWarmup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newWarmupIP.trim()) return
+    try {
+      const res = await fetch('/v1/warmup/ips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          ip: newWarmupIP.trim(),
+          ip_address_id: newWarmupIPID.trim() || 'ip_' + newWarmupIP.trim(),
+          plan_id: newWarmupPlanID,
+        }),
+      })
+      if (res.ok) {
+        setNewWarmupIP('')
+        setNewWarmupIPID('')
+        setAlertsActionMsg('IP enrolled in warmup plan successfully.')
+        loadPhase11Data()
+        setTimeout(() => setAlertsActionMsg(null), 4000)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Enrollment failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleAdvanceWarmup = async (id: string, force: boolean) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/warmup/ips/${id}/advance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ force }),
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Advance failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleHoldWarmup = async (id: string) => {
+    if (!activeTenant || !user) return
+    const reason = prompt('Enter reason for holding warmup:', 'Administrative hold')
+    if (!reason) return
+    try {
+      const res = await fetch(`/v1/warmup/ips/${id}/hold`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({ reason }),
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleResumeWarmup = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/warmup/ips/${id}/resume`, {
+        method: 'POST',
+        headers: {
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleCreateAlertRule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newRuleName.trim()) return
+    try {
+      const res = await fetch('/v1/alerts/rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          name: newRuleName.trim(),
+          metric_type: newRuleMetric,
+          comparison_operator: newRuleOp,
+          threshold: Number(newRuleThreshold),
+          severity: newRuleSeverity,
+          cooldown_minutes: Number(newRuleCooldown),
+        }),
+      })
+      if (res.ok) {
+        setNewRuleName('')
+        setAlertsActionMsg('Alert rule created successfully.')
+        loadPhase11Data()
+        setTimeout(() => setAlertsActionMsg(null), 4000)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Rule creation failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleDeleteAlertRule = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Are you sure you want to delete this alert rule?')) return
+    try {
+      const res = await fetch(`/v1/alerts/rules/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleEvaluateAlerts = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/alerts/evaluate', {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        setAlertsActionMsg('Alert evaluation completed.')
+        loadPhase11Data()
+        setTimeout(() => setAlertsActionMsg(null), 4000)
+      }
+    } catch {}
+  }
+
+  const handleAcknowledgeIncident = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/alerts/incidents/${id}/acknowledge`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleResolveIncident = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/alerts/incidents/${id}/resolve`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user || !newChannelName.trim()) return
+    try {
+      const res = await fetch('/v1/alerts/channels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': user.id,
+          'X-Tenant-ID': activeTenant.id,
+        },
+        body: JSON.stringify({
+          name: newChannelName.trim(),
+          type: newChannelType,
+          config: JSON.stringify({ url: newChannelURL.trim() }),
+        }),
+      })
+      if (res.ok) {
+        setNewChannelName('')
+        setNewChannelURL('')
+        setAlertsActionMsg('Notification channel created.')
+        loadPhase11Data()
+        setTimeout(() => setAlertsActionMsg(null), 4000)
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Channel creation failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleDeleteChannel = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm('Are you sure you want to delete this channel?')) return
+    try {
+      const res = await fetch(`/v1/alerts/channels/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
+
+  const handleTestChannel = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/alerts/channels/${id}/test`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        alert('Test notification dispatched successfully!')
+      } else {
+        const d = await res.json()
+        alert(d.error?.message || 'Dispatch failed')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleMarkNotifRead = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/alerts/notifications/${id}/read`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        loadPhase11Data()
+      }
+    } catch {}
+  }
 
   const loadInboundRoutes = async () => {
     if (!activeTenant || !user) return
@@ -1662,6 +2130,16 @@ export default function App() {
           >
             Inbound Routing
           </button>
+          <button
+            onClick={() => setCurrentTab('alerts_warmup')}
+            className={`w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              currentTab === 'alerts_warmup'
+                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            Alerts, DNSBL & Warmup
+          </button>
         </nav>
 
         {/* Workspace Body */}
@@ -1683,6 +2161,7 @@ export default function App() {
                   {currentTab === 'webhooks' && 'Webhooks, Signatures & Replay Defense'}
                   {currentTab === 'privacy_retention' && 'Suppression Privacy & Data Retention'}
                   {currentTab === 'inbound' && 'Inbound Email Routing & Processing'}
+                  {currentTab === 'alerts_warmup' && 'Reputation, DNSBL, Warmup & Alert Center'}
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
                   Tenant: <code className="text-slate-300">{activeTenant?.slug}</code> (
@@ -3928,6 +4407,698 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                         )}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Phase 11: Alerts, DNSBL & Warmup Tab */}
+            {currentTab === 'alerts_warmup' && (
+              <div className="space-y-6">
+                {alertsActionMsg && (
+                  <div className="bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 text-sm p-3 rounded-lg flex items-center justify-between">
+                    <span>{alertsActionMsg}</span>
+                    <button onClick={() => setAlertsActionMsg(null)} className="text-indigo-400 hover:text-white text-xs">✕</button>
+                  </div>
+                )}
+
+                {/* Section 1: Reputation Health Overview Card (§22.1) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                    <div>
+                      <h2 className="text-base font-semibold text-white flex items-center space-x-2">
+                        <span>IP & Domain Reputation State</span>
+                        <span className="text-xs font-mono text-slate-400 font-normal">(§22.1 & §11.4 Shared-Pool Protection)</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Continuous deliverability health tracking across rolling 7-day volume, bounces, complaints, and DNSBL listings.
+                      </p>
+                    </div>
+                    <div>
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        reputationOverview?.overall_status === 'measured'
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : reputationOverview?.overall_status === 'warning'
+                          ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                          : reputationOverview?.overall_status === 'blocked'
+                          ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        Status: {reputationOverview?.overall_status || 'unknown'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4 pt-4">
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">7-Day Sent</div>
+                      <div className="text-lg font-bold text-white mt-1">{reputationOverview?.total_sent_7d || 0}</div>
+                    </div>
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">Delivery Rate</div>
+                      <div className="text-lg font-bold text-emerald-400 mt-1">
+                        {reputationOverview ? (reputationOverview.delivery_rate * 100).toFixed(1) : 0}%
+                      </div>
+                    </div>
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">Bounce Rate</div>
+                      <div className={`text-lg font-bold mt-1 ${
+                        (reputationOverview?.bounce_rate || 0) > 0.05 ? 'text-rose-400' : 'text-slate-200'
+                      }`}>
+                        {reputationOverview ? (reputationOverview.bounce_rate * 100).toFixed(2) : 0}%
+                      </div>
+                    </div>
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">Complaint Rate</div>
+                      <div className={`text-lg font-bold mt-1 ${
+                        (reputationOverview?.complaint_rate || 0) > 0.001 ? 'text-rose-400' : 'text-slate-200'
+                      }`}>
+                        {reputationOverview ? (reputationOverview.complaint_rate * 100).toFixed(3) : 0}%
+                      </div>
+                    </div>
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">DNSBL Listed</div>
+                      <div className={`text-lg font-bold mt-1 ${
+                        (reputationOverview?.dnsbl_listings_count || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'
+                      }`}>
+                        {reputationOverview?.dnsbl_listings_count || 0}
+                      </div>
+                    </div>
+                    <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                      <div className="text-xs text-slate-400">Firing Incidents</div>
+                      <div className={`text-lg font-bold mt-1 ${
+                        (reputationOverview?.active_alerts_count || 0) > 0 ? 'text-amber-400' : 'text-slate-400'
+                      }`}>
+                        {reputationOverview?.active_alerts_count || 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: DNSBL Monitor (§22.2) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">DNSBL Blocklist Monitor ({dnsblProviders.length} Providers Monitored)</h2>
+                      <p className="text-xs text-slate-400">
+                        Query public IP addresses against major DNSBL blocklists (Spamhaus, Barracuda, SpamCop, UCEPROTECT).
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleRunDNSBLCheck} className="flex space-x-3">
+                    <input
+                      type="text"
+                      required
+                      value={testDNSBLIP}
+                      onChange={(e) => setTestDNSBLIP(e.target.value)}
+                      placeholder="Enter IPv4 or IPv6 address (e.g. 198.51.100.25)"
+                      className="flex-1 px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg font-mono focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={dnsblChecking}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {dnsblChecking ? 'Checking Blocklists...' : 'Run DNSBL Check'}
+                    </button>
+                  </form>
+
+                  {/* DNSBL Results Table */}
+                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-2.5">IP Address</th>
+                          <th className="px-4 py-2.5">Provider</th>
+                          <th className="px-4 py-2.5">Status</th>
+                          <th className="px-4 py-2.5">Return Meaning</th>
+                          <th className="px-4 py-2.5">Checked At</th>
+                          <th className="px-4 py-2.5 text-right">Delist Guidance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {dnsblResults.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-4 text-center text-slate-500">
+                              No DNSBL check results yet. Run a check above to verify your sending IPs.
+                            </td>
+                          </tr>
+                        ) : (
+                          dnsblResults.map((r) => (
+                            <tr key={r.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-2.5 font-mono text-white">{r.ip_address}</td>
+                              <td className="px-4 py-2.5 font-medium">{r.provider_name || 'DNSBL'}</td>
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                                  r.is_listed
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                }`}>
+                                  {r.is_listed ? 'LISTED' : 'CLEAN'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-400 font-mono text-[11px]">
+                                {r.return_meaning || '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-500">{new Date(r.checked_at).toLocaleTimeString()}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                {r.delist_url ? (
+                                  <a
+                                    href={r.delist_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-medium"
+                                  >
+                                    Delist Portal ↗
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-600">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 3: IP Warmup Engine (§11.5) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">IP Warmup Ramp & Schedules</h2>
+                      <p className="text-xs text-slate-400">
+                        Automated daily volume doubling plans and per-provider caps. Holds automatically if bounce or complaint spikes occur.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Enroll IP Form */}
+                  <form onSubmit={handleEnrollWarmup} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">IP Address</label>
+                      <input
+                        type="text"
+                        required
+                        value={newWarmupIP}
+                        onChange={(e) => setNewWarmupIP(e.target.value)}
+                        placeholder="e.g. 198.51.100.25"
+                        className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg font-mono focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">IP Identifier (Optional)</label>
+                      <input
+                        type="text"
+                        value={newWarmupIPID}
+                        onChange={(e) => setNewWarmupIPID(e.target.value)}
+                        placeholder="e.g. ip_pool_outbound_1"
+                        className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg font-mono focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Warmup Plan</label>
+                      <select
+                        value={newWarmupPlanID}
+                        onChange={(e) => setNewWarmupPlanID(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        {warmupPlans.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.total_days} days)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Enroll IP in Warmup
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Active Warmup Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {warmupStates.length === 0 ? (
+                      <div className="col-span-2 text-center py-6 text-slate-500 text-xs bg-slate-950/20 rounded-lg border border-slate-800/50">
+                        No IP addresses currently enrolled in warmup. Enroll an IP above to begin a staged volume ramp.
+                      </div>
+                    ) : (
+                      warmupStates.map((ws) => (
+                        <div key={ws.id} className="bg-slate-950/60 border border-slate-800 rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-mono text-sm font-bold text-white">{ws.ip_address}</div>
+                              <div className="text-[11px] text-slate-400">ID: {ws.ip_address_id}</div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              ws.status === 'warming'
+                                ? 'bg-indigo-950 text-indigo-400 border border-indigo-800'
+                                : ws.status === 'held'
+                                ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            }`}>
+                              {ws.status.toUpperCase()}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-slate-300">
+                              <span>Day {ws.current_day} of 30 Ramp</span>
+                              <span>Sent Today: {ws.current_day_volume}</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-2">
+                              <div
+                                className="bg-indigo-500 h-2 rounded-full"
+                                style={{ width: `${Math.min(100, (ws.current_day / 30) * 100)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {ws.held_reason && (
+                            <div className="bg-rose-950/40 border border-rose-800/50 p-2 rounded text-[11px] text-rose-300">
+                              Hold Reason: {ws.held_reason}
+                            </div>
+                          )}
+
+                          <div className="flex items-center space-x-2 pt-2 border-t border-slate-800">
+                            {ws.status === 'held' ? (
+                              <button
+                                onClick={() => handleResumeWarmup(ws.ip_address_id)}
+                                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-medium rounded transition-colors"
+                              >
+                                Resume Warmup
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleHoldWarmup(ws.ip_address_id)}
+                                className="px-2.5 py-1 bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium rounded transition-colors"
+                              >
+                                Hold
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleAdvanceWarmup(ws.ip_address_id, false)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded transition-colors"
+                            >
+                              Advance Day
+                            </button>
+                            <button
+                              onClick={() => handleAdvanceWarmup(ws.ip_address_id, true)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-medium rounded transition-colors"
+                            >
+                              Force Advance
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 4: Alert Rules & Incident Management (§22.3) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">Alert Rules & Incident Manager</h2>
+                      <p className="text-xs text-slate-400">
+                        Configure threshold rules for bounce rates, complaint spikes, queue backpressure, and DNSBL blocks.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleEvaluateAlerts}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 hover:text-indigo-300 text-xs font-medium rounded-lg transition-colors border border-slate-700"
+                    >
+                      ⚡ Evaluate Rules Now
+                    </button>
+                  </div>
+
+                  {alertsActionMsg && (
+                    <div className="p-3 bg-indigo-950/60 border border-indigo-800/60 rounded-lg text-xs text-indigo-300">
+                      {alertsActionMsg}
+                    </div>
+                  )}
+
+                  {/* Create Alert Rule Form */}
+                  <form onSubmit={handleCreateAlertRule} className="grid grid-cols-1 md:grid-cols-7 gap-2 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Rule Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={newRuleName}
+                        onChange={(e) => setNewRuleName(e.target.value)}
+                        placeholder="e.g. Critical Bounce Spike"
+                        className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Metric</label>
+                      <select
+                        value={newRuleMetric}
+                        onChange={(e) => setNewRuleMetric(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="bounce_rate">Bounce Rate (%)</option>
+                        <option value="complaint_rate">Complaint Rate (%)</option>
+                        <option value="dnsbl_listed">DNSBL Listed Count</option>
+                        <option value="queue_depth">Queue Depth</option>
+                        <option value="delivery_rate">Delivery Rate (&lt;)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Condition</label>
+                      <div className="flex space-x-1">
+                        <select
+                          value={newRuleOp}
+                          onChange={(e) => setNewRuleOp(e.target.value)}
+                          className="w-12 px-1 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                        >
+                          <option value=">">&gt;</option>
+                          <option value=">=">&gt;=</option>
+                          <option value="<">&lt;</option>
+                          <option value="<=">&lt;=</option>
+                        </select>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={newRuleThreshold}
+                          onChange={(e) => setNewRuleThreshold(Number(e.target.value))}
+                          className="flex-1 px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Severity</label>
+                      <select
+                        value={newRuleSeverity}
+                        onChange={(e) => setNewRuleSeverity(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Cooldown (m)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={newRuleCooldown}
+                        onChange={(e) => setNewRuleCooldown(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Create Rule
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Configured Rules Table */}
+                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                    <div className="p-3 bg-slate-950 border-b border-slate-800 font-semibold text-xs text-white flex justify-between">
+                      <span>Configured Alert Rules ({alertRules.length})</span>
+                    </div>
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-2.5">Rule Name</th>
+                          <th className="px-4 py-2.5">Metric</th>
+                          <th className="px-4 py-2.5">Condition</th>
+                          <th className="px-4 py-2.5">Severity</th>
+                          <th className="px-4 py-2.5">Cooldown</th>
+                          <th className="px-4 py-2.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {alertRules.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-4 text-center text-slate-500">
+                              No custom alert rules configured yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          alertRules.map((r) => (
+                            <tr key={r.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-2.5 font-medium text-white">{r.name}</td>
+                              <td className="px-4 py-2.5 font-mono text-slate-400">{r.metric_type}</td>
+                              <td className="px-4 py-2.5 font-mono text-indigo-300">{r.comparison_operator} {r.threshold}</td>
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  r.severity === 'critical'
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : r.severity === 'warning'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : 'bg-blue-950 text-blue-400 border border-blue-800'
+                                }`}>
+                                  {r.severity}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-400">{r.cooldown_minutes}m</td>
+                              <td className="px-4 py-2.5 text-right">
+                                <button
+                                  onClick={() => handleDeleteAlertRule(r.id)}
+                                  className="text-xs text-rose-400 hover:text-rose-300 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Active Incidents Table */}
+                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                    <div className="p-3 bg-slate-950 border-b border-slate-800 font-semibold text-xs text-white flex justify-between">
+                      <span>Alert Incidents Log ({alertIncidents.length})</span>
+                    </div>
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-2.5">Severity</th>
+                          <th className="px-4 py-2.5">Summary</th>
+                          <th className="px-4 py-2.5">Status</th>
+                          <th className="px-4 py-2.5">Fired At</th>
+                          <th className="px-4 py-2.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {alertIncidents.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-4 text-center text-slate-500">
+                              No active or past incidents. System deliverability is within safe thresholds.
+                            </td>
+                          </tr>
+                        ) : (
+                          alertIncidents.map((inc) => (
+                            <tr key={inc.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  inc.severity === 'critical'
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : inc.severity === 'warning'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : 'bg-blue-950 text-blue-400 border border-blue-800'
+                                }`}>
+                                  {inc.severity}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-white max-w-sm truncate">{inc.summary}</td>
+                              <td className="px-4 py-2.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                                  inc.status === 'firing'
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse'
+                                    : inc.status === 'acknowledged'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                }`}>
+                                  {inc.status.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-500">{new Date(inc.fired_at).toLocaleTimeString()}</td>
+                              <td className="px-4 py-2.5 text-right space-x-2">
+                                {inc.status === 'firing' && (
+                                  <button
+                                    onClick={() => handleAcknowledgeIncident(inc.id)}
+                                    className="text-xs text-amber-400 hover:text-amber-300 font-medium"
+                                  >
+                                    Ack
+                                  </button>
+                                )}
+                                {inc.status !== 'resolved' && (
+                                  <button
+                                    onClick={() => handleResolveIncident(inc.id)}
+                                    className="text-xs text-emerald-400 hover:text-emerald-300 font-medium"
+                                  >
+                                    Resolve
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 5: Multi-Channel Notification Dispatchers (§22.4) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-white">Notification Channels (§22.4)</h2>
+                      <p className="text-xs text-slate-400">
+                        Dispatch incidents in real-time to Slack webhooks, Microsoft Teams, PagerDuty Events API, or signed generic webhooks.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Add Channel Form */}
+                  <form onSubmit={handleCreateChannel} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Channel Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={newChannelName}
+                        onChange={(e) => setNewChannelName(e.target.value)}
+                        placeholder="e.g. SRE Slack Alerts"
+                        className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Channel Type</label>
+                      <select
+                        value={newChannelType}
+                        onChange={(e) => setNewChannelType(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                      >
+                        <option value="slack">Slack Webhook</option>
+                        <option value="microsoft_teams">Microsoft Teams</option>
+                        <option value="pagerduty">PagerDuty Events v2</option>
+                        <option value="generic_webhook">Generic HMAC Webhook</option>
+                        <option value="email">System Tenant Email</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Webhook URL / Endpoint</label>
+                      <input
+                        type="text"
+                        required
+                        value={newChannelURL}
+                        onChange={(e) => setNewChannelURL(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className="w-full px-3 py-1.5 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg font-mono"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors"
+                      >
+                        Add Channel
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Channels Table */}
+                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-2.5">Channel Name</th>
+                          <th className="px-4 py-2.5">Type</th>
+                          <th className="px-4 py-2.5">Configuration</th>
+                          <th className="px-4 py-2.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {notificationChannels.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-4 py-4 text-center text-slate-500">
+                              No notification channels configured. Add Slack, Teams, or PagerDuty channels above.
+                            </td>
+                          </tr>
+                        ) : (
+                          notificationChannels.map((ch) => (
+                            <tr key={ch.id} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-2.5 font-medium text-white">{ch.name}</td>
+                              <td className="px-4 py-2.5 font-mono text-indigo-400">{ch.type}</td>
+                              <td className="px-4 py-2.5 font-mono text-slate-400 max-w-xs truncate">{ch.config}</td>
+                              <td className="px-4 py-2.5 text-right space-x-2">
+                                <button
+                                  onClick={() => handleTestChannel(ch.id)}
+                                  className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                                >
+                                  Test
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteChannel(ch.id)}
+                                  className="text-xs text-rose-400 hover:text-rose-300 font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 6: In-App Notification Center Feed */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-4 border-b border-slate-800 font-semibold text-xs text-white flex justify-between items-center">
+                    <span>In-App Notification Feed ({alertNotifications.length})</span>
+                    <button
+                      onClick={loadPhase11Data}
+                      className="text-indigo-400 hover:text-indigo-300 text-xs font-normal"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="divide-y divide-slate-800">
+                    {alertNotifications.length === 0 ? (
+                      <div className="p-4 text-center text-slate-500 text-xs">
+                        No notifications in your feed.
+                      </div>
+                    ) : (
+                      alertNotifications.map((n) => (
+                        <div key={n.id} className={`p-4 flex items-start justify-between ${n.is_read ? 'opacity-60' : 'bg-slate-850'}`}>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              {!n.is_read && <span className="w-2 h-2 rounded-full bg-indigo-400"></span>}
+                              <span className="font-semibold text-white text-xs">{n.title}</span>
+                              <span className="text-[10px] text-slate-500">{new Date(n.created_at).toLocaleTimeString()}</span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-1">{n.message}</p>
+                          </div>
+                          {!n.is_read && (
+                            <button
+                              onClick={() => handleMarkNotifRead(n.id)}
+                              className="text-xs text-slate-400 hover:text-white"
+                            >
+                              Mark Read
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>

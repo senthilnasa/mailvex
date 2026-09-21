@@ -17,8 +17,11 @@ import (
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/reports"
 	"github.com/mailvex/mailvex/core/retention"
+	"github.com/mailvex/mailvex/core/alerts"
+	"github.com/mailvex/mailvex/core/dnsbl"
 	"github.com/mailvex/mailvex/core/storage"
 	"github.com/mailvex/mailvex/core/tracking"
+	"github.com/mailvex/mailvex/core/warmup"
 	"github.com/mailvex/mailvex/core/webhooks"
 )
 
@@ -35,10 +38,14 @@ type API struct {
 	retention  *retention.RetentionService
 	tracking   *tracking.TrackingEngine
 	inbound    *inbound.InboundEngine
+	dnsbl      *dnsbl.Checker
+	warmup     *warmup.Manager
+	alerts     *alerts.Engine
 }
 
 func NewAPI(repo repository.Repository, auditService *audit.Service, encryption *crypto.EnvelopeEncryption) *API {
 	store := storage.NewMemoryStorage()
+	alertsEngine := alerts.NewEngine(repo, nil)
 	return &API{
 		repo:       repo,
 		audit:      auditService,
@@ -52,6 +59,9 @@ func NewAPI(repo repository.Repository, auditService *audit.Service, encryption 
 		retention:  retention.NewRetentionService(repo),
 		tracking:   tracking.NewTrackingEngine(nil, repo),
 		inbound:    inbound.NewInboundEngine(repo),
+		dnsbl:      dnsbl.NewChecker(repo, nil),
+		warmup:     warmup.NewManager(repo),
+		alerts:     alertsEngine,
 	}
 }
 

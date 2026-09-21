@@ -730,3 +730,127 @@ type InboundMessage struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type DNSBLProvider struct {
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	QueryPattern         string    `json:"query_pattern"`
+	ReturnCodeMeanings   string    `json:"return_code_meanings,omitempty"`
+	DelistURL            *string   `json:"delist_url,omitempty"`
+	CheckIntervalSeconds int       `json:"check_interval_seconds"`
+	IsEnabled            bool      `json:"is_enabled"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
+}
+
+type DNSBLResult struct {
+	ID            string    `json:"id"`
+	IPAddressID   string    `json:"ip_address_id"`
+	IPAddress     string    `json:"ip_address"`
+	ProviderID    string    `json:"provider_id"`
+	ProviderName  string    `json:"provider_name,omitempty"`
+	IsListed      bool      `json:"is_listed"`
+	ResponseCode  *string   `json:"response_code,omitempty"`
+	ReturnMeaning *string   `json:"return_meaning,omitempty"`
+	DelistURL     *string   `json:"delist_url,omitempty"`
+	CheckedAt     time.Time `json:"checked_at"`
+}
+
+type WarmupPlan struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description *string          `json:"description,omitempty"`
+	TotalDays   int              `json:"total_days"`
+	IsDefault   bool             `json:"is_default"`
+	Days        []*WarmupPlanDay `json:"days,omitempty"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
+}
+
+type WarmupPlanDay struct {
+	ID           string         `json:"id"`
+	PlanID       string         `json:"plan_id"`
+	DayNumber    int            `json:"day_number"`
+	MaxVolume    int            `json:"max_volume"`
+	ProviderCaps map[string]int `json:"provider_caps,omitempty"`
+}
+
+type IPWarmupState struct {
+	ID                string         `json:"id"`
+	IPAddressID       string         `json:"ip_address_id"`
+	IPAddress         string         `json:"ip_address"`
+	PlanID            string         `json:"plan_id"`
+	CurrentDay        int            `json:"current_day"`
+	CurrentDayVolume  int            `json:"current_day_volume"`
+	ProviderVolume    map[string]int `json:"provider_volume,omitempty"`
+	Status            string         `json:"status"` // warming, held, completed, paused
+	HeldReason        *string        `json:"held_reason,omitempty"`
+	StartedAt         time.Time      `json:"started_at"`
+	LastAdvancedAt    *time.Time     `json:"last_advanced_at,omitempty"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+}
+
+type AlertRule struct {
+	ID                 string    `json:"id"`
+	TenantID           *string   `json:"tenant_id,omitempty"`
+	Name               string    `json:"name"`
+	MetricType         string    `json:"metric_type"` // bounce_rate, complaint_rate, queue_depth, oldest_queued, webhook_failures, dnsbl_listed, warmup_held, quota_warning
+	ComparisonOperator string    `json:"comparison_operator"` // >, >=, <, <=, ==
+	Threshold          float64   `json:"threshold"`
+	DurationMinutes    int       `json:"duration_minutes"`
+	CooldownMinutes    int       `json:"cooldown_minutes"`
+	Severity           string    `json:"severity"` // info, warning, critical
+	IsEnabled          bool      `json:"is_enabled"`
+	Channels           []string  `json:"channels,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type AlertIncident struct {
+	ID             string     `json:"id"`
+	RuleID         string     `json:"rule_id"`
+	TenantID       *string    `json:"tenant_id,omitempty"`
+	MetricType     string     `json:"metric_type"`
+	Severity       string     `json:"severity"`
+	Status         string     `json:"status"` // firing, acknowledged, resolved
+	TriggeredValue float64    `json:"triggered_value"`
+	Threshold      float64    `json:"threshold"`
+	Summary        string     `json:"summary"`
+	FiredAt        time.Time  `json:"fired_at"`
+	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+}
+
+type NotificationChannel struct {
+	ID        string    `json:"id"`
+	TenantID  *string   `json:"tenant_id,omitempty"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"` // email, slack, generic_webhook, pagerduty, microsoft_teams
+	Config    string    `json:"config"`
+	IsEnabled bool      `json:"is_enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type AlertNotification struct {
+	ID         string    `json:"id"`
+	TenantID   *string   `json:"tenant_id,omitempty"`
+	IncidentID string    `json:"incident_id"`
+	Title      string    `json:"title"`
+	Message    string    `json:"message"`
+	Severity   string    `json:"severity"`
+	IsRead     bool      `json:"is_read"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type ReputationOverview struct {
+	TenantID           string  `json:"tenant_id"`
+	OverallStatus      string  `json:"overall_status"` // measured, unknown, warning, blocked
+	BounceRate         float64 `json:"bounce_rate"`
+	ComplaintRate      float64 `json:"complaint_rate"`
+	DeliveryRate       float64 `json:"delivery_rate"`
+	TotalSent7d        int     `json:"total_sent_7d"`
+	DNSBLListingsCount int     `json:"dnsbl_listings_count"`
+	WarmingIPsCount    int     `json:"warming_ips_count"`
+	ActiveAlertsCount  int     `json:"active_alerts_count"`
+}
+

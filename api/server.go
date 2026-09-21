@@ -332,6 +332,83 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "inbound.read")(http.HandlerFunc(apiHandler.GetInboundMessageHandler)),
 	))
 
+	// Phase 11: Reputation, DNSBL, Warmup & Alerts (§22, §11.5)
+	s.mux.Handle("GET /v1/reputation/overview", authMiddleware(
+		middleware.RequirePermission(s.repo, "reputation.read")(http.HandlerFunc(apiHandler.GetReputationOverviewHandler)),
+	))
+	s.mux.Handle("GET /v1/dnsbl/providers", authMiddleware(
+		middleware.RequirePermission(s.repo, "dnsbl.read")(http.HandlerFunc(apiHandler.ListDNSBLProvidersHandler)),
+	))
+	s.mux.Handle("POST /v1/dnsbl/check", authMiddleware(
+		middleware.RequirePermission(s.repo, "dnsbl.check")(http.HandlerFunc(apiHandler.CheckDNSBLHandler)),
+	))
+	s.mux.Handle("GET /v1/dnsbl/results", authMiddleware(
+		middleware.RequirePermission(s.repo, "dnsbl.read")(http.HandlerFunc(apiHandler.ListDNSBLResultsHandler)),
+	))
+	s.mux.Handle("GET /v1/warmup/plans", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.read")(http.HandlerFunc(apiHandler.ListWarmupPlansHandler)),
+	))
+	s.mux.Handle("GET /v1/warmup/plans/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.read")(http.HandlerFunc(apiHandler.GetWarmupPlanHandler)),
+	))
+	s.mux.Handle("GET /v1/warmup/ips", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.read")(http.HandlerFunc(apiHandler.ListIPWarmupStatesHandler)),
+	))
+	s.mux.Handle("POST /v1/warmup/ips", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.write")(http.HandlerFunc(apiHandler.EnrollIPWarmupHandler)),
+	))
+	s.mux.Handle("POST /v1/warmup/ips/{id}/advance", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.write")(http.HandlerFunc(apiHandler.AdvanceIPWarmupHandler)),
+	))
+	s.mux.Handle("POST /v1/warmup/ips/{id}/hold", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.write")(http.HandlerFunc(apiHandler.HoldIPWarmupHandler)),
+	))
+	s.mux.Handle("POST /v1/warmup/ips/{id}/resume", authMiddleware(
+		middleware.RequirePermission(s.repo, "warmup.write")(http.HandlerFunc(apiHandler.ResumeIPWarmupHandler)),
+	))
+	s.mux.Handle("GET /v1/alerts/rules", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.read")(http.HandlerFunc(apiHandler.ListAlertRulesHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/rules", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.CreateAlertRuleHandler)),
+	))
+	s.mux.Handle("GET /v1/alerts/rules/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.read")(http.HandlerFunc(apiHandler.GetAlertRuleHandler)),
+	))
+	s.mux.Handle("DELETE /v1/alerts/rules/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.DeleteAlertRuleHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/evaluate", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.EvaluateAlertsHandler)),
+	))
+	s.mux.Handle("GET /v1/alerts/incidents", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.read")(http.HandlerFunc(apiHandler.ListAlertIncidentsHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/incidents/{id}/acknowledge", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.AcknowledgeAlertIncidentHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/incidents/{id}/resolve", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.ResolveAlertIncidentHandler)),
+	))
+	s.mux.Handle("GET /v1/alerts/channels", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.read")(http.HandlerFunc(apiHandler.ListNotificationChannelsHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/channels", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.CreateNotificationChannelHandler)),
+	))
+	s.mux.Handle("DELETE /v1/alerts/channels/{id}", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.DeleteNotificationChannelHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/channels/{id}/test", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.TestNotificationChannelHandler)),
+	))
+	s.mux.Handle("GET /v1/alerts/notifications", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.read")(http.HandlerFunc(apiHandler.ListAlertNotificationsHandler)),
+	))
+	s.mux.Handle("POST /v1/alerts/notifications/{id}/read", authMiddleware(
+		middleware.RequirePermission(s.repo, "alerts.write")(http.HandlerFunc(apiHandler.MarkAlertNotificationReadHandler)),
+	))
+
 	// Apply global middleware: RequestID -> SecurityHeaders -> Logger
 	var h http.Handler = s.mux
 	h = middleware.SecurityHeaders(h)

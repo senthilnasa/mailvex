@@ -236,6 +236,36 @@ type Repository interface {
 	SaveInboundMessage(ctx context.Context, msg *domain.InboundMessage) error
 	GetInboundMessage(ctx context.Context, tenantID, id string) (*domain.InboundMessage, error)
 	ListInboundMessages(ctx context.Context, tenantID string, limit, offset int) ([]*domain.InboundMessage, error)
+
+	// Phase 11: Reputation, DNSBL, Warmup & Alerts
+	ListDNSBLProviders(ctx context.Context) ([]*domain.DNSBLProvider, error)
+	GetDNSBLProvider(ctx context.Context, id string) (*domain.DNSBLProvider, error)
+	SaveDNSBLProvider(ctx context.Context, provider *domain.DNSBLProvider) error
+	RecordDNSBLResult(ctx context.Context, result *domain.DNSBLResult) error
+	ListDNSBLResults(ctx context.Context, ipAddressID string, limit int) ([]*domain.DNSBLResult, error)
+	CreateWarmupPlan(ctx context.Context, plan *domain.WarmupPlan) error
+	GetWarmupPlan(ctx context.Context, id string) (*domain.WarmupPlan, error)
+	ListWarmupPlans(ctx context.Context) ([]*domain.WarmupPlan, error)
+	GetIPWarmupState(ctx context.Context, ipAddressID string) (*domain.IPWarmupState, error)
+	SaveIPWarmupState(ctx context.Context, state *domain.IPWarmupState) error
+	ListIPWarmupStates(ctx context.Context) ([]*domain.IPWarmupState, error)
+	CreateAlertRule(ctx context.Context, rule *domain.AlertRule) error
+	GetAlertRule(ctx context.Context, tenantID *string, id string) (*domain.AlertRule, error)
+	ListAlertRules(ctx context.Context, tenantID *string) ([]*domain.AlertRule, error)
+	UpdateAlertRule(ctx context.Context, rule *domain.AlertRule) error
+	DeleteAlertRule(ctx context.Context, tenantID *string, id string) error
+	RecordAlertIncident(ctx context.Context, incident *domain.AlertIncident) error
+	GetAlertIncident(ctx context.Context, tenantID *string, id string) (*domain.AlertIncident, error)
+	ListAlertIncidents(ctx context.Context, tenantID *string, status string, limit int) ([]*domain.AlertIncident, error)
+	UpdateAlertIncidentStatus(ctx context.Context, tenantID *string, id, status string) error
+	CreateNotificationChannel(ctx context.Context, channel *domain.NotificationChannel) error
+	GetNotificationChannel(ctx context.Context, tenantID *string, id string) (*domain.NotificationChannel, error)
+	ListNotificationChannels(ctx context.Context, tenantID *string) ([]*domain.NotificationChannel, error)
+	DeleteNotificationChannel(ctx context.Context, tenantID *string, id string) error
+	CreateAlertNotification(ctx context.Context, notif *domain.AlertNotification) error
+	ListAlertNotifications(ctx context.Context, tenantID *string, unreadOnly bool, limit int) ([]*domain.AlertNotification, error)
+	MarkAlertNotificationRead(ctx context.Context, tenantID *string, id string) error
+	GetReputationOverview(ctx context.Context, tenantID string) (*domain.ReputationOverview, error)
 }
 
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
@@ -310,6 +340,16 @@ type MemoryRepository struct {
 	trackingEvents  []*domain.TrackingEvent
 	inboundRoutes   map[string]*domain.InboundRoute // key: routeID
 	inboundMessages []*domain.InboundMessage
+
+	// Phase 11 collections
+	dnsblProviders       map[string]*domain.DNSBLProvider
+	dnsblResults         []*domain.DNSBLResult
+	warmupPlans          map[string]*domain.WarmupPlan
+	ipWarmupStates       map[string]*domain.IPWarmupState
+	alertRules           map[string]*domain.AlertRule
+	alertIncidents       map[string]*domain.AlertIncident
+	notificationChannels map[string]*domain.NotificationChannel
+	alertNotifications   []*domain.AlertNotification
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -365,6 +405,14 @@ func NewMemoryRepository() *MemoryRepository {
 		trackingEvents:     make([]*domain.TrackingEvent, 0),
 		inboundRoutes:      make(map[string]*domain.InboundRoute),
 		inboundMessages:    make([]*domain.InboundMessage, 0),
+		dnsblProviders:       make(map[string]*domain.DNSBLProvider),
+		dnsblResults:         make([]*domain.DNSBLResult, 0),
+		warmupPlans:          make(map[string]*domain.WarmupPlan),
+		ipWarmupStates:       make(map[string]*domain.IPWarmupState),
+		alertRules:           make(map[string]*domain.AlertRule),
+		alertIncidents:       make(map[string]*domain.AlertIncident),
+		notificationChannels: make(map[string]*domain.NotificationChannel),
+		alertNotifications:   make([]*domain.AlertNotification, 0),
 	}
 
 	// Seed default IP pool
@@ -427,6 +475,7 @@ func (m *MemoryRepository) seedDefaults() {
 		"settings.read", "settings.write",
 		"retention.read", "retention.write", "privacy.erase", "privacy.export", "privacy.read",
 		"inbound.read", "inbound.write", "inbound.routes", "tracking.read",
+		"reputation.read", "dnsbl.read", "dnsbl.check", "warmup.read", "warmup.write", "alerts.read", "alerts.write",
 		"impersonate.read", "impersonate.write",
 		"system.read", "system.write",
 	}
@@ -456,8 +505,60 @@ func (m *MemoryRepository) seedDefaults() {
 		"analytics.read", "analytics.export", "reports.read", "abuse.read", "abuse.write", "audit.read", "settings.read", "settings.write",
 		"retention.read", "retention.write", "privacy.erase", "privacy.export", "privacy.read",
 		"inbound.read", "inbound.write", "inbound.routes", "tracking.read",
+		"reputation.read", "dnsbl.read", "dnsbl.check", "warmup.read", "warmup.write", "alerts.read", "alerts.write",
 	}
 	m.rolePerms["role_tenant_owner"] = tenantPerms
+
+	// Seed DNSBL Providers (§22.2)
+	delistSpamhaus := "https://check.spamhaus.org/"
+	delistBarracuda := "https://www.barracudacentral.org/rbl/removal-request"
+	delistSpamCop := "https://www.spamcop.net/bl.shtml"
+	delistUCEPROTECT := "https://www.uceprotect.net/en/rblcheck.php"
+
+	m.dnsblProviders["dnsbl_zen"] = &domain.DNSBLProvider{
+		ID: "dnsbl_zen", Name: "Spamhaus Zen", QueryPattern: "zen.spamhaus.org",
+		ReturnCodeMeanings: `{"127.0.0.2":"SBL - Direct UBE sources","127.0.0.3":"CSS - Direct snowshoe/spam sources","127.0.0.4":"XBL - Exploits/CBL","127.0.0.10":"PBL - End-user dynamic ranges"}`,
+		DelistURL: &delistSpamhaus, CheckIntervalSeconds: 3600, IsEnabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	m.dnsblProviders["dnsbl_barracuda"] = &domain.DNSBLProvider{
+		ID: "dnsbl_barracuda", Name: "Barracuda Central", QueryPattern: "b.barracudacentral.org",
+		ReturnCodeMeanings: `{"127.0.0.2":"Listed as spam source"}`,
+		DelistURL: &delistBarracuda, CheckIntervalSeconds: 3600, IsEnabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	m.dnsblProviders["dnsbl_spamcop"] = &domain.DNSBLProvider{
+		ID: "dnsbl_spamcop", Name: "SpamCop", QueryPattern: "bl.spamcop.net",
+		ReturnCodeMeanings: `{"127.0.0.2":"Reported spam source"}`,
+		DelistURL: &delistSpamCop, CheckIntervalSeconds: 3600, IsEnabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	m.dnsblProviders["dnsbl_uceprotect"] = &domain.DNSBLProvider{
+		ID: "dnsbl_uceprotect", Name: "UCEPROTECT Level 1", QueryPattern: "dnsbl-1.uceprotect.net",
+		ReturnCodeMeanings: `{"127.0.0.2":"Single IP listed"}`,
+		DelistURL: &delistUCEPROTECT, CheckIntervalSeconds: 7200, IsEnabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	// Seed Standard 30-Day Warmup Plan (§11.5)
+	warmupDesc := "Standard 30-day exponential volume ramp with per-provider caps"
+	defaultDays := []*domain.WarmupPlanDay{
+		{ID: "wpday_1", PlanID: "wplan_default", DayNumber: 1, MaxVolume: 50, ProviderCaps: map[string]int{"google": 20, "microsoft": 20, "yahoo": 10}},
+		{ID: "wpday_2", PlanID: "wplan_default", DayNumber: 2, MaxVolume: 100, ProviderCaps: map[string]int{"google": 40, "microsoft": 40, "yahoo": 20}},
+		{ID: "wpday_3", PlanID: "wplan_default", DayNumber: 3, MaxVolume: 200, ProviderCaps: map[string]int{"google": 80, "microsoft": 80, "yahoo": 40}},
+		{ID: "wpday_4", PlanID: "wplan_default", DayNumber: 4, MaxVolume: 400, ProviderCaps: map[string]int{"google": 150, "microsoft": 150, "yahoo": 80}},
+		{ID: "wpday_5", PlanID: "wplan_default", DayNumber: 5, MaxVolume: 800, ProviderCaps: map[string]int{"google": 300, "microsoft": 300, "yahoo": 150}},
+		{ID: "wpday_6", PlanID: "wplan_default", DayNumber: 6, MaxVolume: 1500, ProviderCaps: map[string]int{"google": 600, "microsoft": 600, "yahoo": 250}},
+		{ID: "wpday_7", PlanID: "wplan_default", DayNumber: 7, MaxVolume: 3000, ProviderCaps: map[string]int{"google": 1200, "microsoft": 1200, "yahoo": 500}},
+		{ID: "wpday_8", PlanID: "wplan_default", DayNumber: 8, MaxVolume: 5000, ProviderCaps: map[string]int{"google": 2000, "microsoft": 2000, "yahoo": 800}},
+		{ID: "wpday_9", PlanID: "wplan_default", DayNumber: 9, MaxVolume: 8000, ProviderCaps: map[string]int{"google": 3200, "microsoft": 3200, "yahoo": 1200}},
+		{ID: "wpday_10", PlanID: "wplan_default", DayNumber: 10, MaxVolume: 12000, ProviderCaps: map[string]int{"google": 5000, "microsoft": 5000, "yahoo": 1800}},
+		{ID: "wpday_15", PlanID: "wplan_default", DayNumber: 15, MaxVolume: 35000, ProviderCaps: map[string]int{"google": 15000, "microsoft": 15000, "yahoo": 5000}},
+		{ID: "wpday_20", PlanID: "wplan_default", DayNumber: 20, MaxVolume: 80000, ProviderCaps: map[string]int{"google": 35000, "microsoft": 35000, "yahoo": 10000}},
+		{ID: "wpday_25", PlanID: "wplan_default", DayNumber: 25, MaxVolume: 150000, ProviderCaps: map[string]int{"google": 65000, "microsoft": 65000, "yahoo": 20000}},
+		{ID: "wpday_30", PlanID: "wplan_default", DayNumber: 30, MaxVolume: 500000, ProviderCaps: map[string]int{"google": 200000, "microsoft": 200000, "yahoo": 60000}},
+	}
+	m.warmupPlans["wplan_default"] = &domain.WarmupPlan{
+		ID: "wplan_default", Name: "Standard 30-Day Warmup", Description: &warmupDesc,
+		TotalDays: 30, IsDefault: true, Days: defaultDays,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
 }
 
 func (m *MemoryRepository) CreateOrganization(ctx context.Context, org *domain.Organization) error {
@@ -3196,6 +3297,509 @@ func (r *MemoryRepository) ListInboundMessages(ctx context.Context, tenantID str
 		end = len(list)
 	}
 	return list[offset:end], nil
+}
+
+// Phase 11: Reputation, DNSBL, Warmup & Alerts implementations
+
+func (r *MemoryRepository) ListDNSBLProviders(ctx context.Context) ([]*domain.DNSBLProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.DNSBLProvider
+	for _, p := range r.dnsblProviders {
+		list = append(list, p)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) GetDNSBLProvider(ctx context.Context, id string) (*domain.DNSBLProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	p, exists := r.dnsblProviders[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	return p, nil
+}
+
+func (r *MemoryRepository) SaveDNSBLProvider(ctx context.Context, provider *domain.DNSBLProvider) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if provider.ID == "" {
+		provider.ID = crypto.NewULID(crypto.PrefixDNSBLProvider)
+	}
+	now := time.Now().UTC()
+	if provider.CreatedAt.IsZero() {
+		provider.CreatedAt = now
+	}
+	provider.UpdatedAt = now
+	r.dnsblProviders[provider.ID] = provider
+	return nil
+}
+
+func (r *MemoryRepository) RecordDNSBLResult(ctx context.Context, result *domain.DNSBLResult) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if result.ID == "" {
+		result.ID = crypto.NewULID(crypto.PrefixDNSBLResult)
+	}
+	if result.CheckedAt.IsZero() {
+		result.CheckedAt = time.Now().UTC()
+	}
+	r.dnsblResults = append(r.dnsblResults, result)
+	return nil
+}
+
+func (r *MemoryRepository) ListDNSBLResults(ctx context.Context, ipAddressID string, limit int) ([]*domain.DNSBLResult, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.DNSBLResult
+	for _, res := range r.dnsblResults {
+		if ipAddressID == "" || res.IPAddressID == ipAddressID {
+			list = append(list, res)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].CheckedAt.After(list[j].CheckedAt)
+	})
+	if limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return list, nil
+}
+
+func (r *MemoryRepository) CreateWarmupPlan(ctx context.Context, plan *domain.WarmupPlan) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if plan.ID == "" {
+		plan.ID = crypto.NewULID(crypto.PrefixWarmupPlan)
+	}
+	now := time.Now().UTC()
+	if plan.CreatedAt.IsZero() {
+		plan.CreatedAt = now
+	}
+	plan.UpdatedAt = now
+	r.warmupPlans[plan.ID] = plan
+	return nil
+}
+
+func (r *MemoryRepository) GetWarmupPlan(ctx context.Context, id string) (*domain.WarmupPlan, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	plan, exists := r.warmupPlans[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	return plan, nil
+}
+
+func (r *MemoryRepository) ListWarmupPlans(ctx context.Context) ([]*domain.WarmupPlan, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.WarmupPlan
+	for _, p := range r.warmupPlans {
+		list = append(list, p)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) GetIPWarmupState(ctx context.Context, ipAddressID string) (*domain.IPWarmupState, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	state, exists := r.ipWarmupStates[ipAddressID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	return state, nil
+}
+
+func (r *MemoryRepository) SaveIPWarmupState(ctx context.Context, state *domain.IPWarmupState) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if state.ID == "" {
+		state.ID = crypto.NewULID(crypto.PrefixIPWarmupState)
+	}
+	now := time.Now().UTC()
+	if state.StartedAt.IsZero() {
+		state.StartedAt = now
+	}
+	state.UpdatedAt = now
+	r.ipWarmupStates[state.IPAddressID] = state
+	return nil
+}
+
+func (r *MemoryRepository) ListIPWarmupStates(ctx context.Context) ([]*domain.IPWarmupState, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.IPWarmupState
+	for _, s := range r.ipWarmupStates {
+		list = append(list, s)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].IPAddress < list[j].IPAddress
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) CreateAlertRule(ctx context.Context, rule *domain.AlertRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if rule.ID == "" {
+		rule.ID = crypto.NewULID(crypto.PrefixAlertRule)
+	}
+	now := time.Now().UTC()
+	if rule.CreatedAt.IsZero() {
+		rule.CreatedAt = now
+	}
+	rule.UpdatedAt = now
+	r.alertRules[rule.ID] = rule
+	return nil
+}
+
+func (r *MemoryRepository) GetAlertRule(ctx context.Context, tenantID *string, id string) (*domain.AlertRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	rule, exists := r.alertRules[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if tenantID != nil && rule.TenantID != nil && *rule.TenantID != *tenantID {
+		return nil, ErrNotFound
+	}
+	return rule, nil
+}
+
+func (r *MemoryRepository) ListAlertRules(ctx context.Context, tenantID *string) ([]*domain.AlertRule, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.AlertRule
+	for _, rule := range r.alertRules {
+		if tenantID == nil || rule.TenantID == nil || *rule.TenantID == *tenantID {
+			list = append(list, rule)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) UpdateAlertRule(ctx context.Context, rule *domain.AlertRule) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, exists := r.alertRules[rule.ID]
+	if !exists {
+		return ErrNotFound
+	}
+	if rule.TenantID != nil && existing.TenantID != nil && *existing.TenantID != *rule.TenantID {
+		return ErrUnauthorized
+	}
+	rule.UpdatedAt = time.Now().UTC()
+	r.alertRules[rule.ID] = rule
+	return nil
+}
+
+func (r *MemoryRepository) DeleteAlertRule(ctx context.Context, tenantID *string, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rule, exists := r.alertRules[id]
+	if !exists {
+		return ErrNotFound
+	}
+	if tenantID != nil && rule.TenantID != nil && *rule.TenantID != *tenantID {
+		return ErrUnauthorized
+	}
+	delete(r.alertRules, id)
+	return nil
+}
+
+func (r *MemoryRepository) RecordAlertIncident(ctx context.Context, incident *domain.AlertIncident) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if incident.ID == "" {
+		incident.ID = crypto.NewULID(crypto.PrefixAlertIncident)
+	}
+	if incident.FiredAt.IsZero() {
+		incident.FiredAt = time.Now().UTC()
+	}
+	r.alertIncidents[incident.ID] = incident
+	return nil
+}
+
+func (r *MemoryRepository) GetAlertIncident(ctx context.Context, tenantID *string, id string) (*domain.AlertIncident, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	inc, exists := r.alertIncidents[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if tenantID != nil && inc.TenantID != nil && *inc.TenantID != *tenantID {
+		return nil, ErrNotFound
+	}
+	return inc, nil
+}
+
+func (r *MemoryRepository) ListAlertIncidents(ctx context.Context, tenantID *string, status string, limit int) ([]*domain.AlertIncident, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.AlertIncident
+	for _, inc := range r.alertIncidents {
+		if tenantID != nil && inc.TenantID != nil && *inc.TenantID != *tenantID {
+			continue
+		}
+		if status != "" && inc.Status != status {
+			continue
+		}
+		list = append(list, inc)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].FiredAt.After(list[j].FiredAt)
+	})
+	if limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return list, nil
+}
+
+func (r *MemoryRepository) UpdateAlertIncidentStatus(ctx context.Context, tenantID *string, id, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	inc, exists := r.alertIncidents[id]
+	if !exists {
+		return ErrNotFound
+	}
+	if tenantID != nil && inc.TenantID != nil && *inc.TenantID != *tenantID {
+		return ErrUnauthorized
+	}
+	now := time.Now().UTC()
+	inc.Status = status
+	if status == "acknowledged" {
+		inc.AcknowledgedAt = &now
+	} else if status == "resolved" {
+		inc.ResolvedAt = &now
+	}
+	return nil
+}
+
+func (r *MemoryRepository) CreateNotificationChannel(ctx context.Context, channel *domain.NotificationChannel) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if channel.ID == "" {
+		channel.ID = crypto.NewULID(crypto.PrefixNotifChannel)
+	}
+	now := time.Now().UTC()
+	if channel.CreatedAt.IsZero() {
+		channel.CreatedAt = now
+	}
+	channel.UpdatedAt = now
+	r.notificationChannels[channel.ID] = channel
+	return nil
+}
+
+func (r *MemoryRepository) GetNotificationChannel(ctx context.Context, tenantID *string, id string) (*domain.NotificationChannel, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ch, exists := r.notificationChannels[id]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if tenantID != nil && ch.TenantID != nil && *ch.TenantID != *tenantID {
+		return nil, ErrNotFound
+	}
+	return ch, nil
+}
+
+func (r *MemoryRepository) ListNotificationChannels(ctx context.Context, tenantID *string) ([]*domain.NotificationChannel, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.NotificationChannel
+	for _, ch := range r.notificationChannels {
+		if tenantID == nil || ch.TenantID == nil || *ch.TenantID == *tenantID {
+			list = append(list, ch)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name < list[j].Name
+	})
+	return list, nil
+}
+
+func (r *MemoryRepository) DeleteNotificationChannel(ctx context.Context, tenantID *string, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ch, exists := r.notificationChannels[id]
+	if !exists {
+		return ErrNotFound
+	}
+	if tenantID != nil && ch.TenantID != nil && *ch.TenantID != *tenantID {
+		return ErrUnauthorized
+	}
+	delete(r.notificationChannels, id)
+	return nil
+}
+
+func (r *MemoryRepository) CreateAlertNotification(ctx context.Context, notif *domain.AlertNotification) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if notif.ID == "" {
+		notif.ID = crypto.NewULID(crypto.PrefixAlertNotif)
+	}
+	if notif.CreatedAt.IsZero() {
+		notif.CreatedAt = time.Now().UTC()
+	}
+	r.alertNotifications = append(r.alertNotifications, notif)
+	return nil
+}
+
+func (r *MemoryRepository) ListAlertNotifications(ctx context.Context, tenantID *string, unreadOnly bool, limit int) ([]*domain.AlertNotification, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []*domain.AlertNotification
+	for _, n := range r.alertNotifications {
+		if tenantID != nil && n.TenantID != nil && *n.TenantID != *tenantID {
+			continue
+		}
+		if unreadOnly && n.IsRead {
+			continue
+		}
+		list = append(list, n)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].CreatedAt.After(list[j].CreatedAt)
+	})
+	if limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return list, nil
+}
+
+func (r *MemoryRepository) MarkAlertNotificationRead(ctx context.Context, tenantID *string, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, n := range r.alertNotifications {
+		if n.ID == id {
+			if tenantID != nil && n.TenantID != nil && *n.TenantID != *tenantID {
+				return ErrUnauthorized
+			}
+			n.IsRead = true
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (r *MemoryRepository) GetReputationOverview(ctx context.Context, tenantID string) (*domain.ReputationOverview, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	overview := &domain.ReputationOverview{
+		TenantID:      tenantID,
+		OverallStatus: "unknown",
+	}
+
+	// Calculate 7-day stats from messages & events
+	sevenDaysAgo := time.Now().UTC().Add(-7 * 24 * time.Hour)
+	sentCount := 0
+	deliveredCount := 0
+	bounceCount := 0
+	complaintCount := 0
+
+	for _, msg := range r.messages {
+		if msg.TenantID != tenantID || msg.CreatedAt.Before(sevenDaysAgo) {
+			continue
+		}
+		sentCount++
+		if msg.Status == "delivered" {
+			deliveredCount++
+		} else if msg.Status == "bounced" || msg.Status == "failed" {
+			bounceCount++
+		}
+	}
+
+	for _, fbl := range r.fblReports {
+		if fbl.TenantID == tenantID && fbl.CreatedAt.After(sevenDaysAgo) {
+			complaintCount++
+		}
+	}
+
+	overview.TotalSent7d = sentCount
+	if sentCount > 0 {
+		overview.DeliveryRate = float64(deliveredCount) / float64(sentCount)
+		overview.BounceRate = float64(bounceCount) / float64(sentCount)
+		overview.ComplaintRate = float64(complaintCount) / float64(sentCount)
+	}
+
+	// Count DNSBL listings
+	dnsblListed := 0
+	for _, res := range r.dnsblResults {
+		if res.IsListed {
+			dnsblListed++
+		}
+	}
+	overview.DNSBLListingsCount = dnsblListed
+
+	// Count warming IPs
+	warmingCount := 0
+	for _, ws := range r.ipWarmupStates {
+		if ws.Status == "warming" {
+			warmingCount++
+		}
+	}
+	overview.WarmingIPsCount = warmingCount
+
+	// Count active firing incidents
+	activeIncidents := 0
+	for _, inc := range r.alertIncidents {
+		if (inc.TenantID == nil || *inc.TenantID == tenantID) && inc.Status == "firing" {
+			activeIncidents++
+		}
+	}
+	overview.ActiveAlertsCount = activeIncidents
+
+	// Determine status
+	if overview.BounceRate > 0.10 || overview.ComplaintRate > 0.005 || dnsblListed >= 3 {
+		overview.OverallStatus = "blocked"
+	} else if overview.BounceRate > 0.05 || overview.ComplaintRate > 0.001 || dnsblListed > 0 || activeIncidents > 0 {
+		overview.OverallStatus = "warning"
+	} else if overview.TotalSent7d >= 1000 {
+		overview.OverallStatus = "measured"
+	} else {
+		overview.OverallStatus = "unknown"
+	}
+
+	return overview, nil
 }
 
 
