@@ -12,6 +12,7 @@ import (
 
 	"github.com/mailvex/mailvex/core/crypto"
 	"github.com/mailvex/mailvex/core/domain"
+	"github.com/mailvex/mailvex/core/mime"
 	"github.com/mailvex/mailvex/core/repository"
 	"github.com/mailvex/mailvex/core/storage"
 )
@@ -184,12 +185,15 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 	}
 	if len(rawMIME) == 0 && msg.BodyRef != nil {
 		bodyData, _ := w.storage.Get(ctx, *msg.BodyRef)
-		rawMIME = []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
-			msg.FromAddress, rcpt.Address, msg.Subject, string(bodyData)))
+		content := string(bodyData)
+		if strings.Contains(content, "<html") || strings.Contains(content, "<div") || strings.Contains(content, "<body") {
+			rawMIME = mime.BuildMessage(msg.FromAddress, rcpt.Address, msg.Subject, "", content)
+		} else {
+			rawMIME = mime.BuildMessage(msg.FromAddress, rcpt.Address, msg.Subject, content, "")
+		}
 	}
 	if len(rawMIME) == 0 {
-		rawMIME = []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\nHello",
-			msg.FromAddress, rcpt.Address, msg.Subject))
+		rawMIME = mime.BuildMessage(msg.FromAddress, rcpt.Address, msg.Subject, "Hello", "")
 	}
 
 	// 8. Resolve domain name for DKIM & headers

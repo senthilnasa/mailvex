@@ -270,6 +270,11 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		_ = eng.storage.Put(ctx, bodyKey, req.RawMIME)
 		msg.RawMIMERef = &bodyKey
 	} else if req.BodyHTML != "" || req.BodyText != "" {
+		constructedMIME := mime.BuildMessage(req.FromAddress, strings.Join(req.To, ", "), req.Subject, req.BodyText, req.BodyHTML)
+		rawKey := fmt.Sprintf("%s/%s/raw.eml", req.TenantID, msgID)
+		_ = eng.storage.Put(ctx, rawKey, constructedMIME)
+		msg.RawMIMERef = &rawKey
+
 		bodyKey := fmt.Sprintf("%s/%s/body.txt", req.TenantID, msgID)
 		_ = eng.storage.Put(ctx, bodyKey, []byte(req.BodyText+"\n"+req.BodyHTML))
 		msg.BodyRef = &bodyKey

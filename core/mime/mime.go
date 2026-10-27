@@ -123,3 +123,51 @@ func Parse(raw []byte) (*ParsedEmail, error) {
 
 	return parsed, nil
 }
+
+// BuildMessage constructs a standard MIME message (supporting text/plain, text/html, or multipart/alternative)
+func BuildMessage(from, to, subject, bodyText, bodyHTML string) []byte {
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("From: %s\r\n", from))
+	buf.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	buf.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z)))
+	buf.WriteString("MIME-Version: 1.0\r\n")
+
+	hasText := strings.TrimSpace(bodyText) != ""
+	hasHTML := strings.TrimSpace(bodyHTML) != ""
+
+	if hasText && hasHTML {
+		boundary := fmt.Sprintf("=_mvx_%s", crypto.NewULID(""))
+		buf.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n\r\n", boundary))
+
+		// Plain text part
+		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		buf.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		buf.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		buf.WriteString(bodyText)
+		buf.WriteString("\r\n\r\n")
+
+		// HTML part
+		buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		buf.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+		buf.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		buf.WriteString(bodyHTML)
+		buf.WriteString("\r\n\r\n")
+
+		// Closing boundary
+		buf.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+	} else if hasHTML {
+		buf.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+		buf.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		buf.WriteString(bodyHTML)
+		buf.WriteString("\r\n")
+	} else {
+		buf.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		buf.WriteString("Content-Transfer-Encoding: 7bit\r\n\r\n")
+		buf.WriteString(bodyText)
+		buf.WriteString("\r\n")
+	}
+
+	return buf.Bytes()
+}
