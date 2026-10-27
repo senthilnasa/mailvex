@@ -34,6 +34,7 @@ type DeliveryWorker struct {
 	retry           *RetryScheduler
 	directTransport Transport
 	relayTransport  Transport
+	encryption      *crypto.EnvelopeEncryption
 	cfg             WorkerConfig
 
 	inFlightWg      sync.WaitGroup
@@ -81,6 +82,10 @@ func (w *DeliveryWorker) SetTransports(direct, relay Transport) {
 	if relay != nil {
 		w.relayTransport = relay
 	}
+}
+
+func (w *DeliveryWorker) SetEncryption(enc *crypto.EnvelopeEncryption) {
+	w.encryption = enc
 }
 
 // IsDraining returns true if the worker is draining for shutdown
@@ -215,12 +220,23 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 		streamName = stream.Name
 	}
 
+	bounceHost := domainName
+	if w.cfg.BounceDomain != "" && !strings.HasSuffix(w.cfg.BounceDomain, ".local") {
+		bounceHost = w.cfg.BounceDomain
+	}
+	returnPath := fmt.Sprintf("bounce+%s@%s", verpToken, bounceHost)
+
+	ehloHost := "mailer.krea.edu.in"
+	if route.EHLOHostname != "" && !strings.HasSuffix(route.EHLOHostname, ".local") {
+		ehloHost = route.EHLOHostname
+	}
+
 	hygieneParams := HygieneParams{
 		TenantID:      rcpt.TenantID,
 		StreamName:    streamName,
 		SendingDomain: domainName,
-		PlatformHost:  w.cfg.PlatformHost,
-		BounceDomain:  w.cfg.BounceDomain,
+		PlatformHost:  ehloHost,
+		BounceDomain:  bounceHost,
 		RecipientID:   rcpt.ID,
 		RecipientAddr: rcpt.Address,
 		VERPToken:     verpToken,
@@ -239,26 +255,30 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 	// 10. DKIM Signing (§15 step 10)
 	finalMIME := sanitizedMIME
 	dkimKey, err := w.repo.GetActiveDKIMKey(ctx, msg.DomainID)
-	if err == nil && dkimKey != nil {
-		signedMIME, err := crypto.SignDKIM(sanitizedMIME, domainName, dkimKey.Selector, dkimKey.EncryptedPrivateKey)
+	if err == nil && dkimKey != nil && dkimKey.EncryptedPrivateKey != "" {
+		privKeyPEM := dkimKey.EncryptedPrivateKey
+		if !strings.HasPrefix(strings.TrimSpace(privKeyPEM), "-----BEGIN") && w.encryption != nil {
+			if tKey, tErr := w.repo.GetActiveTenantKey(ctx, msg.TenantID); tErr == nil && tKey != nil {
+				if dek, dErr := w.encryption.DecryptDEK(tKey.EncryptedDEK); dErr == nil {
+					if dec, sErr := crypto.DecryptSecret(dek, privKeyPEM); sErr == nil {
+						privKeyPEM = string(dec)
+					}
+				}
+			}
+		}
+		signedMIME, err := crypto.SignDKIM(sanitizedMIME, domainName, dkimKey.Selector, privKeyPEM)
 		if err == nil {
 			finalMIME = signedMIME
 		}
 	}
 
 	// 11. Prepare Delivery Request
-	bounceHost := w.cfg.BounceDomain
-	if bounceHost == "" {
-		bounceHost = domainName
-	}
-	returnPath := fmt.Sprintf("bounce+%s@%s", verpToken, bounceHost)
-
 	delReq := &DeliveryRequest{
 		RecipientID:   rcpt.ID,
 		RecipientAddr: rcpt.Address,
 		ReturnPath:    returnPath,
 		MIMEData:      finalMIME,
-		EHLOHostname:  route.EHLOHostname,
+		EHLOHostname:  ehloHost,
 		SourceIP:      route.SourceIP,
 		TLSPolicy:     "opportunistic",
 	}

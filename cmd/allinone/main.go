@@ -55,8 +55,14 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 	if smtpAddr == "" {
 		smtpAddr = ":2525"
 	}
+	platformHost := os.Getenv("MVX_PLATFORM_HOST")
+	if platformHost == "" {
+		platformHost = "mailer.krea.edu.in"
+	}
+	bounceDomain := os.Getenv("MVX_BOUNCE_DOMAIN")
+
 	smtpBackend := smtp.NewBackend(repo, ingestEngine)
-	smtpServer := smtp.NewServer(smtpAddr, "mailvex.local", smtpBackend)
+	smtpServer := smtp.NewServer(smtpAddr, platformHost, smtpBackend)
 
 	// Outbound Delivery Worker
 	router := worker.NewRouter(repo, "homelab-node")
@@ -66,12 +72,13 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 
 	workerCfg := worker.WorkerConfig{
 		NodeID:        "homelab-node",
-		PlatformHost:  "mailvex.local",
-		BounceDomain:  "bounce.mailvex.local",
+		PlatformHost:  platformHost,
+		BounceDomain:  bounceDomain,
 		DefaultPort:   25,
 		ShutdownGrace: 10 * time.Second,
 	}
 	deliveryWorker := worker.NewDeliveryWorker(repo, store, router, resolver, classifier, workerCfg)
+	deliveryWorker.SetEncryption(enc)
 
 	// Pre-seed default platform administrator credentials for immediate access
 	adminEmail := os.Getenv("ADMIN_EMAIL")
@@ -103,6 +110,18 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
 	})
+	if dek, err := enc.GenerateDEK(); err == nil {
+		if encDEK, err := enc.EncryptDEK(dek); err == nil {
+			_ = repo.SaveTenantKey(context.Background(), &domain.TenantKey{
+				ID:           crypto.NewULID(crypto.PrefixAPIKey),
+				TenantID:     tenantID,
+				KeyVersion:   1,
+				EncryptedDEK: encDEK,
+				KEKVersion:   "v1",
+				CreatedAt:    time.Now().UTC(),
+			})
+		}
+	}
 	adminHash, _ := crypto.HashPassword(adminPass)
 	adminUser := &domain.User{
 		ID:              "user_platform_admin",
