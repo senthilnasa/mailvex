@@ -14,6 +14,7 @@ import (
 
 type CreateExportRequest struct {
 	Format      string  `json:"format"` // csv
+	Range       string  `json:"range,omitempty"`
 	From        *string `json:"from,omitempty"`
 	To          *string `json:"to,omitempty"`
 	StreamID    *string `json:"stream_id,omitempty"`
@@ -34,6 +35,24 @@ func parseAnalyticsFilter(r *http.Request) domain.AnalyticsFilter {
 	if toStr := q.Get("to"); toStr != "" {
 		if t, err := time.Parse(time.RFC3339, toStr); err == nil {
 			filter.To = &t
+		}
+	}
+	if filter.From == nil {
+		rangeParam := q.Get("range")
+		now := time.Now().UTC()
+		switch rangeParam {
+		case "24h":
+			from := now.Add(-24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
+		case "7d":
+			from := now.Add(-7 * 24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
+		case "30d":
+			from := now.Add(-30 * 24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
 		}
 	}
 	if sID := q.Get("stream_id"); sID != "" {
@@ -174,6 +193,23 @@ func (a *API) CreateAnalyticsExportHandler(w http.ResponseWriter, r *http.Reques
 	if req.To != nil {
 		if t, err := time.Parse(time.RFC3339, *req.To); err == nil {
 			filter.To = &t
+		}
+	}
+	if filter.From == nil && req.Range != "" {
+		now := time.Now().UTC()
+		switch req.Range {
+		case "24h":
+			from := now.Add(-24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
+		case "7d":
+			from := now.Add(-7 * 24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
+		case "30d":
+			from := now.Add(-30 * 24 * time.Hour)
+			filter.From = &from
+			filter.To = &now
 		}
 	}
 

@@ -142,38 +142,66 @@ interface PostmasterSnapshotItem {
 }
 
 interface AnalyticsSummary {
-  period_start: string
-  period_end: string
+  period_start?: string
+  period_end?: string
+  sent: number
+  delivered: number
+  bounced_hard: number
+  bounced_soft: number
+  deferred?: number
+  complained: number
+  opened_unique?: number
+  opened_total?: number
+  clicked_unique?: number
+  clicked_total?: number
+  unsubscribed: number
+  delivery_rate: number
+  bounce_rate: number
+  hard_bounce_rate?: number
+  complaint_rate: number
+  open_rate?: number
+  click_rate?: number
+  unsubscribe_rate: number
+  complaint_warning: boolean
+  median_latency_seconds?: number
+  p95_latency_seconds?: number
   sent_count: number
   delivered_count: number
-  delivery_rate: number
   hard_bounce_count: number
   soft_bounce_count: number
-  bounce_rate: number
   complaint_count: number
-  complaint_rate: number
-  complaint_warning: boolean
   unsubscribe_count: number
-  unsubscribe_rate: number
-  median_latency_seconds: number
-  p95_latency_seconds: number
 }
 
 interface ProviderBreakdownItem {
   provider: string
+  sent: number
+  delivered: number
+  bounced: number
+  complained: number
+  delivery_rate: number
+  bounce_rate?: number
+  complaint_rate: number
   sent_count: number
   delivered_count: number
   bounce_count: number
   complaint_count: number
-  delivery_rate: number
-  bounce_rate: number
-  complaint_rate: number
 }
 
 interface LatencyHistogramItem {
   bucket: string
   count: number
   percentage: number
+}
+
+interface AnalyticsTimeSeriesPoint {
+  timestamp: string
+  sent: number
+  delivered: number
+  bounced: number
+  complained: number
+  delivery_rate: number
+  complaint_rate: number
 }
 
 interface WebhookEndpointItem {
@@ -419,10 +447,38 @@ interface FCrDNSResult {
 
 export default function App() {
   const [setupCompleted, setSetupCompleted] = useState<boolean | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [tenants, setTenants] = useState<Tenant[]>([])
-  const [activeTenant, setActiveTenant] = useState<Tenant | null>(null)
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance' | 'platform_admin'>('dashboard')
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('mvx_user')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  const [tenants, setTenants] = useState<Tenant[]>(() => {
+    try {
+      const saved = localStorage.getItem('mvx_tenants')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [activeTenant, setActiveTenant] = useState<Tenant | null>(() => {
+    try {
+      const saved = localStorage.getItem('mvx_active_tenant')
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  })
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance' | 'platform_admin'>(() => {
+    try {
+      const saved = localStorage.getItem('mvx_current_tab')
+      return (saved as any) || 'dashboard'
+    } catch {
+      return 'dashboard'
+    }
+  })
 
   // Platform Admin Center state
   const [adminActiveSubTab, setAdminActiveSubTab] = useState<'overview' | 'tenants' | 'health' | 'audit'>('overview')
@@ -489,6 +545,7 @@ export default function App() {
   const [analyticsSummary, setAnalyticsSummary] = useState<AnalyticsSummary | null>(null)
   const [analyticsProviders, setAnalyticsProviders] = useState<ProviderBreakdownItem[]>([])
   const [analyticsLatency, setAnalyticsLatency] = useState<LatencyHistogramItem[]>([])
+  const [analyticsTimeSeries, setAnalyticsTimeSeries] = useState<AnalyticsTimeSeriesPoint[]>([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
 
@@ -605,12 +662,91 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
 
+  const handleSignOut = () => {
+    localStorage.removeItem('mvx_user')
+    localStorage.removeItem('mvx_tenants')
+    localStorage.removeItem('mvx_active_tenant')
+    localStorage.removeItem('mvx_current_tab')
+    setUser(null)
+    setTenants([])
+    setActiveTenant(null)
+    setCurrentTab('dashboard')
+  }
+
   useEffect(() => {
     fetch('/v1/setup')
       .then((res) => res.json())
       .then((data) => setSetupCompleted(data.setup_completed))
       .catch(() => setSetupCompleted(false))
+
+    // Rehydrate & verify session from localStorage
+    const savedUser = localStorage.getItem('mvx_user')
+    const savedTenant = localStorage.getItem('mvx_active_tenant')
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser)
+        const parsedTenant = savedTenant ? JSON.parse(savedTenant) : null
+        fetch('/v1/auth/me', {
+          headers: {
+            'X-User-ID': parsedUser.id,
+            'X-Tenant-ID': parsedTenant?.id || 'tenant_default',
+          },
+        })
+          .then((res) => {
+            if (res.ok) {
+              return res.json().then((d) => {
+                if (d.user) {
+                  setUser(d.user)
+                  localStorage.setItem('mvx_user', JSON.stringify(d.user))
+                }
+                if (d.available_tenants) {
+                  setTenants(d.available_tenants)
+                  localStorage.setItem('mvx_tenants', JSON.stringify(d.available_tenants))
+                  if (!parsedTenant || !d.available_tenants.some((t: Tenant) => t.id === parsedTenant.id)) {
+                    if (d.available_tenants.length > 0) {
+                      setActiveTenant(d.available_tenants[0])
+                      localStorage.setItem('mvx_active_tenant', JSON.stringify(d.available_tenants[0]))
+                    }
+                  }
+                }
+              })
+            } else if (res.status === 401) {
+              handleSignOut()
+            }
+          })
+          .catch(() => {
+            // Keep existing session on network error
+          })
+      } catch {
+        handleSignOut()
+      }
+    }
   }, [])
+
+  // Sync state changes to localStorage
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('mvx_user', JSON.stringify(user))
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (tenants && tenants.length > 0) {
+      localStorage.setItem('mvx_tenants', JSON.stringify(tenants))
+    }
+  }, [tenants])
+
+  useEffect(() => {
+    if (activeTenant) {
+      localStorage.setItem('mvx_active_tenant', JSON.stringify(activeTenant))
+    }
+  }, [activeTenant])
+
+  useEffect(() => {
+    if (currentTab) {
+      localStorage.setItem('mvx_current_tab', currentTab)
+    }
+  }, [currentTab])
 
   useEffect(() => {
     if (activeTenant && user) {
@@ -1638,7 +1774,8 @@ export default function App() {
     setAnalyticsLoading(true)
     try {
       const q = `?range=${analyticsRange}`
-      const [overviewRes, providersRes, latencyRes] = await Promise.all([
+      const interval = analyticsRange === '30d' ? '1d' : '1h'
+      const [overviewRes, providersRes, latencyRes, tsRes] = await Promise.all([
         fetch(`/v1/analytics/overview${q}`, {
           headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
         }),
@@ -1648,19 +1785,78 @@ export default function App() {
         fetch(`/v1/analytics/latency${q}`, {
           headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
         }),
+        fetch(`/v1/analytics/time-series?interval=${interval}&range=${analyticsRange}`, {
+          headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        }),
       ])
 
       if (overviewRes.ok) {
         const data = await overviewRes.json()
-        setAnalyticsSummary(data)
+        setAnalyticsSummary({
+          ...data,
+          sent: data.sent ?? 0,
+          delivered: data.delivered ?? 0,
+          bounced_hard: data.bounced_hard ?? 0,
+          bounced_soft: data.bounced_soft ?? 0,
+          complained: data.complained ?? 0,
+          unsubscribed: data.unsubscribed ?? 0,
+          sent_count: data.sent ?? data.sent_count ?? 0,
+          delivered_count: data.delivered ?? data.delivered_count ?? 0,
+          hard_bounce_count: data.bounced_hard ?? data.hard_bounce_count ?? 0,
+          soft_bounce_count: data.bounced_soft ?? data.soft_bounce_count ?? 0,
+          complaint_count: data.complained ?? data.complaint_count ?? 0,
+          unsubscribe_count: data.unsubscribed ?? data.unsubscribe_count ?? 0,
+          delivery_rate: data.delivery_rate ?? 0,
+          bounce_rate: data.bounce_rate ?? 0,
+          complaint_rate: data.complaint_rate ?? 0,
+          unsubscribe_rate: data.unsubscribe_rate ?? 0,
+          complaint_warning: !!data.complaint_warning,
+          median_latency_seconds: data.median_latency_seconds ?? 0,
+          p95_latency_seconds: data.p95_latency_seconds ?? 0,
+        })
       }
       if (providersRes.ok) {
         const data = await providersRes.json()
-        setAnalyticsProviders(data.data || [])
+        const rawList = Array.isArray(data) ? data : (data.data || [])
+        const mapped = rawList.map((p: any) => ({
+          provider: p.provider || 'unknown',
+          sent: p.sent ?? p.sent_count ?? 0,
+          delivered: p.delivered ?? p.delivered_count ?? 0,
+          bounced: p.bounced ?? p.bounce_count ?? 0,
+          complained: p.complained ?? p.complaint_count ?? 0,
+          sent_count: p.sent ?? p.sent_count ?? 0,
+          delivered_count: p.delivered ?? p.delivered_count ?? 0,
+          bounce_count: p.bounced ?? p.bounce_count ?? 0,
+          complaint_count: p.complained ?? p.complaint_count ?? 0,
+          delivery_rate: p.delivery_rate ?? 0,
+          bounce_rate: p.bounce_rate ?? (p.sent > 0 ? (p.bounced ?? 0) / p.sent : 0),
+          complaint_rate: p.complaint_rate ?? 0,
+        }))
+        setAnalyticsProviders(mapped)
       }
       if (latencyRes.ok) {
         const data = await latencyRes.json()
-        setAnalyticsLatency(data.data || [])
+        const u5 = data.under_5s || 0
+        const u30 = data.under_30s || 0
+        const u1m = data.under_1m || 0
+        const u5m = data.under_5m || 0
+        const u15m = data.under_15m || 0
+        const o15m = data.over_15m || 0
+        const total = u5 + u30 + u1m + u5m + u15m + o15m
+
+        const hist: LatencyHistogramItem[] = [
+          { bucket: '< 5 seconds', count: u5, percentage: total > 0 ? (u5 / total) * 100 : 0 },
+          { bucket: '5 - 30 seconds', count: u30, percentage: total > 0 ? (u30 / total) * 100 : 0 },
+          { bucket: '30s - 1 minute', count: u1m, percentage: total > 0 ? (u1m / total) * 100 : 0 },
+          { bucket: '1 - 5 minutes', count: u5m, percentage: total > 0 ? (u5m / total) * 100 : 0 },
+          { bucket: '5 - 15 minutes', count: u15m, percentage: total > 0 ? (u15m / total) * 100 : 0 },
+          { bucket: '> 15 minutes', count: o15m, percentage: total > 0 ? (o15m / total) * 100 : 0 },
+        ]
+        setAnalyticsLatency(hist)
+      }
+      if (tsRes.ok) {
+        const data = await tsRes.json()
+        setAnalyticsTimeSeries(data.data || [])
       }
     } catch {}
     finally {
@@ -1679,11 +1875,12 @@ export default function App() {
           'X-User-ID': user.id,
           'X-Tenant-ID': activeTenant.id,
         },
-        body: JSON.stringify({ range: analyticsRange }),
+        body: JSON.stringify({ range: analyticsRange, format: 'csv' }),
       })
       const data = await res.json()
-      if (res.ok && data.export?.id) {
-        window.open(`/v1/analytics/exports/${data.export.id}/download`, '_blank')
+      const exportId = data.id || data.export?.id
+      if (res.ok && exportId) {
+        window.open(`/v1/analytics/exports/${exportId}/download`, '_blank')
       } else {
         alert(data.error?.message || 'Failed to generate export')
       }
@@ -2150,9 +2347,13 @@ export default function App() {
       }
 
       setUser(data.user)
-      setTenants(data.tenants || [])
-      if (data.tenants && data.tenants.length > 0) {
-        setActiveTenant(data.tenants[0])
+      localStorage.setItem('mvx_user', JSON.stringify(data.user))
+      const tList = data.tenants || []
+      setTenants(tList)
+      localStorage.setItem('mvx_tenants', JSON.stringify(tList))
+      if (tList.length > 0) {
+        setActiveTenant(tList[0])
+        localStorage.setItem('mvx_active_tenant', JSON.stringify(tList[0]))
       }
     } catch (err: any) {
       setLoginError(err.message)
@@ -2556,7 +2757,7 @@ export default function App() {
           </div>
 
           <button
-            onClick={() => setUser(null)}
+            onClick={handleSignOut}
             className="flex items-center space-x-1 text-xs text-slate-400 hover:text-rose-400 p-2 rounded-xl hover:bg-rose-500/10 transition border border-transparent hover:border-rose-500/20"
             title="Sign Out"
           >
@@ -4137,7 +4338,16 @@ export default function App() {
                     )}
                   </div>
 
-                  <div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={loadAnalytics}
+                      disabled={analyticsLoading}
+                      className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors flex items-center space-x-1.5 border border-slate-700 disabled:opacity-50"
+                      title="Refresh analytics metrics"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin text-indigo-400' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
                     <button
                       onClick={handleExportCSV}
                       disabled={exportLoading}
@@ -4155,7 +4365,7 @@ export default function App() {
                     <div>
                       <div className="font-semibold text-sm text-red-300">Google &amp; Yahoo Deliverability Warning: Complaint Rate Exceeded 0.10%</div>
                       <p className="text-xs text-red-300/80 mt-1">
-                        Current tenant complaint rate is {(analyticsSummary.complaint_rate * 100).toFixed(3)}%. Mailbox providers will defer or spam-folder messages if complaint rate approaches or exceeds 0.30%. Review unverified lists and enforce immediate suppression.
+                        Current tenant complaint rate is {((analyticsSummary.complaint_rate || 0) * 100).toFixed(3)}%. Mailbox providers will defer or spam-folder messages if complaint rate approaches or exceeds 0.30%. Review unverified lists and enforce immediate suppression.
                       </p>
                     </div>
                   </div>
@@ -4166,7 +4376,7 @@ export default function App() {
                   <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
                     <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Sent</div>
                     <div className="text-2xl font-bold text-white mt-2">
-                      {analyticsSummary?.sent_count?.toLocaleString() || 0}
+                      {(analyticsSummary?.sent ?? analyticsSummary?.sent_count ?? 0).toLocaleString()}
                     </div>
                     <div className="text-xs text-slate-500 mt-1">Outbound messages</div>
                   </div>
@@ -4177,7 +4387,7 @@ export default function App() {
                       {((analyticsSummary?.delivery_rate || 0) * 100).toFixed(2)}%
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      {analyticsSummary?.delivered_count?.toLocaleString() || 0} delivered
+                      {(analyticsSummary?.delivered ?? analyticsSummary?.delivered_count ?? 0).toLocaleString()} delivered
                     </div>
                   </div>
 
@@ -4187,7 +4397,7 @@ export default function App() {
                       {((analyticsSummary?.bounce_rate || 0) * 100).toFixed(2)}%
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      {analyticsSummary?.hard_bounce_count || 0} hard / {analyticsSummary?.soft_bounce_count || 0} soft
+                      {(analyticsSummary?.bounced_hard ?? analyticsSummary?.hard_bounce_count ?? 0)} hard / {(analyticsSummary?.bounced_soft ?? analyticsSummary?.soft_bounce_count ?? 0)} soft
                     </div>
                   </div>
 
@@ -4197,7 +4407,7 @@ export default function App() {
                       {((analyticsSummary?.complaint_rate || 0) * 100).toFixed(3)}%
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      {analyticsSummary?.complaint_count || 0} spam reports
+                      {(analyticsSummary?.complained ?? analyticsSummary?.complaint_count ?? 0)} spam reports
                     </div>
                   </div>
                 </div>
@@ -4209,13 +4419,17 @@ export default function App() {
                     <div className="flex items-baseline space-x-4 mt-2">
                       <div>
                         <span className="text-xl font-bold text-indigo-400">
-                          {analyticsSummary ? `${analyticsSummary.median_latency_seconds.toFixed(2)}s` : '—'}
+                          {analyticsSummary && (analyticsSummary.median_latency_seconds ?? 0) > 0
+                            ? `${analyticsSummary.median_latency_seconds!.toFixed(2)}s`
+                            : '< 1s'}
                         </span>
                         <span className="text-xs text-slate-500 ml-1">Median (p50)</span>
                       </div>
                       <div>
                         <span className="text-xl font-bold text-sky-400">
-                          {analyticsSummary ? `${analyticsSummary.p95_latency_seconds.toFixed(2)}s` : '—'}
+                          {analyticsSummary && (analyticsSummary.p95_latency_seconds ?? 0) > 0
+                            ? `${analyticsSummary.p95_latency_seconds!.toFixed(2)}s`
+                            : '< 2s'}
                         </span>
                         <span className="text-xs text-slate-500 ml-1">p95 Tail</span>
                       </div>
@@ -4236,7 +4450,7 @@ export default function App() {
                       </div>
                       <div>
                         <span className="text-xl font-bold text-white">
-                          {analyticsSummary?.unsubscribe_count || 0}
+                          {analyticsSummary?.unsubscribed ?? analyticsSummary?.unsubscribe_count ?? 0}
                         </span>
                         <span className="text-xs text-slate-500 ml-1">Total Opt-Outs</span>
                       </div>
@@ -4245,6 +4459,59 @@ export default function App() {
                       One-click RFC 8058 and mailto opt-outs.
                     </div>
                   </div>
+                </div>
+
+                {/* Outbound Traffic Volume Trends */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                  <div className="border-b border-slate-800 pb-4 mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">Outbound Traffic Volume &amp; Trends</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Chronological delivery volume and deliverability performance by time bucket.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
+                      {analyticsRange === '30d' ? 'Daily Resolution' : 'Hourly Resolution'}
+                    </span>
+                  </div>
+                  {analyticsTimeSeries.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 text-xs">
+                      No time-series data recorded for this window. Outbound SMTP and API dispatches will appear here.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm text-slate-300">
+                        <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+                          <tr>
+                            <th className="px-4 py-2.5">Time Bucket</th>
+                            <th className="px-4 py-2.5">Sent</th>
+                            <th className="px-4 py-2.5">Delivered</th>
+                            <th className="px-4 py-2.5">Bounced</th>
+                            <th className="px-4 py-2.5">Complained</th>
+                            <th className="px-4 py-2.5">Delivery Rate</th>
+                            <th className="px-4 py-2.5">Complaint Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 font-mono text-xs">
+                          {analyticsTimeSeries.map((point) => (
+                            <tr key={point.timestamp} className="hover:bg-slate-800/40">
+                              <td className="px-4 py-2.5 text-slate-300 font-sans">{new Date(point.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                              <td className="px-4 py-2.5 text-white font-bold">{point.sent.toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-emerald-400">{point.delivered.toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-rose-400">{point.bounced.toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-amber-400">{point.complained.toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-slate-200">{(point.delivery_rate * 100).toFixed(1)}%</td>
+                              <td className="px-4 py-2.5">
+                                <span className={point.complaint_rate >= 0.001 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                                  {(point.complaint_rate * 100).toFixed(3)}%
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 {/* Latency Distribution Histogram */}
@@ -4263,12 +4530,12 @@ export default function App() {
                         <div key={item.bucket} className="space-y-1">
                           <div className="flex justify-between text-xs text-slate-300">
                             <span className="font-mono">{item.bucket}</span>
-                            <span>{item.count} msgs ({item.percentage.toFixed(1)}%)</span>
+                            <span>{item.count} msgs ({(item.percentage || 0).toFixed(1)}%)</span>
                           </div>
                           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                             <div
                               className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${Math.min(100, Math.max(item.percentage > 0 ? 3 : 0, item.percentage))}%` }}
+                              style={{ width: `${Math.min(100, Math.max((item.percentage || 0) > 0 ? 3 : 0, item.percentage || 0))}%` }}
                             />
                           </div>
                         </div>
@@ -4311,15 +4578,15 @@ export default function App() {
                           analyticsProviders.map((p) => (
                             <tr key={p.provider} className="hover:bg-slate-800/40">
                               <td className="px-6 py-4 font-semibold text-white capitalize">{p.provider}</td>
-                              <td className="px-6 py-4 text-slate-300 font-mono text-xs">{p.sent_count.toLocaleString()}</td>
-                              <td className="px-6 py-4 text-emerald-400 font-mono text-xs">{p.delivered_count.toLocaleString()}</td>
-                              <td className="px-6 py-4 text-slate-200">{(p.delivery_rate * 100).toFixed(1)}%</td>
-                              <td className="px-6 py-4 text-rose-400 font-mono text-xs">{p.bounce_count}</td>
-                              <td className="px-6 py-4 text-slate-200">{(p.bounce_rate * 100).toFixed(2)}%</td>
-                              <td className="px-6 py-4 text-amber-400 font-mono text-xs">{p.complaint_count}</td>
+                              <td className="px-6 py-4 text-slate-300 font-mono text-xs">{(p.sent ?? p.sent_count ?? 0).toLocaleString()}</td>
+                              <td className="px-6 py-4 text-emerald-400 font-mono text-xs">{(p.delivered ?? p.delivered_count ?? 0).toLocaleString()}</td>
+                              <td className="px-6 py-4 text-slate-200">{((p.delivery_rate || 0) * 100).toFixed(1)}%</td>
+                              <td className="px-6 py-4 text-rose-400 font-mono text-xs">{p.bounced ?? p.bounce_count ?? 0}</td>
+                              <td className="px-6 py-4 text-slate-200">{((p.bounce_rate || 0) * 100).toFixed(2)}%</td>
+                              <td className="px-6 py-4 text-amber-400 font-mono text-xs">{p.complained ?? p.complaint_count ?? 0}</td>
                               <td className="px-6 py-4 font-semibold">
-                                <span className={p.complaint_rate >= 0.001 ? 'text-red-400' : 'text-slate-300'}>
-                                  {(p.complaint_rate * 100).toFixed(3)}%
+                                <span className={(p.complaint_rate || 0) >= 0.001 ? 'text-red-400' : 'text-slate-300'}>
+                                  {((p.complaint_rate || 0) * 100).toFixed(3)}%
                                 </span>
                               </td>
                             </tr>
