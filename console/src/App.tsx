@@ -33,7 +33,10 @@ import {
   PlusCircle,
   CheckCircle2,
   AlertTriangle,
-  ChevronRight
+  ChevronRight,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react'
 
 interface Tenant {
@@ -479,6 +482,40 @@ export default function App() {
       return 'dashboard'
     }
   })
+
+  // Frosted Glassmorphism Theme System (Light / System / Dark)
+  const [theme, setTheme] = useState<'light' | 'system' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('app_theme')
+      return (saved as any) || 'system'
+    } catch {
+      return 'system'
+    }
+  })
+
+  useEffect(() => {
+    const applyTheme = (t: 'light' | 'system' | 'dark') => {
+      localStorage.setItem('app_theme', t)
+      const isDark =
+        t === 'dark' ||
+        (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      if (isDark) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    }
+    applyTheme(theme)
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const listener = () => {
+      if (theme === 'system') {
+        applyTheme('system')
+      }
+    }
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
+  }, [theme])
 
   // Platform Admin Center state
   const [adminActiveSubTab, setAdminActiveSubTab] = useState<'overview' | 'tenants' | 'health' | 'audit'>('overview')
@@ -2583,59 +2620,86 @@ export default function App() {
   // 2. Modern Enterprise Login View
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.15),rgba(255,255,255,0))] text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.15),rgba(255,255,255,0))] dark:bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.18),rgba(2,6,23,0))] text-slate-800 dark:text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
+        {/* Floating Theme Switcher */}
+        <div className="absolute top-6 right-6">
+          <div className="inline-flex items-center p-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs shadow-xs">
+            <button
+              onClick={() => setTheme('light')}
+              className={`p-1.5 rounded-lg transition ${theme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="Light Mode"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('system')}
+              className={`p-1.5 rounded-lg transition ${theme === 'system' ? 'bg-white dark:bg-slate-700 text-sky-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="System Match"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'bg-slate-700 text-sky-400 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="Dark Mode"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-xl shadow-indigo-500/30 ring-1 ring-white/20 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 rounded-2xl shadow-glow text-white ring-1 ring-white/30 mb-4 transition-transform hover:scale-105">
             <Zap className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
             Mailvex Console
           </h1>
-          <p className="mt-2 text-xs text-slate-400">
-            Sign in to manage carrier-grade email deliverability and tenants
+          <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Carrier-Grade Email Deliverability &amp; Tenant Operations
           </p>
         </div>
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-slate-900/90 backdrop-blur-xl py-8 px-6 shadow-2xl border border-slate-800/80 rounded-2xl sm:px-10">
+          <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl py-8 px-6 shadow-glass dark:shadow-glass-dark border border-white/60 dark:border-slate-800/80 rounded-2xl sm:px-10">
             {loginError && (
-              <div className="mb-6 bg-rose-950/60 border border-rose-500/60 text-rose-300 text-xs p-3.5 rounded-xl flex items-center space-x-2.5">
-                <ShieldAlert className="w-4 h-4 flex-shrink-0 text-rose-400" />
-                <span>{loginError}</span>
+              <div className="mb-6 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs p-3.5 rounded-xl flex items-center space-x-2.5">
+                <ShieldAlert className="w-4 h-4 flex-shrink-0 text-rose-500" />
+                <span className="font-medium">{loginError}</span>
               </div>
             )}
 
             <form className="space-y-4" onSubmit={handleLogin}>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                   <input
                     type="email"
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="admin@mailvex.local"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                    placeholder="admin@example.com"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 backdrop-blur-md transition-all shadow-xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                   <input
                     type="password"
                     required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-700/80 bg-slate-950/60 text-slate-100 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 outline-none transition"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 backdrop-blur-md transition-all shadow-xs"
                   />
                 </div>
               </div>
@@ -2644,7 +2708,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl font-semibold text-xs tracking-wide uppercase text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-xl shadow-indigo-600/25 ring-1 ring-white/10 transition-all disabled:opacity-50"
+                  className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl font-semibold text-xs tracking-wide uppercase text-white bg-gradient-to-r from-sky-500 via-indigo-600 to-purple-600 hover:from-sky-400 hover:to-indigo-500 shadow-md shadow-sky-500/25 ring-1 ring-white/10 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                 >
                   {loginLoading ? (
                     <>
@@ -2665,44 +2729,44 @@ export default function App() {
 
   // 3. Authenticated Dashboard Shell
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Header Navigation */}
-      <header className="bg-slate-900/90 backdrop-blur-xl border-b border-slate-800/80 px-6 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-lg shadow-black/20">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.08),rgba(255,255,255,0))] dark:bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.12),rgba(2,6,23,0))] text-slate-800 dark:text-slate-100 flex flex-col">
+      {/* Top Header Navigation (Frosted Glassmorphism) */}
+      <header className="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 px-6 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-xs dark:shadow-black/20">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
+            <div className="w-8 h-8 bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-sky-500/25 ring-1 ring-white/30">
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent leading-none">Mailvex</span>
-              <span className="text-[10px] text-indigo-400 font-mono tracking-wider font-semibold">ENTERPRISE MTA</span>
+              <span className="text-base font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 dark:from-white dark:via-slate-100 dark:to-slate-400 bg-clip-text text-transparent leading-none">Mailvex</span>
+              <span className="text-[10px] text-sky-600 dark:text-sky-400 font-mono tracking-wider font-bold">ENTERPRISE MTA</span>
             </div>
           </div>
 
-          <div className="h-5 w-px bg-slate-800 hidden sm:block"></div>
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
 
           {/* Tenant Switcher with Environment Badge */}
           <div className="relative inline-flex items-center">
-            <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800/90 rounded-xl px-2.5 py-1.5 focus-within:border-indigo-500/60 transition shadow-inner">
-              <Layers className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+            <div className="flex items-center space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/90 rounded-xl px-2.5 py-1.5 focus-within:border-sky-500/60 transition backdrop-blur-md shadow-xs">
+              <Layers className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
               <select
                 value={activeTenant?.id || ''}
                 onChange={(e) => {
                   const selected = tenants.find((t) => t.id === e.target.value)
                   if (selected) setActiveTenant(selected)
                 }}
-                className="bg-transparent text-slate-200 text-xs font-medium focus:outline-none cursor-pointer pr-2"
+                className="bg-transparent text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer pr-2"
               >
                 {tenants.map((t) => (
-                  <option key={t.id} value={t.id} className="bg-slate-900 text-slate-200">
+                  <option key={t.id} value={t.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                     {t.name} ({t.slug})
                   </option>
                 ))}
               </select>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${
                 activeTenant?.environment === 'live'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
               }`}>
                 {activeTenant?.environment || 'LIVE'}
               </span>
@@ -2712,10 +2776,38 @@ export default function App() {
 
         {/* Global Cluster Status & User Controls */}
         <div className="flex items-center space-x-3">
-          {/* Live Cluster Health Pill */}
-          <div className="hidden md:flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="font-medium text-[11px]">Cluster 100% Operational</span>
+          {/* Active Live Session Banner (Pulsing Monitor) */}
+          <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold backdrop-blur-md">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px]">System Live &amp; Operational</span>
+          </div>
+
+          {/* 3-Mode Theme Toggle (Light / System / Dark) */}
+          <div className="inline-flex items-center p-1 bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
+            <button
+              onClick={() => setTheme('light')}
+              className={`p-1.5 rounded-lg transition ${theme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="Light Mode"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('system')}
+              className={`p-1.5 rounded-lg transition ${theme === 'system' ? 'bg-white dark:bg-slate-700 text-sky-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="System Match"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'bg-slate-700 text-sky-400 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              title="Dark Mode"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Platform Admin Quick Tools */}
@@ -2723,10 +2815,10 @@ export default function App() {
             <>
               <button
                 onClick={() => setCurrentTab('platform_admin')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition shadow-sm ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${
                   currentTab === 'platform_admin'
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-amber-500/20'
-                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm shadow-amber-500/20'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30'
                 }`}
                 title="Open Platform Administration Hub"
               >
@@ -2736,29 +2828,29 @@ export default function App() {
 
               <button
                 onClick={() => setImpModalOpen(true)}
-                className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/80 rounded-xl transition"
+                className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-medium bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/80 rounded-xl transition"
                 title="Platform Admin: Impersonate tenant"
               >
-                <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                <Shield className="w-3.5 h-3.5 text-sky-500" />
                 <span>Impersonate</span>
               </button>
             </>
           )}
 
           {/* User Profile Chip */}
-          <div className="flex items-center space-x-2 bg-slate-950/60 border border-slate-800/80 rounded-xl py-1 pl-1.5 pr-2.5">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white text-[11px] font-bold">
+          <div className="flex items-center space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-xl py-1 pl-1.5 pr-2.5 backdrop-blur-md shadow-xs">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white text-[11px] font-bold">
               {user.email.charAt(0).toUpperCase()}
             </div>
             <div className="flex flex-col text-left">
-              <span className="text-[11px] text-slate-200 font-medium leading-none">{user.email.split('@')[0]}</span>
-              <span className="text-[9px] text-slate-400 font-mono leading-tight">{user.is_platform_admin ? 'Platform Admin' : 'Tenant User'}</span>
+              <span className="text-[11px] text-slate-800 dark:text-slate-200 font-semibold leading-none">{user.email.split('@')[0]}</span>
+              <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono leading-tight">{user.is_platform_admin ? 'Platform Admin' : 'Tenant User'}</span>
             </div>
           </div>
 
           <button
             onClick={handleSignOut}
-            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-rose-400 p-2 rounded-xl hover:bg-rose-500/10 transition border border-transparent hover:border-rose-500/20"
+            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 p-2 rounded-xl hover:bg-rose-500/10 transition border border-transparent hover:border-rose-500/20"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />
@@ -2869,39 +2961,39 @@ export default function App() {
 
       {/* Main Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Modern Categorized Sidebar */}
-        <nav className="w-64 bg-slate-900/70 backdrop-blur-xl border-r border-slate-800/80 p-3 space-y-4 overflow-y-auto flex flex-col justify-between">
+        {/* Modern Frosted Glass Sidebar */}
+        <nav className="w-64 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/80 p-3 space-y-4 overflow-y-auto flex flex-col justify-between">
           <div className="space-y-4">
             {/* Platform Admin Hub Quick Launcher (Visible only to Platform Admins) */}
             {user.is_platform_admin && (
               <div className="space-y-1">
-                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-500 dark:text-amber-400 flex items-center justify-between">
                   <span className="flex items-center space-x-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
                     <span>Platform Admin</span>
                   </span>
-                  <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] px-1.5 py-0.2 rounded font-mono">ROOT</span>
+                  <span className="bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold">ROOT</span>
                 </div>
                 <button
                   onClick={() => setCurrentTab('platform_admin')}
-                  className={`w-full text-left flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition-all ${
+                  className={`w-full text-left flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 ${
                     currentTab === 'platform_admin'
-                      ? 'bg-gradient-to-r from-amber-500/20 via-indigo-600/20 to-violet-600/10 text-amber-300 border border-amber-500/40 shadow-md shadow-amber-500/10'
-                      : 'text-amber-300/80 hover:bg-amber-500/10 hover:text-amber-200 border border-amber-500/20'
+                      ? 'bg-gradient-to-r from-amber-500/20 via-indigo-600/20 to-purple-600/10 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs'
+                      : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 border border-amber-500/20'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5">
-                    <Shield className="w-4 h-4 text-amber-400" />
+                    <Shield className="w-4 h-4 text-amber-500" />
                     <span>Admin Center</span>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-amber-400/60" />
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-500/60" />
                 </button>
               </div>
             )}
 
             {/* Core Operations Group */}
             <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Core Operations
               </div>
               {[
@@ -2918,13 +3010,13 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-500/10 font-semibold'
-                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -2933,7 +3025,7 @@ export default function App() {
 
             {/* Deliverability & Safety Group */}
             <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Deliverability & Safety
               </div>
               {[
@@ -2949,13 +3041,13 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-500/10 font-semibold'
-                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -2964,7 +3056,7 @@ export default function App() {
 
             {/* Security & Infrastructure Group */}
             <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Security & Platform
               </div>
               {[
@@ -2978,13 +3070,13 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-500/10 font-semibold'
-                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -2993,22 +3085,22 @@ export default function App() {
           </div>
 
           {/* System Footer Metadata */}
-          <div className="pt-3 border-t border-slate-800/80 px-2 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 px-2 flex items-center justify-between text-[11px] text-slate-500">
             <div className="flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="font-mono text-slate-400 text-[10px]">v1.0 • MTA</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-mono text-slate-500 dark:text-slate-400 text-[10px]">v1.0 • MTA</span>
             </div>
-            <span className="text-[10px] text-indigo-400 font-semibold">Ready</span>
+            <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold">Ready</span>
           </div>
         </nav>
 
         {/* Workspace Body */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-6 sm:p-8">
           <div className="max-w-5xl mx-auto">
             {/* Top Bar */}
-            <div className="flex items-center justify-between pb-6 border-b border-slate-800/80">
+            <div className="flex items-center justify-between pb-6 border-b border-slate-200/80 dark:border-slate-800/80">
               <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">
+                <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                   {currentTab === 'dashboard' && (activeTenant?.name || 'Dashboard Overview')}
                   {currentTab === 'platform_admin' && 'Platform Administration & Fleet Control'}
                   {currentTab === 'domains' && 'Domains & DNS Configuration'}
@@ -3044,20 +3136,20 @@ export default function App() {
             {currentTab === 'dashboard' && (
               <div className="space-y-6 mt-6">
                 {/* Hero Greeting Banner */}
-                <div className="bg-gradient-to-r from-slate-900/90 via-indigo-950/40 to-slate-900/90 border border-slate-800/90 rounded-2xl p-6 relative overflow-hidden shadow-xl">
-                  <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+                <div className="bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 dark:from-slate-900/90 dark:via-indigo-950/40 dark:to-slate-900/90 border border-sky-500/20 dark:border-slate-800/90 rounded-2xl p-6 relative overflow-hidden backdrop-blur-xl shadow-glass dark:shadow-glass-dark">
+                  <div className="absolute right-0 top-0 w-96 h-96 bg-sky-500/15 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
                     <div>
                       <div className="flex items-center space-x-2 mb-2">
-                        <span className="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full">
+                        <span className="px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase bg-sky-500/10 text-sky-600 dark:text-sky-300 border border-sky-500/20 rounded-full">
                           Enterprise MTA Hub
                         </span>
-                        <span className="text-xs text-slate-400">• Node: homelab-node</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">• Node: homelab-node</span>
                       </div>
-                      <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                      <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                         {user.is_platform_admin ? 'Platform Admin Control Console' : `${activeTenant?.name || 'Mailvex'} Dashboard`}
                       </h2>
-                      <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-xl leading-relaxed font-medium">
                         High-throughput email delivery infrastructure with multi-tenant isolation, automated DKIM/SPF rotation, envelope encryption, and real-time deliverability telemetry.
                       </p>
                     </div>
@@ -3065,24 +3157,24 @@ export default function App() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setCurrentTab('domains')}
-                        className="flex items-center space-x-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition"
+                        className="btn-gradient text-xs px-4 py-2"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Add Domain</span>
                       </button>
                       <button
                         onClick={() => setCurrentTab('apikeys')}
-                        className="flex items-center space-x-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition"
+                        className="btn-secondary text-xs px-3.5 py-2"
                       >
-                        <Key className="w-4 h-4 text-indigo-400" />
+                        <Key className="w-4 h-4 text-sky-500" />
                         <span>API Keys</span>
                       </button>
                       {user.is_platform_admin && (
                         <button
                           onClick={() => setCurrentTab('platform_admin')}
-                          className="flex items-center space-x-2 px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/40 transition"
+                          className="flex items-center space-x-2 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 transition-all duration-150 hover:scale-[1.01]"
                         >
-                          <Shield className="w-4 h-4 text-amber-400" />
+                          <Shield className="w-4 h-4 text-amber-500" />
                           <span>Admin Center</span>
                         </button>
                       )}
@@ -3090,108 +3182,108 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 4 Elevated Stat Cards */}
+                {/* 4 Elevated Stat Cards (Blueprint 4.2) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/40 transition shadow-sm">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Sending Domains</span>
-                      <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Sending Domains</span>
+                      <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                         <Globe className="w-4 h-4" />
                       </div>
                     </div>
-                    <div className="text-3xl font-extrabold text-white mt-3">{domains.length}</div>
+                    <div className="text-3xl font-black text-slate-900 dark:text-white mt-3 tracking-tight">{domains.length}</div>
                     <div className="flex items-center space-x-2 mt-2 text-xs">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                      <span className="text-emerald-400 font-medium">{domains.filter((d) => d.status === 'verified').length} Verified</span>
-                      <span className="text-slate-500">•</span>
-                      <span className="text-slate-400">{domains.filter((d) => d.status === 'pending').length} Pending</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{domains.filter((d) => d.status === 'verified').length} Verified</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-500 dark:text-slate-400">{domains.filter((d) => d.status === 'pending').length} Pending</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/40 transition shadow-sm">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Message Streams</span>
-                      <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Message Streams</span>
+                      <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                         <GitFork className="w-4 h-4" />
                       </div>
                     </div>
-                    <div className="text-3xl font-extrabold text-white mt-3">{streams.length}</div>
-                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-slate-400">
-                      <span className="text-indigo-400 font-semibold">{streams.filter(s => s.type === 'transactional').length} Transactional</span>
+                    <div className="text-3xl font-black text-slate-900 dark:text-white mt-3 tracking-tight">{streams.length}</div>
+                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="text-sky-600 dark:text-sky-400 font-semibold">{streams.filter(s => s.type === 'transactional').length} Transactional</span>
                       <span>•</span>
                       <span>{streams.filter(s => s.type === 'broadcast').length} Broadcast</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/40 transition shadow-sm">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Cryptographic Guard</span>
-                      <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cryptographic Guard</span>
+                      <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
                         <Lock className="w-4 h-4" />
                       </div>
                     </div>
-                    <div className="text-3xl font-extrabold text-indigo-300 mt-3">RSA 2048</div>
-                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-emerald-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      <span className="font-medium">DKIM & DEK Active</span>
+                    <div className="text-3xl font-black text-purple-600 dark:text-purple-400 mt-3 tracking-tight">RSA 2048</div>
+                    <div className="flex items-center space-x-1.5 mt-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      <span>DKIM &amp; DEK Active</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/80 border border-slate-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/40 transition shadow-sm">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">System Readiness</span>
-                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">System Readiness</span>
+                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                         <ShieldCheck className="w-4 h-4" />
                       </div>
                     </div>
-                    <div className="text-3xl font-extrabold text-emerald-400 mt-3">100% SLA</div>
-                    <div className="text-xs text-slate-400 mt-2 flex items-center space-x-1.5">
-                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                    <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-3 tracking-tight">100% SLA</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center space-x-1.5 font-medium">
+                      <Activity className="w-3.5 h-3.5 text-emerald-500" />
                       <span>All Services Online</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Live Infrastructure Matrix Card */}
-                <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-4">
+                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl p-6 shadow-glass dark:shadow-glass-dark">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800/80 mb-4">
                     <div className="flex items-center space-x-2">
-                      <Server className="w-4 h-4 text-indigo-400" />
-                      <h3 className="text-sm font-bold text-white">Live Cluster Services Matrix</h3>
+                      <Server className="w-4 h-4 text-sky-500" />
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Live Cluster Services Matrix</h3>
                     </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Profile: homelab (All-in-One)</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">Profile: homelab (All-in-One)</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">REST API</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">:8080 Active</span>
-                      <span className="text-[10px] text-slate-500">TLS 1.3</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">REST API</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">:8080 Active</span>
+                      <span className="text-[10px] text-slate-400">TLS 1.3</span>
                     </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">SMTP Edge</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">:2525 / :25</span>
-                      <span className="text-[10px] text-slate-500">RFC 5321</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">SMTP Edge</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">:2525 / :25</span>
+                      <span className="text-[10px] text-slate-400">RFC 5321</span>
                     </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Worker</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">Direct MX</span>
-                      <span className="text-[10px] text-slate-500">Auto Relay</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">Worker</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">Direct MX</span>
+                      <span className="text-[10px] text-slate-400">Auto Relay</span>
                     </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Queue Pipeline</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">Low Latency</span>
-                      <span className="text-[10px] text-slate-500">Priority Outbox</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">Queue Pipeline</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">Low Latency</span>
+                      <span className="text-[10px] text-slate-400">Priority Outbox</span>
                     </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Database</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">MariaDB 11.4</span>
-                      <span className="text-[10px] text-slate-500">Pool Healthy</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">Database</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">MariaDB 11.4</span>
+                      <span className="text-[10px] text-slate-400">Pool Healthy</span>
                     </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-center">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold block">Master KEK</span>
-                      <span className="text-xs font-mono text-emerald-300 font-bold block mt-1">256-bit AES</span>
-                      <span className="text-[10px] text-slate-500">Envelope DEKs</span>
+                    <div className="bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 text-center">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold block">Master KEK</span>
+                      <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-1">256-bit AES</span>
+                      <span className="text-[10px] text-slate-400">Envelope DEKs</span>
                     </div>
                   </div>
                 </div>
@@ -3239,31 +3331,37 @@ export default function App() {
 
             {/* TAB: DOMAINS */}
             {currentTab === 'domains' && (
-              <div className="mt-6 space-y-8">
+              <div className="mt-6 space-y-6">
                 {/* Add Domain Form */}
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-                  <h2 className="text-lg font-semibold text-white">Add Sending Domain</h2>
-                  <form onSubmit={handleAddDomain} className="mt-4 flex gap-4">
+                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-6 rounded-2xl shadow-glass dark:shadow-glass-dark">
+                  <div className="flex items-center space-x-2 pb-4 border-b border-slate-100 dark:border-slate-800/80 mb-4">
+                    <Globe className="w-5 h-5 text-sky-500" />
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white">Add Sending Domain</h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Register new custom domain for automated DKIM, SPF, and DMARC verification</p>
+                    </div>
+                  </div>
+                  <form onSubmit={handleAddDomain} className="flex flex-col sm:flex-row gap-3">
                     <input
                       type="text"
                       required
                       placeholder="e.g. mail.yourdomain.com"
                       value={newDomainName}
                       onChange={(e) => setNewDomainName(e.target.value)}
-                      className="flex-1 px-4 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      className="flex-1 bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 backdrop-blur-md transition-all shadow-xs"
                     />
                     <select
                       value={newDomainType}
                       onChange={(e) => setNewDomainType(e.target.value)}
-                      className="px-4 py-2 border border-slate-700 bg-slate-800 text-slate-200 rounded-lg"
+                      className="bg-white/60 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 backdrop-blur-md transition-all cursor-pointer"
                     >
-                      <option value="public">Public Domain</option>
-                      <option value="local">Local Domain (Home Lab)</option>
+                      <option value="public" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Public Domain</option>
+                      <option value="local" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Local Domain (Home Lab)</option>
                     </select>
                     <button
                       type="submit"
                       disabled={addDomainLoading}
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                      className="btn-gradient text-xs px-5 py-2.5 whitespace-nowrap disabled:opacity-50"
                     >
                       {addDomainLoading ? 'Adding...' : 'Add Domain'}
                     </button>
@@ -3271,73 +3369,88 @@ export default function App() {
                 </div>
 
                 {/* Domains List */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 font-semibold text-white">
-                    Configured Domains
+                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-sky-500" />
+                      Configured Domains
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{domains.length} Total</span>
                   </div>
                   {domains.length === 0 ? (
-                    <div className="p-6 text-center text-slate-500">
+                    <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
                       No domains added yet. Add your first domain above.
                     </div>
                   ) : (
-                    <table className="w-full text-left text-sm text-slate-300">
-                      <thead className="bg-slate-950/50 text-slate-400">
-                        <tr>
-                          <th className="p-4">Domain</th>
-                          <th className="p-4">Type</th>
-                          <th className="p-4">Status</th>
-                          <th className="p-4">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {domains.map((d) => (
-                          <tr key={d.id} className="hover:bg-slate-800/40">
-                            <td className="p-4 font-medium text-white">{d.name}</td>
-                            <td className="p-4 capitalize">{d.type}</td>
-                            <td className="p-4">
-                              <span
-                                className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
-                                  d.status === 'verified'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                    : d.status === 'degraded'
-                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                                }`}
-                              >
-                                {d.status}
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              <button
-                                onClick={() => handleSelectDomain(d)}
-                                className="text-indigo-400 hover:text-indigo-300 font-medium"
-                              >
-                                View DNS Records
-                              </button>
-                            </td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                          <tr>
+                            <th className="py-3 px-4">Domain</th>
+                            <th className="py-3 px-4">Type</th>
+                            <th className="py-3 px-4">Status</th>
+                            <th className="py-3 px-4 text-right">Action</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                          {domains.map((d) => (
+                            <tr key={d.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                              <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold flex items-center justify-center text-xs">
+                                  {d.name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-mono text-xs">{d.name}</span>
+                              </td>
+                              <td className="py-3.5 px-4 capitalize text-xs">{d.type}</td>
+                              <td className="py-3.5 px-4">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border ${
+                                    d.status === 'verified'
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                      : d.status === 'degraded'
+                                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                      : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                                  }`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    d.status === 'verified' ? 'bg-emerald-500' : d.status === 'degraded' ? 'bg-amber-500' : 'bg-slate-400'
+                                  }`}></span>
+                                  {d.status}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <button
+                                  onClick={() => handleSelectDomain(d)}
+                                  className="btn-secondary text-xs"
+                                >
+                                  <span>View DNS Records</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
 
                 {/* Selected Domain Records View */}
                 {selectedDomain && (
-                  <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-                    <div className="flex items-center justify-between">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-6 rounded-2xl shadow-glass dark:shadow-glass-dark space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800/80">
                       <div>
-                        <h3 className="text-lg font-bold text-white">
-                          DNS Records for {selectedDomain.name}
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                          <span>DNS Verification Records for <code className="text-sky-600 dark:text-sky-400 font-mono text-sm">{selectedDomain.name}</code></span>
                         </h3>
-                        <p className="text-sm text-slate-400">
-                          Create these records in your DNS provider to authenticate this domain.
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Publish these TXT &amp; CNAME records in your DNS provider (Cloudflare, Route53, etc.)
                         </p>
                       </div>
                       <button
                         onClick={handleVerifyDomain}
                         disabled={verifyLoading}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                        className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
                       >
                         {verifyLoading ? 'Checking DNS...' : 'Verify DNS Now'}
                       </button>
@@ -3347,25 +3460,26 @@ export default function App() {
                       {domainRecords.map((r, i) => (
                         <div
                           key={i}
-                          className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                          className="bg-slate-50/80 dark:bg-slate-950/60 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-sky-500/30"
                         >
-                          <div className="space-y-1 overflow-hidden">
+                          <div className="space-y-1.5 overflow-hidden">
                             <div className="flex items-center space-x-2">
-                              <span className="px-2 py-0.5 bg-slate-800 text-slate-300 font-mono text-xs rounded">
+                              <span className="px-2 py-0.5 bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] rounded font-semibold">
                                 {r.record_type}
                               </span>
-                              <code className="text-sm text-indigo-300 font-mono">{r.name}</code>
+                              <code className="text-xs text-sky-600 dark:text-sky-400 font-mono font-bold">{r.name}</code>
                               <span
-                                className={`text-xs px-2 py-0.5 rounded ${
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
                                   r.status === 'pass'
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : 'bg-amber-500/10 text-amber-400'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                                 }`}
                               >
+                                <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'pass' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
                                 {r.status}
                               </span>
                             </div>
-                            <div className="text-xs text-slate-400 font-mono truncate max-w-xl">
+                            <div className="text-xs text-slate-600 dark:text-slate-400 font-mono truncate max-w-xl bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
                               {r.expected_value}
                             </div>
                           </div>
@@ -3374,7 +3488,7 @@ export default function App() {
                               navigator.clipboard.writeText(r.expected_value)
                               alert('Copied to clipboard!')
                             }}
-                            className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-colors self-start md:self-auto"
+                            className="btn-secondary text-xs px-3 py-1.5 self-start md:self-auto"
                           >
                             Copy Value
                           </button>
@@ -3388,34 +3502,39 @@ export default function App() {
 
             {/* TAB: STREAMS */}
             {currentTab === 'streams' && (
-              <div className="mt-6 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-slate-800 font-semibold text-white">
+              <div className="mt-6 bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  <GitFork className="w-4 h-4 text-sky-500" />
                   Message Streams
                 </div>
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-950/50 text-slate-400">
-                    <tr>
-                      <th className="p-4">Stream Name</th>
-                      <th className="p-4">Type</th>
-                      <th className="p-4">Default</th>
-                      <th className="p-4">Purpose</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {streams.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-800/40">
-                        <td className="p-4 font-medium text-white">{s.name}</td>
-                        <td className="p-4 capitalize">{s.type}</td>
-                        <td className="p-4">{s.is_default ? 'Yes' : 'No'}</td>
-                        <td className="p-4 text-slate-400 text-xs">
-                          {s.type === 'transactional'
-                            ? 'Receipts, password resets, alerts (Priority p1)'
-                            : 'Broadcast newsletters, marketing (RFC 8058 One-Click unsub)'}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3 px-4">Stream Name</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Default</th>
+                        <th className="py-3 px-4">Purpose</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                      {streams.map((s) => (
+                        <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">{s.name}</td>
+                          <td className="py-3.5 px-4 capitalize text-xs">
+                            <span className="badge-info">{s.type}</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-xs font-semibold">{s.is_default ? 'Yes' : 'No'}</td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 text-xs">
+                            {s.type === 'transactional'
+                              ? 'Receipts, password resets, alerts (Priority p1)'
+                              : 'Broadcast newsletters, marketing (RFC 8058 One-Click unsub)'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -4315,26 +4434,26 @@ export default function App() {
 
             {/* TAB: ANALYTICS */}
             {currentTab === 'analytics' && (
-              <div className="mt-6 space-y-8">
+              <div className="mt-6 space-y-6">
                 {/* Time range selector & Export CSV */}
-                <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-4 rounded-2xl shadow-glass dark:shadow-glass-dark">
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-semibold uppercase text-slate-400 mr-2">Time Range:</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-2">Time Range:</span>
                     {(['24h', '7d', '30d'] as const).map((r) => (
                       <button
                         key={r}
                         onClick={() => setAnalyticsRange(r)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all duration-150 ${
                           analyticsRange === r
-                            ? 'bg-indigo-600 text-white shadow'
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            ? 'bg-gradient-to-r from-sky-500 via-indigo-600 to-purple-600 text-white shadow-xs'
+                            : 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-700/80'
                         }`}
                       >
                         {r === '24h' ? 'Last 24 Hours' : r === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
                       </button>
                     ))}
                     {analyticsLoading && (
-                      <span className="text-xs text-indigo-400 animate-pulse ml-2">Loading metrics...</span>
+                      <span className="text-xs text-sky-500 animate-pulse ml-2 font-medium">Loading metrics...</span>
                     )}
                   </div>
 
@@ -4342,16 +4461,16 @@ export default function App() {
                     <button
                       onClick={loadAnalytics}
                       disabled={analyticsLoading}
-                      className="px-3 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors flex items-center space-x-1.5 border border-slate-700 disabled:opacity-50"
+                      className="btn-secondary text-xs px-3.5 py-2 disabled:opacity-50"
                       title="Refresh analytics metrics"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin text-indigo-400' : ''}`} />
+                      <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin text-sky-500' : ''}`} />
                       <span>Refresh</span>
                     </button>
                     <button
                       onClick={handleExportCSV}
                       disabled={exportLoading}
-                      className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center space-x-2 disabled:opacity-50"
+                      className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
                     >
                       <span>{exportLoading ? 'Generating...' : '📥 Export CSV Report'}</span>
                     </button>
@@ -4360,53 +4479,53 @@ export default function App() {
 
                 {/* Reputation Alert if complaint rate exceeds 0.10% threshold */}
                 {analyticsSummary?.complaint_warning && (
-                  <div className="bg-red-950/70 border border-red-500/80 rounded-xl p-4 flex items-start space-x-3 text-red-200">
+                  <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-start space-x-3 text-rose-700 dark:text-rose-300 backdrop-blur-xl">
                     <span className="text-xl">⚠️</span>
                     <div>
-                      <div className="font-semibold text-sm text-red-300">Google &amp; Yahoo Deliverability Warning: Complaint Rate Exceeded 0.10%</div>
-                      <p className="text-xs text-red-300/80 mt-1">
+                      <div className="font-bold text-sm text-rose-800 dark:text-rose-200">Google &amp; Yahoo Deliverability Warning: Complaint Rate Exceeded 0.10%</div>
+                      <p className="text-xs text-rose-700/80 dark:text-rose-300/80 mt-1">
                         Current tenant complaint rate is {((analyticsSummary.complaint_rate || 0) * 100).toFixed(3)}%. Mailbox providers will defer or spam-folder messages if complaint rate approaches or exceeds 0.30%. Review unverified lists and enforce immediate suppression.
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* KPI Summary Cards */}
+                {/* KPI Summary Cards (Blueprint 4.2) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Sent</div>
-                    <div className="text-2xl font-bold text-white mt-2">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Sent</div>
+                    <div className="text-3xl font-black text-slate-900 dark:text-white mt-2 tracking-tight">
                       {(analyticsSummary?.sent ?? analyticsSummary?.sent_count ?? 0).toLocaleString()}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">Outbound messages</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Outbound messages</div>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Delivery Rate</div>
-                    <div className="text-2xl font-bold text-emerald-400 mt-2">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Delivery Rate</div>
+                    <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-2 tracking-tight">
                       {((analyticsSummary?.delivery_rate || 0) * 100).toFixed(2)}%
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
                       {(analyticsSummary?.delivered ?? analyticsSummary?.delivered_count ?? 0).toLocaleString()} delivered
                     </div>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Bounce Rate</div>
-                    <div className="text-2xl font-bold text-rose-400 mt-2">
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Bounce Rate</div>
+                    <div className="text-3xl font-black text-rose-600 dark:text-rose-400 mt-2 tracking-tight">
                       {((analyticsSummary?.bounce_rate || 0) * 100).toFixed(2)}%
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
                       {(analyticsSummary?.bounced_hard ?? analyticsSummary?.hard_bounce_count ?? 0)} hard / {(analyticsSummary?.bounced_soft ?? analyticsSummary?.soft_bounce_count ?? 0)} soft
                     </div>
                   </div>
 
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Complaint Rate</div>
-                    <div className={`text-2xl font-bold mt-2 ${analyticsSummary?.complaint_warning ? 'text-red-400' : 'text-slate-200'}`}>
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Complaint Rate</div>
+                    <div className={`text-3xl font-black mt-2 tracking-tight ${analyticsSummary?.complaint_warning ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
                       {((analyticsSummary?.complaint_rate || 0) * 100).toFixed(3)}%
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
                       {(analyticsSummary?.complained ?? analyticsSummary?.complaint_count ?? 0)} spam reports
                     </div>
                   </div>
@@ -4414,27 +4533,27 @@ export default function App() {
 
                 {/* Additional Performance Row: Latency & Unsubscribes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Delivery Latency Percentiles</div>
+                  <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Delivery Latency Percentiles</div>
                     <div className="flex items-baseline space-x-4 mt-2">
                       <div>
-                        <span className="text-xl font-bold text-indigo-400">
+                        <span className="text-2xl font-black text-sky-600 dark:text-sky-400 tracking-tight">
                           {analyticsSummary && (analyticsSummary.median_latency_seconds ?? 0) > 0
                             ? `${analyticsSummary.median_latency_seconds!.toFixed(2)}s`
                             : '< 1s'}
                         </span>
-                        <span className="text-xs text-slate-500 ml-1">Median (p50)</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-1 font-medium">Median (p50)</span>
                       </div>
                       <div>
-                        <span className="text-xl font-bold text-sky-400">
+                        <span className="text-2xl font-black text-purple-600 dark:text-purple-400 tracking-tight">
                           {analyticsSummary && (analyticsSummary.p95_latency_seconds ?? 0) > 0
                             ? `${analyticsSummary.p95_latency_seconds!.toFixed(2)}s`
                             : '< 2s'}
                         </span>
-                        <span className="text-xs text-slate-500 ml-1">p95 Tail</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 ml-1 font-medium">p95 Tail</span>
                       </div>
                     </div>
-                    <div className="text-xs text-slate-500 mt-2">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">
                       End-to-end time from queue ingestion to remote MX 250 OK.
                     </div>
                   </div>
