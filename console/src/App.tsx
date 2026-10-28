@@ -486,6 +486,8 @@ export default function App() {
   // Frosted Glassmorphism Theme System (Light / System / Dark)
   const [theme, setTheme] = useState<'light' | 'system' | 'dark'>(() => {
     try {
+      const urlTheme = new URLSearchParams(window.location.search).get('theme') as any
+      if (urlTheme === 'light' || urlTheme === 'dark' || urlTheme === 'system') return urlTheme
       const saved = localStorage.getItem('app_theme')
       return (saved as any) || 'system'
     } catch {

@@ -78,3 +78,170 @@
     @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20;
   }
 }
+
+/* ==========================================================================
+   FROSTED GLASS LIGHT MODE FULL ADAPTATION
+   Transforms dark slate tokens into pristine Frosted White Glass
+   when .dark is not present on <html>.
+   ========================================================================== */
+
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html:not(.dark) body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* Glass Panels & Containers */
+html:not(.dark) .bg-slate-900,
+html:not(.dark) .bg-slate-900\/95,
+html:not(.dark) .bg-slate-900\/90,
+html:not(.dark) .bg-slate-900\/80,
+html:not(.dark) .bg-slate-900\/75,
+html:not(.dark) .bg-slate-900\/70,
+html:not(.dark) .bg-slate-900\/60,
+html:not(.dark) .bg-slate-900\/50,
+html:not(.dark) .bg-slate-900\/40 {
+  background-color: rgba(255, 255, 255, 0.80) !important;
+  border-color: rgba(226, 232, 240, 0.85) !important;
+  color: #0f172a !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Deep Canvas / Well Panels */
+html:not(.dark) .bg-slate-950,
+html:not(.dark) .bg-slate-950\/90,
+html:not(.dark) .bg-slate-950\/80,
+html:not(.dark) .bg-slate-950\/70,
+html:not(.dark) .bg-slate-950\/60,
+html:not(.dark) .bg-slate-950\/50,
+html:not(.dark) .bg-slate-950\/40 {
+  background-color: rgba(248, 250, 252, 0.85) !important;
+  border-color: rgba(226, 232, 240, 0.85) !important;
+  color: #0f172a !important;
+}
+
+/* Elevated Sub-panels & Button Secondary */
+html:not(.dark) .bg-slate-800,
+html:not(.dark) .bg-slate-800\/90,
+html:not(.dark) .bg-slate-800\/80,
+html:not(.dark) .bg-slate-800\/70,
+html:not(.dark) .bg-slate-800\/60,
+html:not(.dark) .bg-slate-800\/50,
+html:not(.dark) .bg-slate-800\/40 {
+  background-color: rgba(241, 245, 249, 0.90) !important;
+  border-color: rgba(203, 213, 225, 0.80) !important;
+  color: #1e293b !important;
+}
+
+/* Typography Overrides in Light Mode */
+html:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+
+/* Ensure vibrant buttons, primary actions, and solid gradient badges retain crisp white text */
+html:not(.dark) .btn-gradient,
+html:not(.dark) .btn-gradient *,
+html:not(.dark) button[class*="bg-gradient-"],
+html:not(.dark) button[class*="bg-gradient-"] *,
+html:not(.dark) a[class*="bg-gradient-"],
+html:not(.dark) a[class*="bg-gradient-"] *,
+html:not(.dark) .bg-indigo-600,
+html:not(.dark) .bg-indigo-600 *,
+html:not(.dark) .bg-emerald-600,
+html:not(.dark) .bg-emerald-600 *,
+html:not(.dark) .bg-rose-600,
+html:not(.dark) .bg-rose-600 *,
+html:not(.dark) .bg-sky-600,
+html:not(.dark) .bg-sky-600 *,
+html:not(.dark) .bg-sky-500,
+html:not(.dark) .bg-sky-500 * {
+  color: #ffffff !important;
+}
+
+/* Preserve gradient text clipping */
+html:not(.dark) .bg-clip-text {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+html:not(.dark) .text-slate-100 {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-slate-200 {
+  color: #1e293b !important;
+}
+
+html:not(.dark) .text-slate-300 {
+  color: #334155 !important;
+}
+
+html:not(.dark) .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Borders & Dividers in Light Mode */
+html:not(.dark) .border-slate-800,
+html:not(.dark) .border-slate-800\/90,
+html:not(.dark) .border-slate-800\/80,
+html:not(.dark) .border-slate-800\/70,
+html:not(.dark) .border-slate-700,
+html:not(.dark) .border-slate-700\/90,
+html:not(.dark) .border-slate-700\/80,
+html:not(.dark) .border-slate-700\/60 {
+  border-color: rgba(226, 232, 240, 0.85) !important;
+}
+
+html:not(.dark) .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+html:not(.dark) .divide-slate-800\/80 > :not([hidden]) ~ :not([hidden]),
+html:not(.dark) .divide-slate-800\/60 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(226, 232, 240, 0.85) !important;
+}
+
+/* Table rows and hovers in Light Mode */
+html:not(.dark) .hover\:bg-slate-800\/40:hover,
+html:not(.dark) .hover\:bg-slate-800\/60:hover,
+html:not(.dark) .hover\:bg-slate-800:hover,
+html:not(.dark) .hover\:bg-slate-700:hover,
+html:not(.dark) .hover\:bg-slate-700\/80:hover {
+  background-color: rgba(241, 245, 249, 0.70) !important;
+}
+
+/* Form Inputs, Selects, and Textareas in Light Mode */
+html:not(.dark) input:not([type="checkbox"]):not([type="radio"]),
+html:not(.dark) select,
+html:not(.dark) textarea {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(203, 213, 225, 0.85) !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html:not(.dark) select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Code and Mono Blocks in Light Mode */
+html:not(.dark) code {
+  color: #0369a1;
+}
+
+/* Dark mode explicit settings */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #020617;
+  color: #f8fafc;
+}
