@@ -2084,6 +2084,228 @@ export default function App() {
     } catch {}
   }
 
+  const loadSMTPCredentials = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/smtp-credentials', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSmtpCredentials(data.data || [])
+      }
+    } catch {}
+  }
+
+  const loadDevices = async () => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch('/v1/devices', {
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDevicesList(data.data || [])
+      }
+    } catch {}
+  }
+
+  const handleCreateSMTPCredential = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user) return
+    setSmtpLoading(true)
+    try {
+      const domains = smtpNewAllowedDomains.split(',').map((s) => s.trim()).filter(Boolean)
+      const cidrs = smtpNewAllowedCIDRs.split(',').map((s) => s.trim()).filter(Boolean)
+      const res = await fetch('/v1/smtp-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        body: JSON.stringify({
+          username: smtpNewUsername || undefined,
+          rate_limit: Number(smtpNewRateLimit) || 100,
+          allowed_domains: domains.length > 0 ? domains : undefined,
+          allowed_cidrs: cidrs.length > 0 ? cidrs : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSmtpCreatedPassword(data.password)
+        setSmtpNewUsername('')
+        setSmtpNewAllowedDomains('')
+        setSmtpNewAllowedCIDRs('')
+        loadSMTPCredentials()
+      } else {
+        alert(data.error?.message || 'Failed to create SMTP credential')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setSmtpLoading(false)
+    }
+  }
+
+  const handleCreateDevice = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user) return
+    setDevLoading(true)
+    try {
+      const addrs = devNewAllowedFrom.split(',').map((s) => s.trim()).filter(Boolean)
+      const res = await fetch('/v1/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        body: JSON.stringify({
+          name: devNewName,
+          type: devNewType,
+          expected_ip: devNewIP,
+          allowed_from: addrs.length > 0 ? addrs : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDevNewName('')
+        setDevNewIP('')
+        setDevNewAllowedFrom('')
+        loadDevices()
+      } else {
+        alert(data.error?.message || 'Failed to register device')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setDevLoading(false)
+    }
+  }
+
+  const handleAddTrustedNetwork = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user) return
+    setTnLoading(true)
+    try {
+      const res = await fetch('/v1/trusted-networks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        body: JSON.stringify({ cidr: tnNewCIDR, description: tnNewDesc }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(`Trusted network ${tnNewCIDR} added successfully`)
+        setTnNewCIDR('')
+        setTnNewDesc('')
+      } else {
+        alert(data.error?.message || 'Failed to add trusted network')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setTnLoading(false)
+    }
+  }
+
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeTenant || !user) return
+    setSendLoading(true)
+    setSendError(null)
+    setSendSuccess(null)
+    try {
+      const recipients = sendTo.split(',').map((s) => s.trim()).filter(Boolean)
+      const payload: any = {
+        from: sendFrom,
+        to: recipients,
+        subject: sendSubject,
+        stream: sendStream,
+      }
+      if (sendIsHTML) {
+        payload.html = sendBody
+      } else {
+        payload.text = sendBody
+      }
+      const res = await fetch('/v1/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSendSuccess(`Email dispatched successfully! Message ID: ${data.id}`)
+        loadMessages()
+        setSendSubject('')
+        setSendBody('')
+      } else {
+        setSendError(data.error?.message || 'Email dispatch failed')
+      }
+    } catch (err: any) {
+      setSendError(err.message)
+    } finally {
+      setSendLoading(false)
+    }
+  }
+
+  const handleRetryMessage = async (id: string) => {
+    if (!activeTenant || !user) return
+    try {
+      const res = await fetch(`/v1/messages/${id}/retry`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        alert(`Message ${id} scheduled for retry.`)
+        loadMessages()
+        setInspectorOpen(false)
+      } else {
+        const data = await res.json()
+        alert(data.error?.message || 'Failed to retry message')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleCancelMessage = async (id: string) => {
+    if (!activeTenant || !user) return
+    if (!confirm(`Are you sure you want to cancel message ${id}?`)) return
+    try {
+      const res = await fetch(`/v1/messages/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      if (res.ok) {
+        alert(`Message ${id} cancelled.`)
+        loadMessages()
+        setInspectorOpen(false)
+      } else {
+        const data = await res.json()
+        alert(data.error?.message || 'Failed to cancel message')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const handleRotateDKIM = async () => {
+    if (!activeTenant || !user || !selectedDomain) return
+    if (!confirm(`Rotate DKIM key for ${selectedDomain.name}? A new 2048-bit key will be generated.`)) return
+    setRotateLoading(true)
+    try {
+      const res = await fetch(`/v1/domains/${selectedDomain.id}/dkim/rotate`, {
+        method: 'POST',
+        headers: { 'X-User-ID': user.id, 'X-Tenant-ID': activeTenant.id },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setRotateResult(data)
+        loadDomains()
+        alert(data.message || 'DKIM rotation initiated successfully!')
+      } else {
+        alert(data.error?.message || 'Failed to rotate DKIM key')
+      }
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setRotateLoading(false)
+    }
+  }
+
   const loadMessages = async () => {
     if (!activeTenant || !user) return
     try {
