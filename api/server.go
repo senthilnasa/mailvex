@@ -63,6 +63,10 @@ func (s *Server) SetIngestEngine(engine *core.IngestionEngine, store storage.Sto
 	s.setupRoutes()
 }
 
+func (s *Server) Storage() storage.Storage {
+	return s.storage
+}
+
 func (s *Server) IngestEngine() *core.IngestionEngine {
 	return s.ingestEngine
 }
