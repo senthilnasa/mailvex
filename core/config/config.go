@@ -2,9 +2,12 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Config represents application configuration loaded from environment variables
@@ -74,24 +77,105 @@ func Load() (*Config, error) {
 		LogRedactEmail:     getEnvBool("MVX_LOG_REDACT_EMAIL", true),
 	}
 
-	masterKeyStr := getEnv("MVX_MASTER_KEY", "")
-	if masterKeyStr != "" {
-		keyBytes, err := base64.StdEncoding.DecodeString(masterKeyStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid MVX_MASTER_KEY: base64 decode failed: %w", err)
-		}
-		if len(keyBytes) != 32 {
-			return nil, fmt.Errorf("invalid MVX_MASTER_KEY: expected 32 bytes, got %d", len(keyBytes))
-		}
-		cfg.MasterKey = keyBytes
-	} else if cfg.AppEnv == "production" {
-		return nil, fmt.Errorf("MVX_MASTER_KEY is mandatory in production")
-	} else {
-		// Sane 32-byte fallback for test/dev environment
-		cfg.MasterKey = []byte("this-is-a-32-byte-dev-master-key!")
+	masterKey, err := parseMasterKey(cfg.AppEnv)
+	if err != nil {
+		return nil, err
 	}
+	cfg.MasterKey = masterKey
+
+	// Parse database and redis URLs if provided and specific fields are default
+	applyDatabaseURL(cfg)
+	applyRedisURL(cfg)
 
 	return cfg, nil
+}
+
+func parseMasterKey(appEnv string) ([]byte, error) {
+	keyVar := "MVX_MASTER_KEY"
+	val := getEnv("MVX_MASTER_KEY", "")
+	if val == "" {
+		keyVar = "MVX_KEK"
+		val = getEnv("MVX_KEK", "")
+	}
+	if val == "" {
+		keyVar = "MAILVEX_MASTER_KEK"
+		val = getEnv("MAILVEX_MASTER_KEK", "")
+	}
+
+	if val == "" {
+		if appEnv == "production" {
+			return nil, fmt.Errorf("master key is mandatory in production: set MVX_MASTER_KEY (32 bytes base64 encoded) or MVX_KEK (64 hex characters)")
+		}
+		// Sane 32-byte fallback for test/dev environment
+		return []byte("mailvex-homelab-32byte-masterkek"), nil
+	}
+
+	val = strings.TrimSpace(val)
+
+	// 1. Try 64-char Hex (64 hex characters = 32 bytes)
+	if len(val) == 64 {
+		if hexBytes, err := hex.DecodeString(val); err == nil && len(hexBytes) == 32 {
+			return hexBytes, nil
+		}
+	}
+
+	// 2. Try Base64 (Standard or URL/Raw)
+	if b64Bytes, err := base64.StdEncoding.DecodeString(val); err == nil {
+		if len(b64Bytes) == 32 {
+			return b64Bytes, nil
+		}
+		return nil, fmt.Errorf("invalid %s: base64 decoded to %d bytes, expected 32 (AES-256)", keyVar, len(b64Bytes))
+	}
+	if b64Bytes, err := base64.RawStdEncoding.DecodeString(val); err == nil {
+		if len(b64Bytes) == 32 {
+			return b64Bytes, nil
+		}
+		return nil, fmt.Errorf("invalid %s: base64 decoded to %d bytes, expected 32 (AES-256)", keyVar, len(b64Bytes))
+	}
+
+	// 3. Raw 32-byte string
+	if len(val) == 32 {
+		return []byte(val), nil
+	}
+
+	return nil, fmt.Errorf("invalid %s: expected 32-byte key (base64, 64-char hex, or 32 raw bytes), got %d characters", keyVar, len(val))
+}
+
+var dsnPattern = regexp.MustCompile(`^(?:([^:]+)(?::([^@]*))?@)?(?:tcp\(([^:)]+)(?::(\d+))?\))?\/([^?]+)`)
+
+func applyDatabaseURL(cfg *Config) {
+	dbURL := getEnv("MVX_DATABASE_URL", "")
+	if dbURL == "" {
+		return
+	}
+	matches := dsnPattern.FindStringSubmatch(dbURL)
+	if matches != nil {
+		if matches[1] != "" && os.Getenv("MVX_DB_USER") == "" {
+			cfg.DBUser = matches[1]
+		}
+		if matches[2] != "" && os.Getenv("MVX_DB_PASSWORD") == "" {
+			cfg.DBPassword = matches[2]
+		}
+		if matches[3] != "" && os.Getenv("MVX_DB_HOST") == "" {
+			cfg.DBHost = matches[3]
+		}
+		if matches[4] != "" && os.Getenv("MVX_DB_PORT") == "" {
+			if port, err := strconv.Atoi(matches[4]); err == nil {
+				cfg.DBPort = port
+			}
+		}
+		if matches[5] != "" && os.Getenv("MVX_DB_NAME") == "" {
+			cfg.DBName = matches[5]
+		}
+	}
+}
+
+func applyRedisURL(cfg *Config) {
+	redisURL := getEnv("MVX_REDIS_URL", "")
+	if redisURL != "" && os.Getenv("MVX_REDIS_ADDR") == "" {
+		redisURL = strings.TrimPrefix(redisURL, "redis://")
+		cfg.RedisAddr = redisURL
+	}
 }
 
 func getEnv(key, defaultVal string) string {

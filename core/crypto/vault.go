@@ -32,7 +32,7 @@ type LocalKEKProvider struct {
 // NewLocalKEKProvider creates a local AES-256-GCM KEK provider
 func NewLocalKEKProvider(keyID string, kek []byte) (*LocalKEKProvider, error) {
 	if len(kek) != 32 {
-		return nil, errors.New("master KEK must be exactly 32 bytes (AES-256)")
+		return nil, fmt.Errorf("master KEK must be exactly 32 bytes (AES-256), got %d bytes", len(kek))
 	}
 	if keyID == "" {
 		keyID = "local-kek-v1"

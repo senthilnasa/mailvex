@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -107,31 +109,62 @@ func (d *SystemDoctor) checkDatabase(ctx context.Context) DiagnosticResult {
 }
 
 func (d *SystemDoctor) checkMasterKEK() DiagnosticResult {
-	kek := os.Getenv("MVX_KEK")
+	kek := os.Getenv("MVX_MASTER_KEY")
+	keyVar := "MVX_MASTER_KEY"
+	if kek == "" {
+		kek = os.Getenv("MVX_KEK")
+		keyVar = "MVX_KEK"
+	}
 	if kek == "" {
 		kek = os.Getenv("MAILVEX_MASTER_KEK")
+		keyVar = "MAILVEX_MASTER_KEK"
 	}
 	if kek == "" {
 		return DiagnosticResult{
 			Component: "Security",
 			Name:      "Master KEK Configuration",
 			Status:    StatusWarn,
-			Message:   "MVX_KEK environment variable is not set; running with ephemeral fallback key",
+			Message:   "MVX_MASTER_KEY / MVX_KEK is not set; running with ephemeral fallback key",
 		}
 	}
-	if len(kek) != 32 && len(kek) != 64 { // Raw 32-byte or 64-char hex
+
+	kek = strings.TrimSpace(kek)
+	var keyBytes []byte
+	var decodeErr error
+
+	if len(kek) == 64 {
+		if h, err := hex.DecodeString(kek); err == nil {
+			keyBytes = h
+		} else {
+			decodeErr = err
+		}
+	} else if b64, err := base64.StdEncoding.DecodeString(kek); err == nil {
+		keyBytes = b64
+	} else if b64Raw, err := base64.RawStdEncoding.DecodeString(kek); err == nil {
+		keyBytes = b64Raw
+	} else if len(kek) == 32 {
+		keyBytes = []byte(kek)
+	}
+
+	if decodeErr != nil || len(keyBytes) != 32 {
+		var detail string
+		if len(keyBytes) > 0 {
+			detail = fmt.Sprintf("decoded to %d bytes, expected 32 (AES-256)", len(keyBytes))
+		} else {
+			detail = fmt.Sprintf("invalid encoding (%d characters; expected 32-byte base64, 64-char hex, or 32 raw bytes)", len(kek))
+		}
 		return DiagnosticResult{
 			Component: "Security",
 			Name:      "Master KEK Configuration",
 			Status:    StatusFail,
-			Message:   fmt.Sprintf("Invalid KEK length %d (must be 32 bytes or 64 hex characters)", len(kek)),
+			Message:   fmt.Sprintf("Invalid %s: %s", keyVar, detail),
 		}
 	}
 	return DiagnosticResult{
 		Component: "Security",
 		Name:      "Master KEK Configuration",
 		Status:    StatusPass,
-		Message:   "Valid 256-bit AES Master KEK detected",
+		Message:   fmt.Sprintf("Valid 256-bit AES Master KEK detected via %s", keyVar),
 	}
 }
 

@@ -17,7 +17,7 @@ type EnvelopeEncryption struct {
 
 func NewEnvelopeEncryption(kek []byte) (*EnvelopeEncryption, error) {
 	if len(kek) != 32 {
-		return nil, errors.New("master KEK must be exactly 32 bytes (AES-256)")
+		return nil, fmt.Errorf("master KEK must be exactly 32 bytes (AES-256), got %d bytes", len(kek))
 	}
 	return &EnvelopeEncryption{kek: kek}, nil
 }

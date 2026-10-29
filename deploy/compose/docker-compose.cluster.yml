@@ -17,38 +17,66 @@ services:
   api-1:
     image: mailvex/mailvex-api:latest
     restart: always
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=cluster
+      - MVX_PROFILE=${MVX_PROFILE:-cluster}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
       - MVX_NODE_ID=api-node-1
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
 
   api-2:
     image: mailvex/mailvex-api:latest
     restart: always
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=cluster
+      - MVX_PROFILE=${MVX_PROFILE:-cluster}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
       - MVX_NODE_ID=api-node-2
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
 
   worker-1:
     image: mailvex/mailvex-worker:latest
     restart: always
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=cluster
+      - MVX_PROFILE=${MVX_PROFILE:-cluster}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
       - MVX_NODE_ID=worker-node-1
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
 
   worker-2:
     image: mailvex/mailvex-worker:latest
     restart: always
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=cluster
+      - MVX_PROFILE=${MVX_PROFILE:-cluster}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
       - MVX_NODE_ID=worker-node-2
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
 
   prometheus:
     image: prom/prometheus:v2.52.0

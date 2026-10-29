@@ -7,12 +7,18 @@ services:
     container_name: mailvex-api
     restart: always
     ports:
-      - "8080:8080"
+      - "${MVX_APP_PORT:-8080}:8080"
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=standard
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
-      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - MVX_PROFILE=${MVX_PROFILE:-standard}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -26,12 +32,18 @@ services:
       dockerfile: deploy/docker/Dockerfile.worker
     container_name: mailvex-worker
     restart: always
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=standard
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
-      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      - MVX_OUTBOUND_PORT=25
+      - MVX_PROFILE=${MVX_PROFILE:-standard}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
+      - MVX_OUTBOUND_PORT=${MVX_OUTBOUND_PORT:-25}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -43,10 +55,10 @@ services:
     container_name: mailvex-standard-db
     restart: always
     environment:
-      - MYSQL_ROOT_PASSWORD=rootsecret
-      - MYSQL_DATABASE=mailvex
-      - MYSQL_USER=mailvex
-      - MYSQL_PASSWORD=secret
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
+      - MYSQL_DATABASE=${MVX_DB_NAME:-mailvex}
+      - MYSQL_USER=${MVX_DB_USER:-mailvex}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-secret}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:

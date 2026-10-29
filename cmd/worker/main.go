@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/senthilnasa/mailvex/core/config"
+	"github.com/senthilnasa/mailvex/core/crypto"
 	"github.com/senthilnasa/mailvex/core/logger"
 	"github.com/senthilnasa/mailvex/core/repository"
 	"github.com/senthilnasa/mailvex/core/storage"
@@ -27,6 +28,13 @@ func main() {
 		"profile", cfg.Profile,
 		"env", cfg.AppEnv,
 	)
+
+	// Initialize Envelope Encryption with master KEK
+	_, err = crypto.NewEnvelopeEncryption(cfg.MasterKey)
+	if err != nil {
+		appLogger.Error("failed to initialize envelope encryption", "error", err)
+		os.Exit(1)
+	}
 
 	// Repositories and Storage
 	repo := repository.NewMemoryRepository()

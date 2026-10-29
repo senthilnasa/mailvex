@@ -7,17 +7,23 @@ services:
     container_name: mailvex-homelab
     restart: unless-stopped
     ports:
-      - "8080:8080"   # Web Console & REST API
-      - "2525:2525"   # Inbound IoT / LAN Device SMTP
+      - "${PORT:-8080}:8080"   # Web Console & REST API
+      - "${SMTP_PORT:-2525}:2525"   # Inbound IoT / LAN Device SMTP
       - "25:25"       # Public Inbound MX (Optional)
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      - MVX_PROFILE=homelab
-      - PORT=8080
-      - SMTP_PORT=2525
-      - MVX_DATABASE_URL=mailvex:secret@tcp(mariadb:3306)/mailvex?parseTime=true
-      - MVX_REDIS_URL=redis:6379
-      - MVX_KEK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      - MVX_RELAY_TRANSPORT=enabled # Smart-host relay for home ISPs
+      - MVX_PROFILE=${MVX_PROFILE:-homelab}
+      - MVX_APP_ENV=${MVX_APP_ENV:-development}
+      - PORT=${PORT:-8080}
+      - SMTP_PORT=${SMTP_PORT:-2525}
+      - MVX_DATABASE_URL=${MVX_DATABASE_URL:-mailvex:${MYSQL_PASSWORD:-secret}@tcp(mariadb:3306)/mailvex?parseTime=true}
+      - MVX_REDIS_URL=${MVX_REDIS_URL:-redis:6379}
+      - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
+      - MVX_KEK=${MVX_KEK:-}
+      - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
+      - MVX_RELAY_TRANSPORT=${MVX_RELAY_TRANSPORT:-enabled} # Smart-host relay for home ISPs
     depends_on:
       mariadb:
         condition: service_healthy
@@ -31,10 +37,10 @@ services:
     container_name: mailvex-mariadb
     restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=rootsecret
-      - MYSQL_DATABASE=mailvex
-      - MYSQL_USER=mailvex
-      - MYSQL_PASSWORD=secret
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootsecret}
+      - MYSQL_DATABASE=${MVX_DB_NAME:-mailvex}
+      - MYSQL_USER=${MVX_DB_USER:-mailvex}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-secret}
     volumes:
       - mariadb_data:/var/lib/mysql
       - ../homelab/my.cnf:/etc/mysql/conf.d/my.cnf:ro

@@ -91,7 +91,7 @@ MVX_APP_PORT=8080
 MVX_APP_URL=https://mail.yourdomain.com
 
 # Master Encryption Key (32-byte Base64)
-MVX_MASTER_KEY=dGhpcy1pcy1hLXRlc3QtMzItYnl0ZS1tYXN0ZXIta2V5ISE=
+MVX_MASTER_KEY=bWFpbHZleC1ob21lbGFiLTMyYnl0ZS1tYXN0ZXJrZWs=
 MVX_KEK_PROVIDER=env
 
 # Database Configuration (MariaDB 11.4+)
