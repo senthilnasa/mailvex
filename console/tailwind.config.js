@@ -23,6 +23,7 @@ export default {
         }
       },
       boxShadow: {
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
         'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.05)',
         'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
         'glow': '0 0 20px -5px rgba(14, 165, 233, 0.35)',

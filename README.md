@@ -9,6 +9,7 @@
   <a href="#architecture--profiles">Profiles</a> •
   <a href="#quickstart-development">Dev Server</a> •
   <a href="#quickstart-production">Prod Server</a> •
+  <a href="#api--ai-agent-integration">API &amp; Agent Docs</a> •
   <a href="#cli--doctor">CLI &amp; Doctor</a> •
   <a href="#go-sdk">Go SDK</a> •
   <a href="#security--compliance">Security</a>
@@ -148,6 +149,20 @@ curl -s -X POST http://localhost:8080/v1/auth/reset-admin \
 | `/ready` | `GET` | Readiness probe (verifies database pool and cache connectivity). |
 | `/metrics` | `GET` | Prometheus telemetry (queue depth, delivery rates, latencies). |
 | `/v1/setup` | `GET` | Checks if platform initial setup has been executed. |
+
+---
+
+## API & AI Agent Integration
+
+Mailvex features a carrier-grade REST API designed for high-throughput software pipelines and autonomous parallel AI agents.
+
+* 📖 **Full API & AI Agent Specification**: [`API.md`](./API.md) (or [`docs/api.md`](./docs/api.md))
+* ⚙️ **OpenAPI 3.1 Specification**: [`sdk/openapi.yaml`](./sdk/openapi.yaml)
+* 🤖 **AI Agent Features**:
+  * Dual-mode keys (`mvx_live_...` for real MX routing, `mvx_test_...` for development sink)
+  * Distributed locking with 24-hour `Idempotency-Key` caching
+  * Pre-built tool definitions (JSON Schema / MCP) for parallel agent swarms
+  * Real-time delivery webhooks with HMAC-SHA256 anti-replay signatures
 
 ---
 

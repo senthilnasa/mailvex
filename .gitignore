@@ -25,3 +25,5 @@ console/dist/
 *~
 .DS_Store
 Thumbs.db
+.edge-profile*
+*.cjs

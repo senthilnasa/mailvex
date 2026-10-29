@@ -145,6 +145,12 @@ func (s *Server) setupRoutes() {
 	s.mux.Handle("POST /v1/email/batch", authMiddleware(
 		middleware.RequirePermission(s.repo, "send.email")(http.HandlerFunc(apiHandler.SendEmailBatchHandler)),
 	))
+	s.mux.Handle("POST /v1/send", authMiddleware(
+		middleware.RequirePermission(s.repo, "send.email")(http.HandlerFunc(apiHandler.SendEmailHandler)),
+	))
+	s.mux.Handle("POST /v1/send/batch", authMiddleware(
+		middleware.RequirePermission(s.repo, "send.email")(http.HandlerFunc(apiHandler.SendEmailBatchHandler)),
+	))
 
 	// Phase 4: Message Inspection, Body, Retry, and Cancel
 	s.mux.Handle("GET /v1/messages/{id}", authMiddleware(

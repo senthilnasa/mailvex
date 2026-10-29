@@ -114,6 +114,9 @@ func (a *API) SendEmailHandler(w http.ResponseWriter, r *http.Request) {
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if idempotencyKey == "" {
+		idempotencyKey = r.Header.Get("X-Idempotency-Key")
+	}
 	var scopedIdemKey string
 	if idempotencyKey != "" {
 		scopedIdemKey = fmt.Sprintf("%s:%s", apiKeyID, idempotencyKey)
@@ -362,6 +365,9 @@ func (a *API) SendEmailBatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if idempotencyKey == "" {
+		idempotencyKey = r.Header.Get("X-Idempotency-Key")
+	}
 	var scopedIdemKey string
 	if idempotencyKey != "" {
 		scopedIdemKey = fmt.Sprintf("%s:%s", apiKeyID, idempotencyKey)

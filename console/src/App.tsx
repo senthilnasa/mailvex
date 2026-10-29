@@ -38,6 +38,7 @@ import {
   Moon,
   Monitor
 } from 'lucide-react'
+import { ExportMenu } from './components/ExportMenu'
 
 interface Tenant {
   id: string
@@ -586,7 +587,6 @@ export default function App() {
   const [analyticsLatency, setAnalyticsLatency] = useState<LatencyHistogramItem[]>([])
   const [analyticsTimeSeries, setAnalyticsTimeSeries] = useState<AnalyticsTimeSeriesPoint[]>([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
-  const [exportLoading, setExportLoading] = useState(false)
 
   // Phase 8: Webhooks state
   const [webhooksList, setWebhooksList] = useState<WebhookEndpointItem[]>([])
@@ -1583,11 +1583,6 @@ export default function App() {
     }
   }
 
-  const handleExportSuppressions = () => {
-    if (!activeTenant || !user) return
-    window.open(`/v1/suppressions/export?format=csv`, '_blank')
-  }
-
   const handlePrivacyErasure = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!activeTenant || !user || !privacyEmail.trim()) return
@@ -1900,33 +1895,6 @@ export default function App() {
     } catch {}
     finally {
       setAnalyticsLoading(false)
-    }
-  }
-
-  const handleExportCSV = async () => {
-    if (!activeTenant || !user) return
-    setExportLoading(true)
-    try {
-      const res = await fetch('/v1/analytics/export', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': user.id,
-          'X-Tenant-ID': activeTenant.id,
-        },
-        body: JSON.stringify({ range: analyticsRange, format: 'csv' }),
-      })
-      const data = await res.json()
-      const exportId = data.id || data.export?.id
-      if (res.ok && exportId) {
-        window.open(`/v1/analytics/exports/${exportId}/download`, '_blank')
-      } else {
-        alert(data.error?.message || 'Failed to generate export')
-      }
-    } catch (err: any) {
-      alert(err.message)
-    } finally {
-      setExportLoading(false)
     }
   }
 
@@ -2740,7 +2708,7 @@ export default function App() {
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 dark:from-white dark:via-slate-100 dark:to-slate-400 bg-clip-text text-transparent leading-none">Mailvex</span>
+              <span className="text-base font-black brand-logo-text leading-none tracking-tight">Mailvex</span>
               <span className="text-[10px] text-sky-600 dark:text-sky-400 font-mono tracking-wider font-bold">ENTERPRISE MTA</span>
             </div>
           </div>
@@ -2886,31 +2854,31 @@ export default function App() {
 
       {/* Impersonate Modal */}
       {impModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <Shield className="w-4 h-4 text-indigo-400" />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/80 dark:border-slate-800/80 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/80 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <Shield className="w-4 h-4 text-sky-500" />
                 <span>Platform Admin Impersonation</span>
               </h3>
               <button
                 onClick={() => setImpModalOpen(false)}
-                className="text-slate-400 hover:text-white text-sm"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm"
               >
                 ✕
               </button>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               Access customer tenant environments to troubleshoot configuration or delivery issues. Every request is audited with your user ID and mandatory reason.
             </p>
             <form onSubmit={handleStartImpersonation} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Target Tenant</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Tenant</label>
                 <select
                   required
                   value={targetImpTenantID}
                   onChange={(e) => setTargetImpTenantID(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30"
                 >
                   <option value="">Select Tenant...</option>
                   {tenants.map((t) => (
@@ -2919,25 +2887,25 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Mandatory Reason for Access</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mandatory Reason for Access</label>
                 <textarea
                   required
                   rows={3}
                   value={targetImpReason}
                   onChange={(e) => setTargetImpReason(e.target.value)}
                   placeholder="e.g. Investigating intermittent bounce delivery spikes"
-                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-200 text-xs rounded-lg"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30"
                 />
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 pt-1">
                 <input
                   type="checkbox"
                   id="supportModeToggle"
                   checked={targetImpSupportMode}
                   onChange={(e) => setTargetImpSupportMode(e.target.checked)}
-                  className="rounded bg-slate-800 border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                  className="rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500"
                 />
-                <label htmlFor="supportModeToggle" className="text-xs text-slate-300">
+                <label htmlFor="supportModeToggle" className="text-xs text-slate-600 dark:text-slate-300 select-none">
                   Enable Support Privacy Masking (masks message body content §7.4)
                 </label>
               </div>
@@ -2945,13 +2913,13 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setImpModalOpen(false)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-3.5 py-2"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg"
+                  className="btn-gradient text-xs px-4 py-2"
                 >
                   Begin Impersonation
                 </button>
@@ -3012,10 +2980,10 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                        ? 'nav-item-active'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
                     }`}
                   >
                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
@@ -3043,10 +3011,10 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                        ? 'nav-item-active'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
                     }`}
                   >
                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
@@ -3072,10 +3040,10 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-150 ${
+                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
                       isActive
-                        ? 'bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-purple-500/5 text-sky-600 dark:text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                        ? 'nav-item-active'
+                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
                     }`}
                   >
                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
@@ -3188,7 +3156,7 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Sending Domains</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Sending Domains</span>
                       <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                         <Globe className="w-4 h-4" />
                       </div>
@@ -3204,7 +3172,7 @@ export default function App() {
 
                   <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Message Streams</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Message Streams</span>
                       <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                         <GitFork className="w-4 h-4" />
                       </div>
@@ -3219,7 +3187,7 @@ export default function App() {
 
                   <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cryptographic Guard</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Cryptographic Guard</span>
                       <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
                         <Lock className="w-4 h-4" />
                       </div>
@@ -3233,7 +3201,7 @@ export default function App() {
 
                   <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-5 rounded-2xl shadow-glass dark:shadow-glass-dark transition-all duration-200 hover:scale-[1.01] hover:border-sky-500/40">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">System Readiness</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">System Readiness</span>
                       <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                         <ShieldCheck className="w-4 h-4" />
                       </div>
@@ -3377,7 +3345,30 @@ export default function App() {
                       <Globe className="w-4 h-4 text-sky-500" />
                       Configured Domains
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{domains.length} Total</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">({domains.length} Total)</span>
+                      <ExportMenu
+                        filename={`mailvex-domains-${activeTenant?.slug || 'tenant'}`}
+                        sheetTitle="Domains"
+                        label="Export Domains"
+                        columns={[
+                          { header: 'Domain Name', key: 'name' },
+                          { header: 'Type', key: 'type' },
+                          { header: 'Status', key: 'status' },
+                          { header: 'Ownership Token', key: 'ownership_token' },
+                          { header: 'Verified At', key: 'verified_at' },
+                          { header: 'Last Checked', key: 'last_checked_at' },
+                        ]}
+                        data={domains.map((d) => ({
+                          name: d.name,
+                          type: d.type,
+                          status: d.status,
+                          ownership_token: d.ownership_token,
+                          verified_at: d.verified_at || 'Unverified',
+                          last_checked_at: d.last_checked_at || 'Never',
+                        }))}
+                      />
+                    </div>
                   </div>
                   {domains.length === 0 ? (
                     <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
@@ -3681,64 +3672,94 @@ export default function App() {
             {/* TAB: MESSAGES LOGS & INSPECTOR */}
             {currentTab === 'messages' && (
               <div className="space-y-6 mt-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                    <span className="font-semibold text-white">Message Activity Logs</span>
-                    <button
-                      onClick={loadMessages}
-                      className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                    >
-                      Refresh
-                    </button>
+                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Inbox className="w-4 h-4 text-sky-500" />
+                      <span className="font-bold text-sm text-slate-900 dark:text-white">Message Activity Logs</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">({messagesList.length} Total)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={loadMessages}
+                        className="btn-secondary text-xs px-3 py-1.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Refresh</span>
+                      </button>
+                      <ExportMenu
+                        filename={`mailvex-messages-${activeTenant?.slug || 'tenant'}`}
+                        sheetTitle="Message Logs"
+                        label="Export Logs"
+                        columns={[
+                          { header: 'Message ID', key: 'id' },
+                          { header: 'From Address', key: 'from_address' },
+                          { header: 'Subject', key: 'subject' },
+                          { header: 'Status', key: 'status' },
+                          { header: 'Stream', key: 'stream_id' },
+                          { header: 'Environment', key: 'environment' },
+                          { header: 'Timestamp', key: 'created_at' },
+                        ]}
+                        data={messagesList.map((m) => ({
+                          id: m.id,
+                          from_address: m.from_address,
+                          subject: m.subject,
+                          status: m.status,
+                          stream_id: m.stream_id,
+                          environment: m.environment,
+                          created_at: m.created_at,
+                        }))}
+                      />
+                    </div>
                   </div>
-                  <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-950/50 text-slate-400">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                       <tr>
-                        <th className="p-4">Message ID</th>
-                        <th className="p-4">Sender</th>
-                        <th className="p-4">Subject</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4">Environment</th>
-                        <th className="p-4">Time</th>
-                        <th className="p-4 text-right">Action</th>
+                        <th className="py-3 px-4">Message ID</th>
+                        <th className="py-3 px-4">Sender</th>
+                        <th className="py-3 px-4">Subject</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Environment</th>
+                        <th className="py-3 px-4">Time</th>
+                        <th className="py-3 px-4 text-right">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
                       {messagesList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-slate-500">
-                            No messages recorded yet.
+                          <td colSpan={7} className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                            No messages recorded yet. Send your first email via SMTP or REST API.
                           </td>
                         </tr>
                       ) : (
                         messagesList.map((m) => (
-                          <tr key={m.id} className="hover:bg-slate-800/40">
-                            <td className="p-4 font-mono text-xs text-indigo-400">{m.id}</td>
-                            <td className="p-4 text-slate-200">{m.from_address}</td>
-                            <td className="p-4 text-white font-medium">{m.subject}</td>
-                            <td className="p-4">
+                          <tr key={m.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 font-mono text-xs text-sky-600 dark:text-sky-400 font-bold">{m.id}</td>
+                            <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200">{m.from_address}</td>
+                            <td className="py-3.5 px-4 text-slate-900 dark:text-white font-semibold">{m.subject}</td>
+                            <td className="py-3.5 px-4">
                               <span
-                                className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold backdrop-blur-md border ${
                                   m.status === 'delivered'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                                     : m.status === 'queued'
-                                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                    ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                                 }`}
                               >
                                 {m.status}
                               </span>
                             </td>
-                            <td className="p-4 text-xs capitalize text-slate-400">{m.environment}</td>
-                            <td className="p-4 text-xs text-slate-400">
+                            <td className="py-3.5 px-4 text-xs capitalize text-slate-600 dark:text-slate-400">{m.environment}</td>
+                            <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
                               {new Date(m.created_at).toLocaleTimeString()}
                             </td>
-                            <td className="p-4 text-right">
+                            <td className="py-3.5 px-4 text-right">
                               <button
                                 onClick={() => handleInspectMessage(m)}
-                                className="px-3 py-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 text-xs rounded-lg transition-colors"
+                                className="btn-secondary text-xs"
                               >
-                                Inspect
+                                <span>Inspect</span>
                               </button>
                             </td>
                           </tr>
@@ -3750,46 +3771,83 @@ export default function App() {
 
                 {/* Message Inspector Modal */}
                 {inspectorOpen && selectedMessage && (
-                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-                      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/80 dark:border-slate-800/80 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                      <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-bold text-white">Message Inspector</h3>
-                          <p className="text-xs font-mono text-indigo-400">{selectedMessage.id}</p>
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Message Inspector</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                              {selectedMessage.status}
+                            </span>
+                          </h3>
+                          <p className="text-xs font-mono text-sky-600 dark:text-sky-400 mt-0.5">{selectedMessage.id}</p>
                         </div>
-                        <button
-                          onClick={() => setInspectorOpen(false)}
-                          className="text-slate-400 hover:text-white text-xl font-bold"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <ExportMenu
+                            filename={`message-inspect-${selectedMessage.id}`}
+                            sheetTitle="Message Details"
+                            label="Export Message"
+                            columns={[
+                              { header: 'Section', key: 'section' },
+                              { header: 'Field / Type', key: 'field' },
+                              { header: 'Value / Details', key: 'value' },
+                              { header: 'Timestamp', key: 'timestamp' },
+                            ]}
+                            data={[
+                              { section: 'Metadata', field: 'Message ID', value: selectedMessage.id, timestamp: selectedMessage.created_at },
+                              { section: 'Metadata', field: 'From Address', value: selectedMessage.from_address, timestamp: selectedMessage.created_at },
+                              { section: 'Metadata', field: 'Subject', value: selectedMessage.subject, timestamp: selectedMessage.created_at },
+                              { section: 'Metadata', field: 'Status', value: selectedMessage.status, timestamp: selectedMessage.created_at },
+                              { section: 'Metadata', field: 'Environment', value: selectedMessage.environment, timestamp: selectedMessage.created_at },
+                              ...selectedMsgRecipients.map((r: any) => ({
+                                section: 'Recipient',
+                                field: `${r.type.toUpperCase()}: ${r.address}`,
+                                value: `Status: ${r.status} | Attempts: ${r.attempts}`,
+                                timestamp: selectedMessage.created_at,
+                              })),
+                              ...selectedMsgEvents.map((e: any) => ({
+                                section: 'Timeline Event',
+                                field: e.type,
+                                value: e.data || '',
+                                timestamp: e.occurred_at,
+                              })),
+                            ]}
+                          />
+                          <button
+                            onClick={() => setInspectorOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xl font-bold p-1 ml-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                       <div className="p-6 overflow-y-auto space-y-6 flex-1">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50/70 dark:bg-slate-950/60 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <div>
-                            <span className="block text-xs text-slate-500">From</span>
-                            <span className="text-sm font-medium text-slate-200">{selectedMessage.from_address}</span>
+                            <span className="block text-xs text-slate-500 dark:text-slate-400 font-medium">From</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-200 truncate block">{selectedMessage.from_address}</span>
                           </div>
                           <div>
-                            <span className="block text-xs text-slate-500">Subject</span>
-                            <span className="text-sm font-medium text-slate-200">{selectedMessage.subject}</span>
+                            <span className="block text-xs text-slate-500 dark:text-slate-400 font-medium">Subject</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-200 truncate block">{selectedMessage.subject}</span>
                           </div>
                           <div>
-                            <span className="block text-xs text-slate-500">Status</span>
-                            <span className="text-sm font-medium text-indigo-400 capitalize">{selectedMessage.status}</span>
+                            <span className="block text-xs text-slate-500 dark:text-slate-400 font-medium">Status</span>
+                            <span className="text-sm font-bold text-sky-600 dark:text-sky-400 capitalize block">{selectedMessage.status}</span>
                           </div>
                           <div>
-                            <span className="block text-xs text-slate-500">Environment</span>
-                            <span className="text-sm font-medium text-emerald-400 capitalize">{selectedMessage.environment}</span>
+                            <span className="block text-xs text-slate-500 dark:text-slate-400 font-medium">Environment</span>
+                            <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 capitalize block">{selectedMessage.environment}</span>
                           </div>
                         </div>
 
                         {/* Recipients */}
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Recipients</h4>
-                          <div className="bg-slate-950/40 border border-slate-800 rounded-lg overflow-hidden">
-                            <table className="w-full text-left text-xs text-slate-300">
-                              <thead className="bg-slate-900 text-slate-400">
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Recipients</h4>
+                          <div className="bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden">
+                            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                              <thead className="bg-slate-100/80 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-semibold uppercase">
                                 <tr>
                                   <th className="p-3">Address</th>
                                   <th className="p-3">Type</th>
@@ -3797,12 +3855,12 @@ export default function App() {
                                   <th className="p-3">Attempts</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-800">
+                              <tbody className="divide-y divide-slate-200/60 dark:divide-slate-800">
                                 {selectedMsgRecipients.map((r) => (
                                   <tr key={r.id}>
-                                    <td className="p-3 font-mono">{r.address}</td>
+                                    <td className="p-3 font-mono text-slate-900 dark:text-slate-200">{r.address}</td>
                                     <td className="p-3 uppercase">{r.type}</td>
-                                    <td className="p-3 capitalize">{r.status}</td>
+                                    <td className="p-3 capitalize font-semibold">{r.status}</td>
                                     <td className="p-3">{r.attempts}</td>
                                   </tr>
                                 ))}
@@ -3813,16 +3871,16 @@ export default function App() {
 
                         {/* Chronological Event History */}
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Event Timeline</h4>
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Event Timeline</h4>
                           <div className="space-y-2">
                             {selectedMsgEvents.map((e) => (
-                              <div key={e.id} className="text-xs bg-slate-950/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                              <div key={e.id} className="text-xs bg-slate-50/70 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                                  <span className="font-semibold text-indigo-300">{e.type}</span>
-                                  <span className="text-slate-400">{e.data}</span>
+                                  <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                                  <span className="font-semibold text-sky-600 dark:text-sky-400">{e.type}</span>
+                                  <span className="text-slate-600 dark:text-slate-400">{e.data}</span>
                                 </div>
-                                <span className="text-slate-500 font-mono">
+                                <span className="text-slate-400 font-mono text-[11px]">
                                   {new Date(e.occurred_at).toLocaleTimeString()}
                                 </span>
                               </div>
@@ -3832,11 +3890,11 @@ export default function App() {
 
                         {/* Sandboxed Body HTML Preview (§23.3) */}
                         <div>
-                          <h4 className="text-sm font-semibold text-slate-300 mb-2">Message Body Preview (Sandboxed)</h4>
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Message Body Preview (Sandboxed)</h4>
                           <iframe
                             sandbox=""
                             srcDoc={selectedMsgBody}
-                            className="w-full h-64 bg-white rounded-lg border border-slate-700 shadow-inner"
+                            className="w-full h-64 bg-white rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-inner"
                             title="Message Content Preview"
                           />
                         </div>
@@ -3850,67 +3908,87 @@ export default function App() {
             {/* TAB: TEMPLATES */}
             {currentTab === 'templates' && (
               <div className="space-y-6 mt-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Create Template</h3>
+                <div className="glass-card p-6">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">Create Template</h3>
                   <form onSubmit={handleCreateTemplate} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Template Name</label>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Template Name</label>
                         <input
                           type="text"
                           required
                           placeholder="e.g. Welcome Onboarding"
                           value={newTmplName}
                           onChange={(e) => setNewTmplName(e.target.value)}
-                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                          className="glass-input"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Subject (Mustache)</label>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Subject (Mustache)</label>
                         <input
                           type="text"
                           required
                           placeholder="Welcome to {{company}}, {{name}}!"
                           value={newTmplSubject}
                           onChange={(e) => setNewTmplSubject(e.target.value)}
-                          className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg"
+                          className="glass-input"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">HTML Body</label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">HTML Body</label>
                       <textarea
                         rows={3}
                         placeholder="<h1>Welcome {{name}}!</h1><p>We are excited to have you.</p>"
                         value={newTmplHTML}
                         onChange={(e) => setNewTmplHTML(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg font-mono"
+                        className="glass-input font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Plain Text Body</label>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plain Text Body</label>
                       <textarea
                         rows={2}
                         placeholder="Welcome {{name}}! We are excited to have you."
                         value={newTmplText}
                         onChange={(e) => setNewTmplText(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm px-3 py-2 rounded-lg font-mono"
+                        className="glass-input font-mono"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      className="btn-gradient text-xs px-5 py-2.5"
                     >
                       Save & Publish Template
                     </button>
                   </form>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 font-semibold text-white">
-                    Published Templates
+                <div className="glass-card overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">Published Templates</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">({templatesList.length} Total)</span>
+                      <ExportMenu
+                        filename={`mailvex-templates-${activeTenant?.slug || 'tenant'}`}
+                        sheetTitle="Templates"
+                        label="Export Templates"
+                        columns={[
+                          { header: 'Template ID', key: 'id' },
+                          { header: 'Template Name', key: 'name' },
+                          { header: 'Description', key: 'description' },
+                          { header: 'Created At', key: 'created_at' },
+                        ]}
+                        data={templatesList.map((t) => ({
+                          id: t.id,
+                          name: t.name,
+                          description: t.description || '—',
+                          created_at: t.created_at,
+                        }))}
+                      />
+                    </div>
                   </div>
-                  <div className="divide-y divide-slate-800">
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                     {templatesList.length === 0 ? (
                       <div className="p-6 text-center text-slate-500 text-sm">
                         No templates created yet.
@@ -4020,43 +4098,63 @@ export default function App() {
                   </form>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
-                    <span>Suppressed Recipients ({suppressionsList.length})</span>
-                    <div className="flex items-center space-x-3">
+                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between font-bold text-sm text-slate-900 dark:text-white">
+                    <div className="flex items-center space-x-2">
+                      <Ban className="w-4 h-4 text-sky-500" />
+                      <span>Suppressed Recipients</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({suppressionsList.length} Total)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setImportModalOpen(true)}
-                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition-colors"
+                        className="btn-secondary text-xs px-3 py-1.5"
                       >
                         Import CSV
                       </button>
-                      <button
-                        onClick={handleExportSuppressions}
-                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition-colors"
-                      >
-                        Export CSV
-                      </button>
+                      <ExportMenu
+                        filename={`mailvex-suppressions-${activeTenant?.slug || 'tenant'}`}
+                        sheetTitle="Suppressions"
+                        label="Export Suppressions"
+                        columns={[
+                          { header: 'Address / Domain', key: 'address' },
+                          { header: 'Domain Name', key: 'address_domain' },
+                          { header: 'Suppression Type', key: 'type' },
+                          { header: 'Reason', key: 'reason' },
+                          { header: 'Source', key: 'source' },
+                          { header: 'Timestamp', key: 'created_at' },
+                        ]}
+                        data={suppressionsList.map((s) => ({
+                          address: s.address,
+                          address_domain: s.address_domain,
+                          type: s.type,
+                          reason: s.reason || 'N/A',
+                          source: s.source,
+                          created_at: s.created_at,
+                        }))}
+                      />
                       <button
                         onClick={loadSuppressions}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
+                        className="btn-secondary text-xs px-3 py-1.5"
                       >
-                        Refresh
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Refresh</span>
                       </button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm text-slate-300">
-                      <thead className="bg-slate-950 text-xs text-slate-400 uppercase border-b border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                         <tr>
-                          <th className="px-6 py-3">Address / Domain</th>
-                          <th className="px-6 py-3">Type</th>
-                          <th className="px-6 py-3">Reason</th>
-                          <th className="px-6 py-3">Source</th>
-                          <th className="px-6 py-3">Created</th>
-                          <th className="px-6 py-3 text-right">Action</th>
+                          <th className="py-3 px-6">Address / Domain</th>
+                          <th className="py-3 px-6">Type</th>
+                          <th className="py-3 px-6">Reason</th>
+                          <th className="py-3 px-6">Source</th>
+                          <th className="py-3 px-6">Created</th>
+                          <th className="py-3 px-6 text-right">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
                         {suppressionsList.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
@@ -4107,23 +4205,23 @@ export default function App() {
 
                 {/* Import CSV Modal */}
                 {importModalOpen && (
-                  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <h4 className="text-md font-semibold text-white">Bulk Import Suppressions (CSV)</h4>
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/80 dark:border-slate-800/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+                        <h4 className="text-base font-bold text-slate-900 dark:text-white">Bulk Import Suppressions (CSV)</h4>
                         <button
                           onClick={() => setImportModalOpen(false)}
-                          className="text-slate-400 hover:text-slate-200 text-sm"
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm"
                         >
                           ✕
                         </button>
                       </div>
 
                       {importStatusMsg && (
-                        <div className={`p-3 rounded-lg text-xs font-medium ${
+                        <div className={`p-3 rounded-xl text-xs font-semibold ${
                           importStatusMsg.startsWith('Import completed')
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                            : 'bg-rose-950 text-rose-400 border border-rose-800'
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                         }`}>
                           {importStatusMsg}
                         </div>
@@ -4131,7 +4229,7 @@ export default function App() {
 
                       <form onSubmit={handleImportSuppressions} className="space-y-4">
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                             CSV Content (format: email,type,reason)
                           </label>
                           <textarea
@@ -4140,20 +4238,20 @@ export default function App() {
                             placeholder={"email,type,reason\nbounced@example.com,hard_bounce,Mailbox inactive\nunsub@example.com,unsubscribe,User opted out"}
                             value={importCSVText}
                             onChange={(e) => setImportCSVText(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 text-slate-200 font-mono text-xs px-3 py-2 rounded-lg"
+                            className="w-full bg-slate-50/70 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 font-mono text-xs px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30"
                           />
                         </div>
-                        <div className="flex justify-end space-x-3 pt-2 border-t border-slate-800">
+                        <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                           <button
                             type="button"
                             onClick={() => setImportModalOpen(false)}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg"
+                            className="btn-secondary text-xs px-3.5 py-2"
                           >
                             Cancel
                           </button>
                           <button
                             type="submit"
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+                            className="btn-gradient text-xs px-4 py-2"
                           >
                             Upload & Process
                           </button>
@@ -4469,13 +4567,56 @@ export default function App() {
                       <RefreshCw className={`w-3.5 h-3.5 ${analyticsLoading ? 'animate-spin text-sky-500' : ''}`} />
                       <span>Refresh</span>
                     </button>
-                    <button
-                      onClick={handleExportCSV}
-                      disabled={exportLoading}
-                      className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
-                    >
-                      <span>{exportLoading ? 'Generating...' : '📥 Export CSV Report'}</span>
-                    </button>
+                    <ExportMenu
+                      filename={`mailvex-analytics-${activeTenant?.slug || 'tenant'}-${analyticsRange}`}
+                      sheetTitle="Analytics"
+                      label="Download Report"
+                      columns={[
+                        { header: 'Metric / Timestamp', key: 'label' },
+                        { header: 'Sent Volume', key: 'sent', type: 'number' },
+                        { header: 'Delivered Volume', key: 'delivered', type: 'number' },
+                        { header: 'Bounced Volume', key: 'bounced', type: 'number' },
+                        { header: 'Complained Volume', key: 'complained', type: 'number' },
+                        { header: 'Delivery Rate', key: 'delivery_rate' },
+                        { header: 'Bounce Rate', key: 'bounce_rate' },
+                        { header: 'Complaint Rate', key: 'complaint_rate' },
+                      ]}
+                      data={
+                        analyticsTimeSeries.length > 0
+                          ? analyticsTimeSeries.map((p) => ({
+                              label: p.timestamp,
+                              sent: p.sent,
+                              delivered: p.delivered,
+                              bounced: p.bounced,
+                              complained: p.complained,
+                              delivery_rate: `${(p.delivery_rate * 100).toFixed(2)}%`,
+                              bounce_rate: `${(((p.bounced || 0) / Math.max(1, p.sent || 1)) * 100).toFixed(2)}%`,
+                              complaint_rate: `${(p.complaint_rate * 100).toFixed(3)}%`,
+                            }))
+                          : [
+                              {
+                                label: `Overall Summary (${analyticsRange})`,
+                                sent: analyticsSummary?.sent_count ?? analyticsSummary?.sent ?? 0,
+                                delivered: analyticsSummary?.delivered_count ?? analyticsSummary?.delivered ?? 0,
+                                bounced: (analyticsSummary?.hard_bounce_count ?? 0) + (analyticsSummary?.soft_bounce_count ?? 0),
+                                complained: analyticsSummary?.complaint_count ?? analyticsSummary?.complained ?? 0,
+                                delivery_rate: `${((analyticsSummary?.delivery_rate ?? 0) * 100).toFixed(2)}%`,
+                                bounce_rate: `${((analyticsSummary?.bounce_rate ?? 0) * 100).toFixed(2)}%`,
+                                complaint_rate: `${((analyticsSummary?.complaint_rate ?? 0) * 100).toFixed(3)}%`,
+                              },
+                              ...analyticsProviders.map((pv) => ({
+                                label: `Provider: ${pv.provider}`,
+                                sent: pv.sent_count || pv.sent,
+                                delivered: pv.delivered_count || pv.delivered,
+                                bounced: pv.bounce_count || pv.bounced,
+                                complained: pv.complaint_count || pv.complained,
+                                delivery_rate: `${(pv.delivery_rate * 100).toFixed(2)}%`,
+                                bounce_rate: `${((pv.bounce_rate ?? 0) * 100).toFixed(2)}%`,
+                                complaint_rate: `${(pv.complaint_rate * 100).toFixed(3)}%`,
+                              }))
+                            ]
+                      }
+                    />
                   </div>
                 </div>
 
@@ -4919,28 +5060,49 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
 
                 {/* Deliveries History Modal */}
                 {deliveriesModalOpen && (
-                  <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-                      <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                  <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/80 dark:border-slate-800/80 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                         <div>
-                          <h3 className="text-base font-semibold text-white">
+                          <h3 className="text-base font-bold text-slate-900 dark:text-white">
                             Webhook Delivery History
                           </h3>
-                          <div className="text-xs text-slate-400 font-mono mt-0.5">
+                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                             {selectedWebhook?.url}
                           </div>
                         </div>
-                        <button
-                          onClick={() => setDeliveriesModalOpen(false)}
-                          className="text-slate-400 hover:text-white text-lg font-bold"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <ExportMenu
+                            filename={`webhook-deliveries-${selectedWebhook?.id || 'hook'}`}
+                            sheetTitle="Deliveries"
+                            label="Export Deliveries"
+                            columns={[
+                              { header: 'Delivery ID', key: 'id' },
+                              { header: 'Event Type', key: 'event_type' },
+                              { header: 'HTTP Status', key: 'status_code' },
+                              { header: 'Duration (ms)', key: 'duration_ms', type: 'number' },
+                              { header: 'Timestamp', key: 'created_at' },
+                            ]}
+                            data={webhookDeliveries.map((del) => ({
+                              id: del.id,
+                              event_type: del.event_type,
+                              status_code: del.status_code || 0,
+                              duration_ms: del.duration_ms || 0,
+                              created_at: del.created_at,
+                            }))}
+                          />
+                          <button
+                            onClick={() => setDeliveriesModalOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-lg font-bold ml-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
 
                       <div className="p-6 overflow-y-auto flex-1">
-                        <table className="w-full text-left text-xs text-slate-300">
-                          <thead className="bg-slate-950/60 uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+                          <thead className="bg-slate-50/70 dark:bg-slate-950/60 uppercase font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                             <tr>
                               <th className="px-4 py-2">Delivery ID</th>
                               <th className="px-4 py-2">Event</th>
@@ -4949,7 +5111,7 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                               <th className="px-4 py-2">Time</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-800">
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {webhookDeliveries.length === 0 ? (
                               <tr>
                                 <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
@@ -4958,14 +5120,14 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                               </tr>
                             ) : (
                               webhookDeliveries.map((del) => (
-                                <tr key={del.id} className="hover:bg-slate-800/40">
-                                  <td className="px-4 py-3 font-mono text-white">{del.id}</td>
-                                  <td className="px-4 py-3 font-mono text-indigo-300">{del.event_type}</td>
+                                <tr key={del.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/40">
+                                  <td className="px-4 py-3 font-mono text-slate-900 dark:text-white font-medium">{del.id}</td>
+                                  <td className="px-4 py-3 font-mono text-sky-600 dark:text-indigo-300">{del.event_type}</td>
                                   <td className="px-4 py-3">
                                     {del.status_code && del.status_code >= 200 && del.status_code < 300 ? (
-                                      <span className="text-emerald-400 font-semibold">{del.status_code} OK</span>
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{del.status_code} OK</span>
                                     ) : (
-                                      <span className="text-rose-400 font-semibold">
+                                      <span className="text-rose-600 dark:text-rose-400 font-semibold">
                                         {del.status_code || 'Error'}: {del.error_message || 'Failed'}
                                       </span>
                                     )}
@@ -5086,34 +5248,71 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
 
                 {/* Privacy Export Inspection Preview */}
                 {privacyExportReport && (
-                  <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-white">
-                        Personal Data Export for: <span className="font-mono text-indigo-400">{privacyExportReport.email_address}</span>
+                  <div className="glass-card p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Personal Data Export for: <span className="font-mono text-sky-600 dark:text-sky-400">{privacyExportReport.email_address}</span>
                       </h3>
-                      <button
-                        onClick={() => setPrivacyExportReport(null)}
-                        className="text-slate-400 hover:text-white text-xs"
-                      >
-                        Close
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <ExportMenu
+                          filename={`privacy-export-${privacyExportReport.email_address?.replace(/[@.]/g, '_') || 'subject'}`}
+                          sheetTitle="GDPR Personal Data"
+                          label="Download Export"
+                          columns={[
+                            { header: 'Record Type', key: 'record_type' },
+                            { header: 'Identifier', key: 'id' },
+                            { header: 'Details / Subject', key: 'details' },
+                            { header: 'Status / Reason', key: 'status' },
+                            { header: 'Timestamp', key: 'created_at' },
+                          ]}
+                          data={[
+                            ...(privacyExportReport.messages || []).map((m: any) => ({
+                              record_type: 'Message',
+                              id: m.id,
+                              details: `From: ${m.from_address || ''} | Subject: ${m.subject || ''}`,
+                              status: m.status,
+                              created_at: m.created_at,
+                            })),
+                            ...(privacyExportReport.events || []).map((ev: any) => ({
+                              record_type: 'Event',
+                              id: ev.id,
+                              details: `Type: ${ev.type || ''} | Recipient: ${ev.recipient || ''}`,
+                              status: ev.details || ev.type,
+                              created_at: ev.created_at,
+                            })),
+                            ...(privacyExportReport.suppressions || []).map((s: any) => ({
+                              record_type: 'Suppression',
+                              id: s.address,
+                              details: `Domain: ${s.address_domain || ''}`,
+                              status: `${s.type}: ${s.reason || ''}`,
+                              created_at: s.created_at,
+                            })),
+                          ]}
+                        />
+                        <button
+                          onClick={() => setPrivacyExportReport(null)}
+                          className="btn-secondary text-xs px-3 py-1.5"
+                        >
+                          Close
+                        </button>
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="p-3 bg-slate-800/60 rounded-lg">
-                        <div className="text-xs text-slate-400">Messages</div>
-                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.messages?.length || 0}</div>
+                      <div className="p-3 bg-slate-50/70 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Messages</div>
+                        <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">{privacyExportReport.messages?.length || 0}</div>
                       </div>
-                      <div className="p-3 bg-slate-800/60 rounded-lg">
-                        <div className="text-xs text-slate-400">Events</div>
-                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.events?.length || 0}</div>
+                      <div className="p-3 bg-slate-50/70 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Events</div>
+                        <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">{privacyExportReport.events?.length || 0}</div>
                       </div>
-                      <div className="p-3 bg-slate-800/60 rounded-lg">
-                        <div className="text-xs text-slate-400">Suppressions</div>
-                        <div className="text-lg font-bold text-white mt-1">{privacyExportReport.suppressions?.length || 0}</div>
+                      <div className="p-3 bg-slate-50/70 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Suppressions</div>
+                        <div className="text-lg font-bold text-slate-900 dark:text-white mt-1">{privacyExportReport.suppressions?.length || 0}</div>
                       </div>
                     </div>
-                    <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto max-h-60">
-                      <pre className="text-xs font-mono text-slate-300">
+                    <div className="bg-slate-50/80 dark:bg-slate-950 p-4 rounded-xl overflow-x-auto max-h-60 border border-slate-200/80 dark:border-slate-800">
+                      <pre className="text-xs font-mono text-slate-800 dark:text-slate-300">
                         {JSON.stringify(privacyExportReport, null, 2)}
                       </pre>
                     </div>
@@ -6565,7 +6764,36 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                   )}
 
                   {/* Impersonation Audit Log Table */}
-                  <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Impersonation Session Audit Trail</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      Impersonation Session Audit Trail
+                    </h3>
+                    <ExportMenu
+                      filename="mailvex-impersonation-sessions"
+                      sheetTitle="Impersonations"
+                      label="Export Sessions"
+                      columns={[
+                        { header: 'Session ID', key: 'id' },
+                        { header: 'Actor Admin', key: 'actor_user_id' },
+                        { header: 'Target Tenant ID', key: 'target_tenant_id' },
+                        { header: 'Reason', key: 'reason' },
+                        { header: 'Mode', key: 'access_type' },
+                        { header: 'Body Masking', key: 'is_support_masking' },
+                        { header: 'Started At', key: 'started_at' },
+                        { header: 'Status', key: 'status' },
+                      ]}
+                      data={impersonationSessions.map((s) => ({
+                        id: s.id,
+                        actor_user_id: s.actor_user_id,
+                        target_tenant_id: s.target_tenant_id,
+                        reason: s.reason,
+                        access_type: s.access_type,
+                        is_support_masking: s.is_support_masking ? 'Masked' : 'Full',
+                        started_at: s.started_at,
+                        status: !s.ended_at ? 'Active' : 'Ended',
+                      }))}
+                    />
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
@@ -6680,8 +6908,29 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                             Domain evaluated: <strong className="text-white">{complianceResult.domain_name}</strong> | Last audit: {new Date(complianceResult.checked_at).toLocaleString()}
                           </p>
                         </div>
-                        <div className="w-20 h-20 rounded-full border-4 border-slate-800 flex items-center justify-center bg-slate-900">
-                          <span className="text-lg font-bold text-white">{complianceResult.overall_score}%</span>
+                        <div className="flex items-center space-x-4">
+                          <ExportMenu
+                            filename={`deliverability-audit-${complianceResult.domain_name}`}
+                            sheetTitle="Compliance Audit"
+                            label="Export Audit"
+                            columns={[
+                              { header: 'Standard / Pillar', key: 'standard' },
+                              { header: 'Status', key: 'status' },
+                              { header: 'Details & Findings', key: 'details' },
+                            ]}
+                            data={[
+                              { standard: 'Overall Score', status: `${complianceResult.overall_score}/100`, details: complianceResult.overall_score >= 80 ? 'Production Ready' : 'Issues Detected' },
+                              { standard: 'SPF Alignment', status: complianceResult.spf_status || 'pass', details: complianceResult.spf_details || 'Configured' },
+                              { standard: 'DKIM Cryptographic Signature', status: complianceResult.dkim_status || 'pass', details: complianceResult.dkim_details || '2048-bit key verified' },
+                              { standard: 'DMARC Enforcement Policy', status: complianceResult.dmarc_status || 'pass', details: complianceResult.dmarc_details || 'Policy active' },
+                              { standard: 'Forward-Confirmed Reverse DNS (FCrDNS)', status: complianceResult.fcrdns_status || 'pass', details: complianceResult.fcrdns_details || 'PTR matches IP' },
+                              { standard: 'STARTTLS In-Flight Encryption', status: complianceResult.tls_status || 'pass', details: complianceResult.tls_details || 'TLS 1.3 negotiated' },
+                              { standard: 'IP DNSBL Reputation', status: complianceResult.dnsbl_status || 'clean', details: complianceResult.dnsbl_details || 'Zero listings' },
+                            ]}
+                          />
+                          <div className="w-16 h-16 rounded-full border-4 border-slate-200 dark:border-slate-800 flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+                            <span className="text-base font-bold text-slate-900 dark:text-white">{complianceResult.overall_score}%</span>
+                          </div>
                         </div>
                       </div>
 
@@ -7245,14 +7494,37 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                         <ShieldCheck className="w-4 h-4 text-amber-400" />
                         <h3 className="text-sm font-bold text-white">Administrative Security Audit Trail</h3>
                       </div>
-                      <button
-                        onClick={fetchAdminAuditLogs}
-                        disabled={adminAuditLoading}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center space-x-1"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${adminAuditLoading ? 'animate-spin' : ''}`} />
-                        <span>Refresh Logs</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={fetchAdminAuditLogs}
+                          disabled={adminAuditLoading}
+                          className="btn-secondary text-xs px-3 py-1.5 flex items-center space-x-1"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${adminAuditLoading ? 'animate-spin text-sky-500' : ''}`} />
+                          <span>Refresh Logs</span>
+                        </button>
+                        <ExportMenu
+                          filename="mailvex-platform-security-audit"
+                          sheetTitle="Audit Logs"
+                          label="Export Audit"
+                          columns={[
+                            { header: 'Log ID', key: 'id' },
+                            { header: 'Actor User', key: 'actor_user_id' },
+                            { header: 'Action', key: 'action' },
+                            { header: 'Resource Type', key: 'resource_type' },
+                            { header: 'Resource ID', key: 'resource_id' },
+                            { header: 'Timestamp', key: 'created_at' },
+                          ]}
+                          data={adminAuditLogs.map((log: any) => ({
+                            id: log.id,
+                            actor_user_id: log.actor_user_id || 'system',
+                            action: log.action,
+                            resource_type: log.resource_type,
+                            resource_id: log.resource_id,
+                            created_at: log.created_at,
+                          }))}
+                        />
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto">

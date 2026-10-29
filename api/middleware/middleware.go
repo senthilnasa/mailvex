@@ -148,8 +148,11 @@ func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 				}
 			}
 
-			// Fallback to User Session authentication
+			// Fallback to User Session authentication (headers or query parameters for direct downloads)
 			userID := r.Header.Get("X-User-ID")
+			if userID == "" {
+				userID = r.URL.Query().Get("user_id")
+			}
 			if userID == "" {
 				http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required"}}`, http.StatusUnauthorized)
 				return
@@ -165,6 +168,9 @@ func RequireAuth(repo repository.Repository) func(http.Handler) http.Handler {
 
 			// Tenant context resolution
 			tenantID := r.Header.Get("X-Tenant-ID")
+			if tenantID == "" {
+				tenantID = r.URL.Query().Get("tenant_id")
+			}
 
 			// Check for Platform Admin Impersonation header
 			impersonateTenantID := r.Header.Get("X-Impersonate-Tenant-ID")
