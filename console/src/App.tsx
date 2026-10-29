@@ -3260,6 +3260,7 @@ export default function App() {
                 { id: 'domains', label: 'Domains & DNS', icon: Globe },
                 { id: 'streams', label: 'Message Streams', icon: GitFork },
                 { id: 'apikeys', label: 'API Keys', icon: Key },
+                { id: 'smtp_devices', label: 'SMTP & Devices', icon: HardDrive },
                 { id: 'messages', label: 'Message Logs', icon: Inbox },
                 { id: 'templates', label: 'Templates', icon: FileCode },
               ].map((item) => {
@@ -3365,6 +3366,7 @@ export default function App() {
                   {currentTab === 'domains' && 'Domains & DNS Configuration'}
                   {currentTab === 'streams' && 'Message Streams'}
                   {currentTab === 'apikeys' && 'API Keys'}
+                  {currentTab === 'smtp_devices' && 'SMTP Credentials & IoT Devices'}
                   {currentTab === 'messages' && 'Message Logs & Inspector'}
                   {currentTab === 'templates' && 'Templates'}
                   {currentTab === 'suppressions' && 'Suppression List & Safeguards'}
