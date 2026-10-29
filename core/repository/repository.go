@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 var (

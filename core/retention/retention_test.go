@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/retention"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/retention"
 )
 
 func TestRetentionPolicyAndPurge(t *testing.T) {

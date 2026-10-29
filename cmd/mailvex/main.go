@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 const Version = "1.0.0"

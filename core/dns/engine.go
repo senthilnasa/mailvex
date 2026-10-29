@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 // Resolver abstracts DNS lookups across multi-resolvers or test stubs

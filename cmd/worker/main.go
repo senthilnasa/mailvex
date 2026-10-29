@@ -8,11 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mailvex/mailvex/core/config"
-	"github.com/mailvex/mailvex/core/logger"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
-	"github.com/mailvex/mailvex/worker"
+	"github.com/senthilnasa/mailvex/core/config"
+	"github.com/senthilnasa/mailvex/core/logger"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/worker"
 )
 
 func main() {

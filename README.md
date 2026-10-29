@@ -199,7 +199,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/mailvex/mailvex/sdk/go/mailvex"
+	"github.com/senthilnasa/mailvex/sdk/go/mailvex"
 )
 
 func main() {

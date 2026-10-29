@@ -11,11 +11,11 @@ import (
 
 	"github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"
-	"github.com/mailvex/mailvex/core"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/reports"
+	"github.com/senthilnasa/mailvex/core"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/reports"
 )
 
 var (

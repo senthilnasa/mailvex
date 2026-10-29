@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 type BounceClassification struct {

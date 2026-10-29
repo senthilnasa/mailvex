@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 type mockResolver struct {

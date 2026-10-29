@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mailvex/mailvex/api/middleware"
-	"github.com/mailvex/mailvex/core/auth"
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/api/middleware"
+	"github.com/senthilnasa/mailvex/core/auth"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 // ListMessagesHandler lists messages with cursor-based pagination and filters

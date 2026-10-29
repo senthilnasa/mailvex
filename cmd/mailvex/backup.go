@@ -16,8 +16,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 // BackupManifest describes the contents and cryptographic checksum of a backup archive

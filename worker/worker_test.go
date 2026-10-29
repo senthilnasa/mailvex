@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
 )
 
 type mockSMTPServer struct {

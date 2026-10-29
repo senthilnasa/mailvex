@@ -4,15 +4,15 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/mailvex/mailvex/api/handlers"
-	"github.com/mailvex/mailvex/api/middleware"
-	"github.com/mailvex/mailvex/core"
-	"github.com/mailvex/mailvex/core/audit"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/dns"
-	"github.com/mailvex/mailvex/core/metrics"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/api/handlers"
+	"github.com/senthilnasa/mailvex/api/middleware"
+	"github.com/senthilnasa/mailvex/core"
+	"github.com/senthilnasa/mailvex/core/audit"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/dns"
+	"github.com/senthilnasa/mailvex/core/metrics"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
 )
 
 // Server configures HTTP routes and middleware for Mailvex API

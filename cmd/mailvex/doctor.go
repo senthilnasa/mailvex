@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 // CheckStatus indicates whether a doctor test passed, failed, or produced a warning

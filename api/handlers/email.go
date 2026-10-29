@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/api/middleware"
-	"github.com/mailvex/mailvex/core"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/template"
+	"github.com/senthilnasa/mailvex/api/middleware"
+	"github.com/senthilnasa/mailvex/core"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/template"
 )
 
 type SendEmailRequest struct {

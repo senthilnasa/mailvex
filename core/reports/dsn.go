@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/worker"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/worker"
 )
 
 var (

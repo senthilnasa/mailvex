@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mailvex/mailvex/api/handlers"
-	"github.com/mailvex/mailvex/core/audit"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/api/handlers"
+	"github.com/senthilnasa/mailvex/core/audit"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func TestSetupExecuteHandler_IdempotenceAndSelfHealing(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/inbound"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/inbound"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func TestInboundRouteMatchingAndProcessing(t *testing.T) {

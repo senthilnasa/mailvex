@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/audit"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/audit"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func setupPrivacyTestEnvironment(t *testing.T) (*Server, repository.Repository, string, string) {

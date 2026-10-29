@@ -10,11 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/mime"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/mime"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
 )
 
 type WorkerConfig struct {

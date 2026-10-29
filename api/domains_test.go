@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/dns"
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/dns"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 func TestDomainsAndDNSLifecycle(t *testing.T) {

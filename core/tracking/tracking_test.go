@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/tracking"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/tracking"
 )
 
 func TestTrackingTokens(t *testing.T) {

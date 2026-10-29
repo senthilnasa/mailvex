@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
 )
 
 func TestAllInOneSupervisorLifecycle(t *testing.T) {

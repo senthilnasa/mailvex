@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 // Transparent 1x1 GIF tracking pixel (RFC 2046 compliant)

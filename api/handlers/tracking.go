@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/tracking"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/tracking"
 )
 
 // HandleOpenPixel serves the 1x1 transparent tracking pixel (GET /o/{token})

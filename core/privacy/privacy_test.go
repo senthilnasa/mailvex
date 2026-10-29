@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/privacy"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/privacy"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func TestPrivacyExportAndErasure(t *testing.T) {

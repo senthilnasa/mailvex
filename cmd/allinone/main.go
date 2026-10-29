@@ -11,16 +11,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mailvex/mailvex/api"
-	"github.com/mailvex/mailvex/core"
-	"github.com/mailvex/mailvex/core/audit"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/dns"
-	"github.com/mailvex/mailvex/core/domain"
-	"github.com/mailvex/mailvex/core/repository"
-	"github.com/mailvex/mailvex/core/storage"
-	"github.com/mailvex/mailvex/smtp"
-	"github.com/mailvex/mailvex/worker"
+	"github.com/senthilnasa/mailvex/api"
+	"github.com/senthilnasa/mailvex/core"
+	"github.com/senthilnasa/mailvex/core/audit"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/dns"
+	"github.com/senthilnasa/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/smtp"
+	"github.com/senthilnasa/mailvex/worker"
 )
 
 // AllInOneSupervisor coordinates all Mailvex services in a single process for homelab and edge deployments (§28)

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailvex/mailvex/api/middleware"
-	"github.com/mailvex/mailvex/core/alerts"
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/api/middleware"
+	"github.com/senthilnasa/mailvex/core/alerts"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 // GET /v1/reputation/overview

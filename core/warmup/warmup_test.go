@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func TestWarmupManagerLifecycle(t *testing.T) {

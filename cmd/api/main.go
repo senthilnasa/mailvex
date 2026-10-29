@@ -9,12 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mailvex/mailvex/api"
-	"github.com/mailvex/mailvex/core/audit"
-	"github.com/mailvex/mailvex/core/config"
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/logger"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/api"
+	"github.com/senthilnasa/mailvex/core/audit"
+	"github.com/senthilnasa/mailvex/core/config"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/logger"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 func main() {

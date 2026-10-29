@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mailvex/mailvex/core/domain"
+	"github.com/senthilnasa/mailvex/core/domain"
 )
 
 func TestDNSEngineAndVerification(t *testing.T) {

@@ -719,7 +719,7 @@ In addition to REST, Mailvex accepts standard RFC 5321 SMTP submission.
 
 Install or import the official Mailvex Go client:
 ```bash
-go get github.com/mailvex/mailvex/sdk/go/mailvex
+go get github.com/senthilnasa/mailvex/sdk/go/mailvex
 ```
 
 ```go
@@ -730,7 +730,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/mailvex/mailvex/sdk/go/mailvex"
+	"github.com/senthilnasa/mailvex/sdk/go/mailvex"
 )
 
 func main() {

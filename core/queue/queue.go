@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/mailvex/mailvex/core/crypto"
-	"github.com/mailvex/mailvex/core/repository"
+	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/repository"
 )
 
 type QueueMessage struct {
