@@ -1,8 +1,13 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/senthilnasa/mailvex/api/handlers"
 	"github.com/senthilnasa/mailvex/api/middleware"
@@ -463,6 +468,8 @@ func (s *Server) setupRoutes() {
 		middleware.RequirePermission(s.repo, "domains.read")(http.HandlerFunc(apiHandler.PostTLSCheckHandler)),
 	))
 
+	// Static SPA / Console Handler for GET / and frontend assets
+	s.setupStaticRoutes()
 
 	// Apply global middleware: RequestID -> Logger -> Recoverer -> SecurityHeaders
 	var h http.Handler = s.mux
@@ -472,6 +479,90 @@ func (s *Server) setupRoutes() {
 	h = middleware.RequestID(h)
 
 	s.handler = h
+}
+
+func (s *Server) setupStaticRoutes() {
+	staticDir := os.Getenv("MVX_STATIC_DIR")
+	if staticDir == "" {
+		for _, dir := range []string{"/var/www/mailvex", "./console/dist", "../console/dist"} {
+			if info, err := os.Stat(dir); err == nil && info.IsDir() {
+				staticDir = dir
+				break
+			}
+		}
+	}
+
+	if staticDir != "" {
+		fs := http.FileServer(http.Dir(staticDir))
+		s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+			path := filepath.Join(staticDir, filepath.Clean(r.URL.Path))
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				fs.ServeHTTP(w, r)
+				return
+			}
+			indexPath := filepath.Join(staticDir, "index.html")
+			if _, err := os.Stat(indexPath); err == nil {
+				http.ServeFile(w, r, indexPath)
+				return
+			}
+			fs.ServeHTTP(w, r)
+		})
+		return
+	}
+
+	// Fallback landing page when console assets are not mounted
+	s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		if strings.Contains(r.Header.Get("Accept"), "application/json") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"name":        "Mailvex Email Infrastructure API",
+				"status":      "healthy",
+				"version":     "1.0.0",
+				"health_url":  "/health",
+				"setup_url":   "/v1/setup",
+				"metrics_url": "/metrics",
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mailvex API</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b0f19; color: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; padding: 2.5rem; max-width: 500px; width: 90%; backdrop-filter: blur(12px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); text-align: center; }
+        .badge { display: inline-block; background: #059669; color: #ecfdf5; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0.25rem 0.75rem; border-radius: 9999px; margin-bottom: 1rem; }
+        h1 { margin: 0 0 0.5rem 0; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
+        p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.75rem; }
+        .links { display: flex; flex-direction: column; gap: 0.75rem; }
+        .btn { display: block; text-decoration: none; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; transition: all 0.15s ease; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="badge">● Online &amp; Healthy</span>
+        <h1>Mailvex API Gateway</h1>
+        <p>Your self-hosted email infrastructure platform is up and operational.</p>
+        <div class="links">
+            <a href="/v1/setup" class="btn btn-primary">Initial Setup Wizard (JSON)</a>
+            <a href="/health" class="btn btn-secondary">System Health Endpoint</a>
+            <a href="/metrics" class="btn btn-secondary">Prometheus Telemetry Metrics</a>
+        </div>
+    </div>
+</body>
+</html>`)
+	})
 }
 
 func (s *Server) Handler() http.Handler {
