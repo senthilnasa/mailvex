@@ -193,19 +193,47 @@ func seedInitialState(ctx context.Context, repo repository.Repository, store sto
 		UpdatedAt:     now,
 	})
 
-	if dkimPair, err := crypto.GenerateDKIMKey(2048); err == nil {
-		_ = repo.SaveDKIMKey(ctx, &domain.DKIMKey{
-			ID:                  crypto.NewULID(crypto.PrefixAPIKey),
-			DomainID:            domainID,
-			TenantID:            tenantID,
-			Selector:            "mvx",
-			Algorithm:           "rsa2048",
-			EncryptedPrivateKey: dkimPair.PrivateKeyPEM,
-			PublicKey:           dkimPair.PublicKeyB64,
-			Status:              "active",
-			CreatedAt:           now,
-		})
-	}
+	const defaultDKIMPrivKey = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDGwgnEYqXI7E3O
+fwy8ZrGEK2EQWlGHK5+GarRp2UFOD/v4IB8elBUKDQrNz74StTqW6LmaW23Vo18c
+QocILKxIoIB4RMn9NPz/PJVCLnCB//BSOCC/24ZXaVgN8DzMZN9soVVfvUhkNJuv
+urkSmqF5xAQp0OFS2NQRT1PvrRw62LwIltpyM403OtKYyF3of237vn1m/RguhS7X
+dMbIXdJd/z4Jr+dhDuDhR6NX3dM04ppaP6m3fpjdMUzoFyU3lGOjwaXaaP/RfErA
+Yg5ZkXr12J3H24TLx/F7QVQCEjxyjZg1zvBgEQSc8nWJzBg0qIhYGA0hkk7M34uH
+73vvzUIPAgMBAAECggEAICWyPrlV5zGRRBz4imBxxdbeVC7HkP1VSABqPdSN43pi
+XreTUPbSkFWbsb4wGAaH+3CY1IaFNVC/SWrZPFE9bGHJZap6oSG46e96lMG+IMis
+rh+17FItYGYBf/+jVcva908A6ANNeieoJrwkwwWPqIozwi+uwh+f7UzPXqy5LCso
+c/0Od2/dydkviMj/QsfsFPyJJyRaNpAtL/KL8GAOGCdfzi4AhLdnIeKYkQnFmvYF
+M0Bl/4GxWIuyHNv+vZ+Y90INloTOtIr/HGMrM5MKPHmrg/CBqtskJ//Pcr49xfrH
++aR97BYG/vfTNmUxkrXrO1HmYQkp95h497NmCpU4wQKBgQD/pvw0n8VE5/7fct/b
+j1xvPVZGDJtMnzjC6P0SjvQATYBCo0El3pGR/58fwUYYy3tE3dQMLnr3k77RG1C3
+qkbyZ7SFc0wOZWzvlMAfU+3lw3zIO4yhQ/T+DFhjECnvJKjLeKAuFR8HhhIiLO0Y
+N+rJlc9K9c+LYSMGvr65rBl8DQKBgQDHBz48ON79TbaaaxBPDpQMiUKV75k2hr1b
+gYFFQKimZP0lxYswWF9EnEFIL458qgplr0q9arAkzqN+fcyGDNwQRaOEqeevUAD4
+dM2bx6lukSEZa/IDhZUl+k9awtISFLDgVt4zsQ6CSCw0Gyu0QJG+V7PymFq+w/ks
+GXWYYx3DiwKBgGAyISxcAgqPkSPbQciIBSwGVHQ/QiBuuRj+OlvFVqLWhrCMZXMu
+cHATU3jLbOjfiB69qZB73OFTwrVEJfc2J0QHKbIdVD0GhRsRScl/90BBcq6VWbFE
+tObzFj8QUfceQDVvyjYM1IQsOp6JcR1vzPTVXg7Ct7mmb1uWYoXS8DPxAoGBALip
+Kb8qbQrMfe4MBBe1yPtQpy0CHz+OCEbMg6pDcbbg4FeZT6lNdSbta0yUgzl7cyYh
+W9EfGcssxljoU0jUyaF3W14NXl80dZIQnWw59iQWF4XEt8k4uceA1Pu64rnP5MRh
+FM0VLAcI+6pkw0n81ryqFtWxMhDpN1kJTihTXhw9AoGBANV/URf00QVcJWuJupDL
+Zt/fUtqN1Sj3Gnsl+6F/z+dq9mMrt1NPrnQH2MHVXi9B6neGuogE/XERMnzT22j+
+9pWeeLnju44+5d+1k0/+R/FikACjAOm14aGMkYe6RUrkD8Dh9ViJF7UIm9KI+0Re
+Uj2MO4wLvHQdWEG2gcUS55xI
+-----END PRIVATE KEY-----`
+	const defaultDKIMPubKey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxsIJxGKlyOxNzn8MvGaxhCthEFpRhyufhmq0adlBTg/7+CAfHpQVCg0Kzc++ErU6lui5mltt1aNfHEKHCCysSKCAeETJ/TT8/zyVQi5wgf/wUjggv9uGV2lYDfA8zGTfbKFVX71IZDSbr7q5EpqhecQEKdDhUtjUEU9T760cOti8CJbacjONNzrSmMhd6H9t+759Zv0YLoUu13TGyF3SXf8+Ca/nYQ7g4UejV93TNOKaWj+pt36Y3TFM6BclN5Rjo8Gl2mj/0XxKwGIOWZF69didx9uEy8fxe0FUAhI8co2YNc7wYBEEnPJ1icwYNKiIWBgNIZJOzN+Lh+97781CDwIDAQAB"
+
+	_ = repo.SaveDKIMKey(ctx, &domain.DKIMKey{
+		ID:                  crypto.NewULID(crypto.PrefixAPIKey),
+		DomainID:            domainID,
+		TenantID:            tenantID,
+		Selector:            "mvx",
+		Algorithm:           "rsa2048",
+		EncryptedPrivateKey: defaultDKIMPrivKey,
+		PublicKey:           defaultDKIMPubKey,
+		Status:              "active",
+		CreatedAt:           now,
+	})
 
 	streamID := "stream_01m64jyhzg4whb3vkckwm6wsyf"
 	_ = repo.CreateStream(ctx, &domain.MessageStream{

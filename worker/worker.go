@@ -222,7 +222,9 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 
 	bounceHost := domainName
 	if w.cfg.BounceDomain != "" && !strings.HasSuffix(w.cfg.BounceDomain, ".local") {
-		bounceHost = w.cfg.BounceDomain
+		if strings.HasSuffix(w.cfg.BounceDomain, "."+domainName) || w.cfg.BounceDomain == domainName {
+			bounceHost = w.cfg.BounceDomain
+		}
 	}
 	returnPath := fmt.Sprintf("bounce+%s@%s", verpToken, bounceHost)
 
