@@ -84,7 +84,7 @@ interface DeviceItem {
   created_at: string
 }
 
-interface TrustedNetworkItem {
+export interface TrustedNetworkItem {
   id: string
   tenant_id: string
   cidr: string
@@ -595,8 +595,7 @@ export default function App() {
   const [devNewAllowedFrom, setDevNewAllowedFrom] = useState('')
   const [devLoading, setDevLoading] = useState(false)
 
-  const [trustedNetworksList, setTrustedNetworksList] = useState<TrustedNetworkItem[]>([])
-  const [tnNewCIDR, setTnNewCIDR] = useState('')
+    const [tnNewCIDR, setTnNewCIDR] = useState('')
   const [tnNewDesc, setTnNewDesc] = useState('')
   const [tnLoading, setTnLoading] = useState(false)
 
@@ -3987,6 +3986,267 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB: SMTP & LAN DEVICES */}
+            {currentTab === 'smtp_devices' && (
+              <div className="space-y-6 mt-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Create SMTP Credentials */}
+                  <div className="glass-card p-6">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Generate SMTP Credential</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                      Create SASL credentials for port 587/2525 submission (§28.1).
+                    </p>
+                    <form onSubmit={handleCreateSMTPCredential} className="space-y-3.5">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Username (optional)</label>
+                        <input
+                          type="text"
+                          value={smtpNewUsername}
+                          onChange={(e) => setSmtpNewUsername(e.target.value)}
+                          placeholder="Auto-generated if left blank"
+                          className="glass-input font-mono"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Rate Limit (req/min)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={smtpNewRateLimit}
+                            onChange={(e) => setSmtpNewRateLimit(Number(e.target.value))}
+                            className="glass-input font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Allowed Sender Domains</label>
+                          <input
+                            type="text"
+                            value={smtpNewAllowedDomains}
+                            onChange={(e) => setSmtpNewAllowedDomains(e.target.value)}
+                            placeholder="e.g. example.com, test.lan"
+                            className="glass-input"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Allowed Client CIDRs</label>
+                        <input
+                          type="text"
+                          value={smtpNewAllowedCIDRs}
+                          onChange={(e) => setSmtpNewAllowedCIDRs(e.target.value)}
+                          placeholder="e.g. 192.168.1.0/24 (blank for any)"
+                          className="glass-input font-mono"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={smtpLoading}
+                          className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
+                        >
+                          {smtpLoading ? 'Generating...' : 'Create SMTP Credential'}
+                        </button>
+                      </div>
+                    </form>
+                    {smtpCreatedPassword && (
+                      <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Save Password (Displayed Once):</span>
+                        <div className="font-mono text-xs bg-slate-900 text-amber-300 p-2 rounded select-all break-all">{smtpCreatedPassword}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Active SMTP Credentials List */}
+                  <div className="glass-card overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <span className="font-bold text-sm text-slate-900 dark:text-white">Active SMTP Credentials ({smtpCredentials.length})</span>
+                      <button onClick={loadSMTPCredentials} className="btn-secondary text-xs px-2.5 py-1">
+                        <RefreshCw className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                          <tr>
+                            <th className="p-3">Username</th>
+                            <th className="p-3">Rate Limit</th>
+                            <th className="p-3">Domains</th>
+                            <th className="p-3">Created</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                          {smtpCredentials.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="p-6 text-center text-slate-400">No credentials generated yet.</td>
+                            </tr>
+                          ) : (
+                            smtpCredentials.map((c) => (
+                              <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                                <td className="p-3 font-mono font-semibold text-slate-900 dark:text-white">{c.username}</td>
+                                <td className="p-3">{c.rate_limit} req/min</td>
+                                <td className="p-3 text-slate-500">{c.allowed_domains && c.allowed_domains.length > 0 ? c.allowed_domains.join(', ') : 'Any'}</td>
+                                <td className="p-3 text-slate-400">{new Date(c.created_at).toLocaleDateString()}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Register Device Form */}
+                  <div className="glass-card p-6">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Register IoT Appliance / Device</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                      Authenticate devices by LAN IP without needing credentials (§28.1).
+                    </p>
+                    <form onSubmit={handleCreateDevice} className="space-y-3.5">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={devNewName}
+                          onChange={(e) => setDevNewName(e.target.value)}
+                          placeholder="e.g. Driveway Security Camera"
+                          className="glass-input"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Type</label>
+                          <select
+                            value={devNewType}
+                            onChange={(e) => setDevNewType(e.target.value)}
+                            className="glass-input"
+                          >
+                            <option value="camera">Security Camera</option>
+                            <option value="printer">Network Printer</option>
+                            <option value="nas">NAS / Storage Server</option>
+                            <option value="sensor">IoT Sensor</option>
+                            <option value="appliance">Home Appliance</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Expected LAN IP</label>
+                          <input
+                            type="text"
+                            required
+                            value={devNewIP}
+                            onChange={(e) => setDevNewIP(e.target.value)}
+                            placeholder="e.g. 192.168.1.150"
+                            className="glass-input font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Allowed Sender Addresses (comma separated)</label>
+                        <input
+                          type="text"
+                          value={devNewAllowedFrom}
+                          onChange={(e) => setDevNewAllowedFrom(e.target.value)}
+                          placeholder="e.g. camera@home.lan, alerts@home.lan"
+                          className="glass-input"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={devLoading}
+                          className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
+                        >
+                          {devLoading ? 'Registering...' : 'Register Appliance'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Registered Devices List */}
+                  <div className="glass-card overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <span className="font-bold text-sm text-slate-900 dark:text-white">Registered LAN Devices ({devicesList.length})</span>
+                      <button onClick={loadDevices} className="btn-secondary text-xs px-2.5 py-1">
+                        <RefreshCw className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto flex-1">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                          <tr>
+                            <th className="p-3">Name</th>
+                            <th className="p-3">Type</th>
+                            <th className="p-3">LAN IP</th>
+                            <th className="p-3">Allowed From</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                          {devicesList.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="p-6 text-center text-slate-400">No appliances registered yet.</td>
+                            </tr>
+                          ) : (
+                            devicesList.map((d) => (
+                              <tr key={d.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                                <td className="p-3 font-semibold text-slate-900 dark:text-white">{d.name}</td>
+                                <td className="p-3 capitalize text-sky-600 dark:text-sky-400">{d.type}</td>
+                                <td className="p-3 font-mono text-slate-600 dark:text-slate-300">{d.expected_ip}</td>
+                                <td className="p-3 text-slate-500">{d.allowed_from && d.allowed_from.length > 0 ? d.allowed_from.join(', ') : 'Any'}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Add Trusted Network Subnet */}
+                <div className="glass-card p-6">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Add Trusted Network Subnet</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    Subnets configured here allow registered LAN devices to submit emails without SASL authentication.
+                  </p>
+                  <form onSubmit={handleAddTrustedNetwork} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Subnet CIDR</label>
+                        <input
+                          type="text"
+                          required
+                          value={tnNewCIDR}
+                          onChange={(e) => setTnNewCIDR(e.target.value)}
+                          placeholder="e.g. 192.168.1.0/24 or 10.0.0.0/16"
+                          className="glass-input font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                        <input
+                          type="text"
+                          value={tnNewDesc}
+                          onChange={(e) => setTnNewDesc(e.target.value)}
+                          placeholder="e.g. Homelab IoT VLAN 50"
+                          className="glass-input"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={tnLoading}
+                        className="btn-secondary text-xs px-4 py-2 disabled:opacity-50"
+                      >
+                        {tnLoading ? 'Adding...' : 'Add Trusted Subnet'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* TAB: MESSAGES LOGS & INSPECTOR */}
             {currentTab === 'messages' && (
               <div className="space-y-6 mt-6">
@@ -3998,6 +4258,20 @@ export default function App() {
                       <span className="text-xs text-slate-500 dark:text-slate-400">({messagesList.length} Total)</span>
                     </div>
                     <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setSendError(null);
+                          setSendSuccess(null);
+                          if (!sendFrom && domains.length > 0) {
+                            setSendFrom("noreply@" + domains[0].name);
+                          }
+                          setSendModalOpen(true);
+                        }}
+                        className="btn-gradient text-xs px-3.5 py-1.5 flex items-center space-x-1.5"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Send Test Email</span>
+                      </button>
                       <button
                         onClick={loadMessages}
                         className="btn-secondary text-xs px-3 py-1.5"
@@ -4087,6 +4361,57 @@ export default function App() {
                   </table>
                 </div>
 
+                {/* Send Test Email Modal */}
+                {sendModalOpen && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/80 dark:border-slate-800/80 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-sky-500" />
+                          <span>Send Test Email</span>
+                        </h3>
+                        <button onClick={() => setSendModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white font-bold">✕</button>
+                      </div>
+                      {sendError && <div className="p-3 bg-rose-500/10 text-rose-500 text-xs rounded-xl border border-rose-500/20">{sendError}</div>}
+                      {sendSuccess && <div className="p-3 bg-emerald-500/10 text-emerald-500 text-xs rounded-xl border border-emerald-500/20">{sendSuccess}</div>}
+                      <form onSubmit={handleSendEmail} className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">From Address</label>
+                          <input type="text" required value={sendFrom} onChange={(e) => setSendFrom(e.target.value)} className="glass-input" placeholder="alerts@yourdomain.com" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">To Recipients (comma-separated)</label>
+                          <input type="text" required value={sendTo} onChange={(e) => setSendTo(e.target.value)} className="glass-input" placeholder="alice@example.com, bob@example.com" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Subject</label>
+                          <input type="text" required value={sendSubject} onChange={(e) => setSendSubject(e.target.value)} className="glass-input" placeholder="Test Delivery Subject" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Body</label>
+                          <textarea rows={4} required value={sendBody} onChange={(e) => setSendBody(e.target.value)} className="glass-input" placeholder="Message content..." />
+                        </div>
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300">
+                            <input type="checkbox" checked={sendIsHTML} onChange={(e) => setSendIsHTML(e.target.checked)} className="rounded" />
+                            <span>Send as HTML</span>
+                          </label>
+                          <select value={sendStream} onChange={(e) => setSendStream(e.target.value)} className="glass-input text-xs w-auto py-1 px-2">
+                            <option value="transactional">Transactional Stream</option>
+                            <option value="broadcast">Broadcast Stream</option>
+                          </select>
+                        </div>
+                        <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                          <button type="button" onClick={() => setSendModalOpen(false)} className="btn-secondary text-xs px-4 py-2">Close</button>
+                          <button type="submit" disabled={sendLoading} className="btn-gradient text-xs px-4 py-2 disabled:opacity-50">
+                            {sendLoading ? 'Dispatching...' : 'Dispatch Email'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
                 {/* Message Inspector Modal */}
                 {inspectorOpen && selectedMessage && (
                   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -4102,6 +4427,18 @@ export default function App() {
                           <p className="text-xs font-mono text-sky-600 dark:text-sky-400 mt-0.5">{selectedMessage.id}</p>
                         </div>
                         <div className="flex items-center space-x-2">
+                          {selectedMessage.status !== 'delivered' && selectedMessage.status !== 'cancelled' && (
+                            <button onClick={() => handleRetryMessage(selectedMessage.id)} className="btn-secondary text-xs px-2.5 py-1.5 flex items-center space-x-1" title="Reschedule delivery retry">
+                              <RefreshCw className="w-3 h-3 text-sky-500" />
+                              <span>Retry Delivery</span>
+                            </button>
+                          )}
+                          {selectedMessage.status !== 'delivered' && selectedMessage.status !== 'cancelled' && (
+                            <button onClick={() => handleCancelMessage(selectedMessage.id)} className="btn-secondary text-xs px-2.5 py-1.5 text-rose-500 hover:text-rose-600 flex items-center space-x-1" title="Cancel queued message">
+                              <Ban className="w-3 h-3 text-rose-500" />
+                              <span>Cancel</span>
+                            </button>
+                          )}
                           <ExportMenu
                             filename={`message-inspect-${selectedMessage.id}`}
                             sheetTitle="Message Details"
