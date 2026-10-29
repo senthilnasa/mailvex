@@ -7,6 +7,7 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#architecture--profiles">Profiles</a> •
+  <a href="DOCKER_DEPLOYMENT.md">Docker Guide</a> •
   <a href="#quickstart-development">Dev Server</a> •
   <a href="#quickstart-production">Prod Server</a> •
   <a href="#api--ai-agent-integration">API &amp; Agent Docs</a> •
@@ -93,7 +94,7 @@ npm run dev
 
 ## Quickstart: Production
 
-Run the full production stack using Docker Compose.
+Run the full production stack using Docker Compose. For the complete step-by-step setup, reverse proxy guides, and troubleshooting, see the [**Docker Deployment Guide**](DOCKER_DEPLOYMENT.md).
 
 ### Homelab Profile (All-In-One Supervisor)
 ```bash
