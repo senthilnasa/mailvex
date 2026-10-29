@@ -3731,14 +3731,41 @@ export default function App() {
                           Publish these TXT &amp; CNAME records in your DNS provider (Cloudflare, Route53, etc.)
                         </p>
                       </div>
-                      <button
-                        onClick={handleVerifyDomain}
-                        disabled={verifyLoading}
-                        className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
-                      >
-                        {verifyLoading ? 'Checking DNS...' : 'Verify DNS Now'}
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={handleRotateDKIM}
+                          disabled={rotateLoading}
+                          className="btn-secondary text-xs px-3.5 py-2 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-indigo-500 ${rotateLoading ? 'animate-spin' : ''}`} />
+                          <span>{rotateLoading ? 'Rotating...' : 'Rotate DKIM'}</span>
+                        </button>
+                        <button
+                          onClick={handleVerifyDomain}
+                          disabled={verifyLoading}
+                          className="btn-gradient text-xs px-4 py-2 disabled:opacity-50"
+                        >
+                          {verifyLoading ? 'Checking DNS...' : 'Verify DNS Now'}
+                        </button>
+                      </div>
                     </div>
+
+                    {rotateResult && (
+                      <div className="p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">New DKIM Key Generated</span>
+                          <button onClick={() => setRotateResult(null)} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-white">Dismiss</button>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{rotateResult.message}</p>
+                        {rotateResult.new_dns_record && (
+                          <div className="p-2.5 bg-slate-900 text-slate-200 rounded-lg font-mono text-[11px] overflow-x-auto space-y-1">
+                            <div><span className="text-slate-400">Type:</span> {rotateResult.new_dns_record.type}</div>
+                            <div><span className="text-slate-400">Name:</span> {rotateResult.new_dns_record.name}</div>
+                            <div className="break-all"><span className="text-slate-400">Value:</span> {rotateResult.new_dns_record.value}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       {domainRecords.map((r, i) => (
