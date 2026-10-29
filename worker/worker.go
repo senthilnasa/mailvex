@@ -226,8 +226,8 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 	}
 	returnPath := fmt.Sprintf("bounce+%s@%s", verpToken, bounceHost)
 
-	ehloHost := "mailer.krea.edu.in"
-	if route.EHLOHostname != "" && !strings.HasSuffix(route.EHLOHostname, ".local") {
+	ehloHost := w.cfg.PlatformHost
+	if route.EHLOHostname != "" {
 		ehloHost = route.EHLOHostname
 	}
 
@@ -551,10 +551,15 @@ func (w *DeliveryWorker) ProcessOutboxBatch(ctx context.Context, limit int) (int
 		if err := json.Unmarshal([]byte(item.Payload), &payload); err == nil {
 			rcpts, err := w.repo.GetMessageRecipients(ctx, payload.TenantID, payload.MessageID)
 			if err == nil {
+				hasActive := false
 				for _, r := range rcpts {
 					if r.Status == "queued" || r.Status == "deferred" {
+						hasActive = true
 						_ = w.ProcessRecipient(ctx, r.ID)
 					}
+				}
+				if !hasActive {
+					_ = w.updateMessageSummary(ctx, payload.TenantID, payload.MessageID)
 				}
 			}
 		}

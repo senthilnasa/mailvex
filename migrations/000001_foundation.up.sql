@@ -141,6 +141,7 @@ INSERT IGNORE INTO permissions (id, name, description) VALUES
 ('ip.write', 'ip.write', 'Manage IP assignments'),
 ('pools.read', 'pools.read', 'View IP pools'),
 ('pools.write', 'pools.write', 'Manage IP pools'),
+('send.email', 'send.email', 'Send single or batch emails'),
 ('messages.read', 'messages.read', 'View message logs and delivery status'),
 ('messages.body.read', 'messages.body.read', 'View full message bodies and raw MIME'),
 ('messages.retry', 'messages.retry', 'Retry failed messages'),
@@ -158,14 +159,28 @@ INSERT IGNORE INTO permissions (id, name, description) VALUES
 ('webhooks.secret.rotate', 'webhooks.secret.rotate', 'Rotate webhook secrets'),
 ('inbound.read', 'inbound.read', 'View inbound routes and messages'),
 ('inbound.write', 'inbound.write', 'Manage inbound routes'),
+('inbound.routes', 'inbound.routes', 'Route inbound emails'),
 ('analytics.read', 'analytics.read', 'View delivery statistics and charts'),
+('analytics.export', 'analytics.export', 'Export deliverability and analytics telemetry'),
 ('reports.read', 'reports.read', 'View DMARC, TLS-RPT and FBL reports'),
+('abuse.read', 'abuse.read', 'View abuse reports and spam feedback'),
+('abuse.write', 'abuse.write', 'Resolve or escalate abuse reports'),
 ('audit.read', 'audit.read', 'View system and tenant audit logs'),
 ('settings.read', 'settings.read', 'View tenant settings'),
 ('settings.write', 'settings.write', 'Update tenant settings'),
-('retention.write', 'retention.write', 'Configure retention policies'),
+('retention.read', 'retention.read', 'View data retention policies'),
+('retention.write', 'retention.write', 'Configure retention policies and execute purge'),
+('privacy.read', 'privacy.read', 'View privacy compliance requests'),
 ('privacy.erase', 'privacy.erase', 'Execute GDPR/DPDP recipient erasure'),
 ('privacy.export', 'privacy.export', 'Export recipient data'),
+('tracking.read', 'tracking.read', 'View open and click tracking telemetry'),
+('reputation.read', 'reputation.read', 'View IP and domain reputation overview'),
+('dnsbl.read', 'dnsbl.read', 'View DNS blocklist providers and query results'),
+('dnsbl.check', 'dnsbl.check', 'Trigger on-demand DNSBL lookups'),
+('warmup.read', 'warmup.read', 'View IP warmup schedules and progression'),
+('warmup.write', 'warmup.write', 'Enroll, advance, hold, or resume IP warmup'),
+('alerts.read', 'alerts.read', 'View alert rules, incidents, and notification channels'),
+('alerts.write', 'alerts.write', 'Manage alert rules, evaluate, and acknowledge incidents'),
 ('impersonate.read', 'impersonate.read', 'Enter tenant in read-only impersonation mode'),
 ('impersonate.write', 'impersonate.write', 'Enter tenant in read-write impersonation mode'),
 ('system.read', 'system.read', 'View system health and node status'),
@@ -181,3 +196,102 @@ INSERT IGNORE INTO roles (id, organization_id, name, scope, description, is_syst
 ('role_developer', NULL, 'Developer', 'tenant', 'Manage API keys, webhooks, templates, view logs', TRUE),
 ('role_analyst', NULL, 'Analyst', 'tenant', 'Read-only access to messages, stats, and domains', TRUE),
 ('role_support', NULL, 'Support', 'tenant', 'Read message metadata with bodies and secrets masked', TRUE);
+
+-- Seed role permissions
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
+SELECT 'role_platform_owner', id FROM permissions;
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
+SELECT 'role_platform_admin', id FROM permissions;
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+('role_platform_support', 'tenants.read'),
+('role_platform_support', 'org.read'),
+('role_platform_support', 'users.read'),
+('role_platform_support', 'domains.read'),
+('role_platform_support', 'streams.read'),
+('role_platform_support', 'messages.read'),
+('role_platform_support', 'suppressions.read'),
+('role_platform_support', 'analytics.read'),
+('role_platform_support', 'reports.read'),
+('role_platform_support', 'audit.read'),
+('role_platform_support', 'impersonate.read');
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
+SELECT 'role_tenant_owner', id FROM permissions
+WHERE id NOT LIKE 'system.%' AND id NOT LIKE 'impersonate.%';
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+('role_tenant_admin', 'tenants.read'),
+('role_tenant_admin', 'domains.read'),
+('role_tenant_admin', 'domains.write'),
+('role_tenant_admin', 'domains.verify'),
+('role_tenant_admin', 'domains.dkim.rotate'),
+('role_tenant_admin', 'streams.read'),
+('role_tenant_admin', 'streams.write'),
+('role_tenant_admin', 'api_keys.read'),
+('role_tenant_admin', 'api_keys.create'),
+('role_tenant_admin', 'api_keys.revoke'),
+('role_tenant_admin', 'smtp_credentials.read'),
+('role_tenant_admin', 'smtp_credentials.create'),
+('role_tenant_admin', 'smtp_credentials.revoke'),
+('role_tenant_admin', 'send.email'),
+('role_tenant_admin', 'messages.read'),
+('role_tenant_admin', 'messages.body.read'),
+('role_tenant_admin', 'messages.retry'),
+('role_tenant_admin', 'messages.export'),
+('role_tenant_admin', 'messages.cancel'),
+('role_tenant_admin', 'suppressions.read'),
+('role_tenant_admin', 'suppressions.write'),
+('role_tenant_admin', 'suppressions.import'),
+('role_tenant_admin', 'templates.read'),
+('role_tenant_admin', 'templates.write'),
+('role_tenant_admin', 'templates.publish'),
+('role_tenant_admin', 'webhooks.read'),
+('role_tenant_admin', 'webhooks.write'),
+('role_tenant_admin', 'webhooks.secret.rotate'),
+('role_tenant_admin', 'inbound.read'),
+('role_tenant_admin', 'inbound.write'),
+('role_tenant_admin', 'analytics.read'),
+('role_tenant_admin', 'analytics.export'),
+('role_tenant_admin', 'reports.read'),
+('role_tenant_admin', 'abuse.read'),
+('role_tenant_admin', 'abuse.write'),
+('role_tenant_admin', 'reputation.read'),
+('role_tenant_admin', 'dnsbl.read'),
+('role_tenant_admin', 'dnsbl.check'),
+('role_tenant_admin', 'warmup.read'),
+('role_tenant_admin', 'warmup.write'),
+('role_tenant_admin', 'alerts.read'),
+('role_tenant_admin', 'alerts.write'),
+('role_tenant_admin', 'settings.read'),
+('role_tenant_admin', 'settings.write'),
+('role_tenant_admin', 'retention.read');
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+('role_developer', 'send.email'),
+('role_developer', 'messages.read'),
+('role_developer', 'messages.body.read'),
+('role_developer', 'api_keys.read'),
+('role_developer', 'api_keys.create'),
+('role_developer', 'webhooks.read'),
+('role_developer', 'webhooks.write'),
+('role_developer', 'templates.read'),
+('role_developer', 'templates.write'),
+('role_developer', 'domains.read'),
+('role_developer', 'streams.read');
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+('role_analyst', 'messages.read'),
+('role_analyst', 'messages.export'),
+('role_analyst', 'analytics.read'),
+('role_analyst', 'analytics.export'),
+('role_analyst', 'reports.read'),
+('role_analyst', 'domains.read'),
+('role_analyst', 'streams.read'),
+('role_analyst', 'suppressions.read');
+
+INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+('role_support', 'messages.read'),
+('role_support', 'domains.read'),
+('role_support', 'suppressions.read');

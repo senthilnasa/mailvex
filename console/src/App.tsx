@@ -64,6 +64,34 @@ interface Domain {
   last_checked_at?: string
 }
 
+interface SMTPCredentialItem {
+  id: string
+  tenant_id: string
+  username: string
+  allowed_domains?: string[]
+  allowed_cidrs?: string[]
+  rate_limit: number
+  created_at: string
+}
+
+interface DeviceItem {
+  id: string
+  tenant_id: string
+  name: string
+  type: string
+  expected_ip: string
+  allowed_from?: string[]
+  created_at: string
+}
+
+interface TrustedNetworkItem {
+  id: string
+  tenant_id: string
+  cidr: string
+  description?: string
+  created_at: string
+}
+
 interface DNSRecord {
   id: string
   record_type: string
@@ -475,7 +503,7 @@ export default function App() {
       return null
     }
   })
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance' | 'platform_admin'>(() => {
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'smtp_devices' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance' | 'platform_admin'>(() => {
     try {
       const saved = localStorage.getItem('mvx_current_tab')
       return (saved as any) || 'dashboard'
@@ -550,6 +578,43 @@ export default function App() {
   const [newKeyEnv, setNewKeyEnv] = useState('live')
   const [createdSecret, setCreatedSecret] = useState<string | null>(null)
   const [keyLoading, setKeyLoading] = useState(false)
+
+  // SMTP & LAN Devices state
+  const [smtpCredentials, setSmtpCredentials] = useState<SMTPCredentialItem[]>([])
+  const [smtpNewUsername, setSmtpNewUsername] = useState('')
+  const [smtpNewRateLimit, setSmtpNewRateLimit] = useState(100)
+  const [smtpNewAllowedDomains, setSmtpNewAllowedDomains] = useState('')
+  const [smtpNewAllowedCIDRs, setSmtpNewAllowedCIDRs] = useState('')
+  const [smtpCreatedPassword, setSmtpCreatedPassword] = useState<string | null>(null)
+  const [smtpLoading, setSmtpLoading] = useState(false)
+
+  const [devicesList, setDevicesList] = useState<DeviceItem[]>([])
+  const [devNewName, setDevNewName] = useState('')
+  const [devNewType, setDevNewType] = useState('camera')
+  const [devNewIP, setDevNewIP] = useState('')
+  const [devNewAllowedFrom, setDevNewAllowedFrom] = useState('')
+  const [devLoading, setDevLoading] = useState(false)
+
+  const [trustedNetworksList, setTrustedNetworksList] = useState<TrustedNetworkItem[]>([])
+  const [tnNewCIDR, setTnNewCIDR] = useState('')
+  const [tnNewDesc, setTnNewDesc] = useState('')
+  const [tnLoading, setTnLoading] = useState(false)
+
+  // Send Test Email state
+  const [sendModalOpen, setSendModalOpen] = useState(false)
+  const [sendFrom, setSendFrom] = useState('')
+  const [sendTo, setSendTo] = useState('')
+  const [sendSubject, setSendSubject] = useState('')
+  const [sendBody, setSendBody] = useState('')
+  const [sendIsHTML, setSendIsHTML] = useState(false)
+  const [sendStream, setSendStream] = useState('transactional')
+  const [sendLoading, setSendLoading] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null)
+
+  // DKIM rotation state
+  const [rotateLoading, setRotateLoading] = useState(false)
+  const [rotateResult, setRotateResult] = useState<any | null>(null)
 
   // Phase 4: Messages & Inspector state
   const [messagesList, setMessagesList] = useState<MessageItem[]>([])
@@ -792,6 +857,8 @@ export default function App() {
       loadDomains()
       loadStreams()
       loadAPIKeys()
+      loadSMTPCredentials()
+      loadDevices()
       loadMessages()
       loadTemplates()
       loadSuppressions()

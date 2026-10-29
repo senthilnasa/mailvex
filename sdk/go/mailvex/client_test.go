@@ -69,6 +69,25 @@ func TestGoSDKSendAndBatch(t *testing.T) {
 		t.Errorf("expected msg_sdk_123, got %s", sendResp.MessageID)
 	}
 
+	// Test Send with response returning {"id": "..."}
+	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg_id_only","status":"queued"}`))
+	}))
+	defer server2.Close()
+	client2 := NewClient("test-key", WithBaseURL(server2.URL), WithHTTPClient(server2.Client()))
+	sendResp2, err := client2.Send(ctx, &SendEmailRequest{
+		From:    "sender@example.com",
+		To:      []string{"rcpt@example.com"},
+		Subject: "ID Only Test",
+	})
+	if err != nil {
+		t.Fatalf("Send ID only failed: %v", err)
+	}
+	if sendResp2.MessageID != "msg_id_only" {
+		t.Errorf("expected msg_id_only fallback, got %s", sendResp2.MessageID)
+	}
+
 	// Test SendBatch
 	batchResp, err := client.SendBatch(ctx, &SendBatchRequest{
 		From:    "sender@example.com",

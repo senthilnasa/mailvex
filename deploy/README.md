@@ -4,7 +4,7 @@ This directory contains container definitions, orchestration manifests, and depl
 
 ## Quick References
 
-* 📖 **Complete Step-by-Step Guide**: [`DOCKER_DEPLOYMENT.md`](../DOCKER_DEPLOYMENT.md)
+* 📖 **Complete Step-by-Step Guide**: [`docs/deployment.md`](../docs/deployment.md)
 * 🐳 **Compose Profiles**:
   * [Homelab All-in-One (`< 200MB RAM`)](./compose/docker-compose.homelab.yml)
   * [Standard Production (Decoupled API & Workers)](./compose/docker-compose.standard.yml)

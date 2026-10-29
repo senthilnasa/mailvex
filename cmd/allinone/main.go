@@ -57,7 +57,7 @@ func NewAllInOneSupervisor(repo repository.Repository, store storage.Storage, lo
 	}
 	platformHost := os.Getenv("MVX_PLATFORM_HOST")
 	if platformHost == "" {
-		platformHost = "mailer.krea.edu.in"
+		platformHost = "mailvex.local"
 	}
 	bounceDomain := os.Getenv("MVX_BOUNCE_DOMAIN")
 

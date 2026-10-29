@@ -16,10 +16,12 @@
     ],
     "authors": [
         {
-            "name": "Mailvex Team",
-            "email": "support@mailvex.io"
+            "name": "Mailvex Team"
         }
     ],
+    "support": {
+        "email": "mailvex@senthilnasa.me"
+    },
     "require": {
         "php": ">=8.1.0",
         "ext-curl": "*",

@@ -18,6 +18,12 @@ console/dist/
 *.key
 *.pem
 
+# PHP SDK
+vendor/
+sdk/php/vendor/
+composer.lock
+.phpunit.cache
+
 # IDE & OS
 .idea/
 .vscode/

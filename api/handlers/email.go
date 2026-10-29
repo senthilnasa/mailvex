@@ -319,6 +319,7 @@ func (a *API) SendEmailHandler(w http.ResponseWriter, r *http.Request) {
 	// 11. Format response
 	respObj := map[string]interface{}{
 		"id":          msgRes.MessageID,
+		"message_id":  msgRes.MessageID,
 		"status":      "queued",
 		"environment": environment,
 		"request_id":  reqID,
@@ -533,6 +534,7 @@ func (a *API) SendEmailBatchHandler(w http.ResponseWriter, r *http.Request) {
 
 	respObj := map[string]interface{}{
 		"data":        results,
+		"total":       len(results),
 		"request_id":  reqID,
 		"environment": environment,
 	}

@@ -63,9 +63,14 @@ func (a *API) CreateSMTPCredentialHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	var actorID *string
+	if user != nil {
+		actorID = &user.ID
+	}
+
 	_ = a.audit.Log(r.Context(), &domain.AuditLog{
 		TenantID:     &tenantID,
-		ActorUserID:  &user.ID,
+		ActorUserID:  actorID,
 		Action:       "smtp_credentials.created",
 		ResourceType: "smtp_credential",
 		ResourceID:   credID,

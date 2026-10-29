@@ -173,9 +173,26 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 	var recipients []*domain.MessageRecipient
 	var recipientIDs []string
 
-	allAddrs := append([]string{}, req.To...)
-	for _, addr := range allAddrs {
-		addr = strings.TrimSpace(strings.ToLower(addr))
+	type rcptSpec struct {
+		addr     string
+		rcptType string
+	}
+	var allAddrs []rcptSpec
+	for _, to := range req.To {
+		allAddrs = append(allAddrs, rcptSpec{addr: to, rcptType: "to"})
+	}
+	for _, cc := range req.Cc {
+		allAddrs = append(allAddrs, rcptSpec{addr: cc, rcptType: "cc"})
+	}
+	for _, bcc := range req.Bcc {
+		allAddrs = append(allAddrs, rcptSpec{addr: bcc, rcptType: "bcc"})
+	}
+
+	for _, item := range allAddrs {
+		addr := strings.TrimSpace(strings.ToLower(item.addr))
+		if addr == "" {
+			continue
+		}
 		rcptParts := strings.Split(addr, "@")
 		rcptDomain := ""
 		if len(rcptParts) == 2 {
@@ -205,7 +222,7 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 			Address:          addr,
 			AddressDomain:    rcptDomain,
 			MXGroup:          "custom",
-			Type:             "to",
+			Type:             item.rcptType,
 			Status:           status,
 			SuppressedReason: suppressedReason,
 			VERPToken:        &verpToken,
@@ -270,7 +287,7 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 		_ = eng.storage.Put(ctx, bodyKey, req.RawMIME)
 		msg.RawMIMERef = &bodyKey
 	} else if req.BodyHTML != "" || req.BodyText != "" {
-		constructedMIME := mime.BuildMessage(req.FromAddress, strings.Join(req.To, ", "), req.Subject, req.BodyText, req.BodyHTML)
+		constructedMIME := mime.BuildMessageWithCc(req.FromAddress, strings.Join(req.To, ", "), strings.Join(req.Cc, ", "), req.Subject, req.BodyText, req.BodyHTML)
 		rawKey := fmt.Sprintf("%s/%s/raw.eml", req.TenantID, msgID)
 		_ = eng.storage.Put(ctx, rawKey, constructedMIME)
 		msg.RawMIMERef = &rawKey

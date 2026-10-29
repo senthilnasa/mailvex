@@ -91,9 +91,10 @@ type SendEmailRequest struct {
 }
 
 type SendEmailResponse struct {
+	ID        string   `json:"id"`
 	MessageID string   `json:"message_id"`
 	Status    string   `json:"status"`
-	Accepted  []string `json:"accepted"`
+	Accepted  []string `json:"accepted,omitempty"`
 	Rejected  []string `json:"rejected,omitempty"`
 }
 
@@ -182,6 +183,9 @@ func (c *Client) Send(ctx context.Context, req *SendEmailRequest) (*SendEmailRes
 	var resp SendEmailResponse
 	if err := c.doRequest(ctx, http.MethodPost, "/v1/send", req, &resp, headers); err != nil {
 		return nil, err
+	}
+	if resp.MessageID == "" && resp.ID != "" {
+		resp.MessageID = resp.ID
 	}
 	return &resp, nil
 }

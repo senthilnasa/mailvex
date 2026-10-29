@@ -51,3 +51,18 @@ func TestMIMENormalizationAndParsing(t *testing.T) {
 		t.Fatalf("expected body text to contain alert message")
 	}
 }
+
+func TestBuildMessageWithCcAndUTF8(t *testing.T) {
+	msg := BuildMessageWithCc("sender@example.com", "to@example.com", "cc@example.com", "Hello World! 🚀", "Hello éü", "<b>Hello éü</b>")
+	msgStr := string(msg)
+
+	if !strings.Contains(msgStr, "Cc: cc@example.com\r\n") {
+		t.Fatalf("expected Cc header in message, got:\n%s", msgStr)
+	}
+	if !strings.Contains(msgStr, "Content-Transfer-Encoding: 8bit") {
+		t.Fatalf("expected 8bit encoding for UTF-8 compatibility, got:\n%s", msgStr)
+	}
+	if !strings.Contains(msgStr, "Subject: Hello World! 🚀") {
+		t.Fatalf("expected emoji in subject, got:\n%s", msgStr)
+	}
+}

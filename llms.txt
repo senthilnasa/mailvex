@@ -1,0 +1,98 @@
+# Mailvex — AI & LLM System Integration Index
+
+> **Mailvex** is a carrier-grade, multi-tenant, self-hosted email infrastructure and delivery engine written in Go 1.24 with a frosted-glass React 19 operator console. It serves as an open-source alternative to commercial email providers (SendGrid, Mailgun, AWS SES, Postmark) with direct-to-MX SMTP delivery, RSA-2048 DKIM signing, RFC 8058 one-click unsubscribes, automatic bounce classification, and high-concurrency REST APIs.
+
+---
+
+## Repository Structure & Core Modules
+
+- `/cmd/allinone`: Unified single-process supervisor combining REST API, embedded Console UI, Outbound Worker, and Inbound/Submission SMTP edge.
+- `/cmd/mailvex`: Operator CLI for environmental diagnostics (`mailvex doctor`) and cryptographic backups (`mailvex backup create/restore`).
+- `/api`: REST API router, authentication middleware, rate limiting, and HTTP handlers (`/v1/send`, `/v1/send/batch`, `/v1/domains`, `/v1/messages`, `/v1/templates`, `/v1/suppressions`, `/v1/webhooks`).
+- `/core`: Message domain models, envelope encryption (AES-256-GCM), MIME serialization, and DKIM canonicalization/signing.
+- `/worker`: Asynchronous delivery workers, direct MX DNS resolution, TLS connection pooling, retry exponential backoff, and smart-host relay fallback.
+- `/smtp`: SMTP edge listener supporting Port 25 (inbound direct MX), Port 587 (submission with SASL AUTH), and Port 2525.
+- `/console`: Modern operator web interface built with React 19, Vite, Tailwind CSS v4, Lucide icons, and real-time delivery telemetry.
+- `/sdk`: Official SDK libraries:
+  - `/sdk/go/mailvex`: Zero-dependency, thread-safe Go client (`pkg.go.dev/github.com/senthilnasa/mailvex/sdk/go/mailvex`).
+  - `/sdk/php`: Official PHP & Laravel SDK with fluent message builder and native mail transport driver (`Mailvex\Client`).
+  - `/sdk/openapi.yaml`: Complete OpenAPI 3.1 schema.
+- `/docs`: Enterprise documentation index, deployment guides, security audits, and deliverability tuning.
+
+---
+
+## Developer & Agent Quickstart
+
+```bash
+# Run All-In-One Dev Server (API :8080, SMTP :2525, Console :8080)
+go run ./cmd/allinone
+
+# Run Production Stack via Docker Compose
+docker compose -f deploy/compose/docker-compose.homelab.yml up -d
+
+# Run System Doctor Environmental Audit
+go run ./cmd/mailvex doctor
+
+# Run Comprehensive Unit & Integration Tests
+go test -count=1 ./...
+```
+
+---
+
+## Primary API Endpoints for AI Agents
+
+All API requests require an `Authorization: Bearer <API_KEY>` header.
+
+### 1. Send Transactional Email
+- **Endpoint:** `POST /v1/send` (or `POST /v1/email`)
+- **Headers:** `Content-Type: application/json`, `Idempotency-Key: <unique-uuid-or-hash>`
+- **Payload:**
+```json
+{
+  "from": "agent@yourdomain.com",
+  "to": ["user@example.com"],
+  "subject": "System Notification",
+  "text": "Plain text message content",
+  "html": "<p>Rich HTML message content</p>"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "message_id": "0192e4a1-b87c-7f2e-a345-9876543210ab",
+  "status": "queued"
+}
+```
+
+### 2. Send Batch Email
+- **Endpoint:** `POST /v1/send/batch` (or `POST /v1/email/batch`)
+- **Payload:** Dispatches up to 500 personalized emails per request with template variable interpolation.
+
+### 3. Track Message Status
+- **Endpoint:** `GET /v1/messages/{id}`
+- **Response:** Current state (`queued`, `delivering`, `delivered`, `bounced`, `failed`), MX target host, and SMTP response codes.
+
+### 4. Custom Domains & DKIM
+- **Create Domain:** `POST /v1/domains` `{"name": "mail.yourdomain.com"}` (Generates RSA-2048 keypair)
+- **Verify DNS:** `POST /v1/domains/{id}/verify` (Audits DKIM, SPF, DMARC, and MX records)
+
+---
+
+## Concurrency & Idempotency Guarantees for AI Agents
+
+Autonomous agents operating in parallel MUST pass the `Idempotency-Key` (or `X-Idempotency-Key`) header on all write requests (`POST /v1/send`).
+- Mailvex enforces distributed Redis locks with a 24-hour result cache.
+- Replayed requests with the same key safely return the exact original HTTP response without re-dispatching emails or creating duplicate outbound messages.
+
+---
+
+## Documentation Links
+
+- [Complete REST API Specification](docs/api.md)
+- [AI Agent & MCP Tool Calling Guide](docs/ai-agents.md)
+- [Docker Production Deployment Guide](docs/deployment.md)
+- [Architecture & Queue Pipeline](docs/architecture.md)
+- [Deliverability, DKIM, SPF & DMARC](docs/deliverability.md)
+- [Go Client SDK](sdk/go/mailvex/client.go)
+- [PHP & Laravel SDK](sdk/php/README.md)
+- [Master Documentation Hub](docs/README.md)

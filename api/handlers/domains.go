@@ -163,9 +163,13 @@ func (a *API) CreateDomainHandler(w http.ResponseWriter, r *http.Request) {
 	_ = a.repo.SaveDNSRecords(r.Context(), domID, records)
 
 	// Audit Log
+	var actorID *string
+	if user != nil {
+		actorID = &user.ID
+	}
 	_ = a.audit.Log(r.Context(), &domain.AuditLog{
 		TenantID:     &tenantID,
-		ActorUserID:  &user.ID,
+		ActorUserID:  actorID,
 		Action:       "domain.created",
 		ResourceType: "domain",
 		ResourceID:   domID,
@@ -355,9 +359,13 @@ func (a *API) RotateDKIMHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.repo.SaveDKIMKey(r.Context(), newKey)
 
+	var actorID *string
+	if user != nil {
+		actorID = &user.ID
+	}
 	_ = a.audit.Log(r.Context(), &domain.AuditLog{
 		TenantID:     &tenantID,
-		ActorUserID:  &user.ID,
+		ActorUserID:  actorID,
 		Action:       "domain.dkim.rotated",
 		ResourceType: "domain",
 		ResourceID:   dom.ID,

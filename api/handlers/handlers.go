@@ -502,7 +502,22 @@ func (a *API) MeHandler(w http.ResponseWriter, r *http.Request) {
 // ListTenantsHandler returns tenants accessible to the caller
 func (a *API) ListTenantsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	user := r.Context().Value(middleware.UserKey).(*domain.User)
+	user, ok := r.Context().Value(middleware.UserKey).(*domain.User)
+	if !ok || user == nil {
+		if apiKey, ok := r.Context().Value(middleware.APIKeyKey).(*domain.APIKey); ok && apiKey != nil {
+			tenant, err := a.repo.GetTenant(r.Context(), apiKey.TenantID)
+			if err != nil {
+				http.Error(w, `{"error":{"code":"tenant_not_found","message":"Tenant not found"}}`, http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []*domain.Tenant{tenant},
+			})
+			return
+		}
+		http.Error(w, `{"error":{"code":"unauthorized","message":"Authentication required"}}`, http.StatusUnauthorized)
+		return
+	}
 
 	tenants, err := a.repo.ListTenantsForUser(r.Context(), user.ID)
 	if err != nil {
@@ -523,7 +538,11 @@ type CreateTenantRequest struct {
 // CreateTenantHandler creates a new tenant within the user's organization
 func (a *API) CreateTenantHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	user := r.Context().Value(middleware.UserKey).(*domain.User)
+	user, ok := r.Context().Value(middleware.UserKey).(*domain.User)
+	if !ok || user == nil {
+		http.Error(w, `{"error":{"code":"unauthorized","message":"User session required to create tenants"}}`, http.StatusUnauthorized)
+		return
+	}
 
 	var req CreateTenantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

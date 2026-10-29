@@ -34,9 +34,9 @@ Mailvex provides three deployment profiles via `MVX_PROFILE`:
 
 | Profile | Target Environment | Memory Footprint | Architecture | Compose File |
 |---|---|---|---|---|
-| **`homelab`** | Homelabs, Edge nodes, IoT hubs, Single-board computers | **< 200MB RAM** | Single unified process (API + Console + Inbound SMTP + Outbound Worker) with MariaDB 11.4 & Redis 7.2 | [`deploy/compose/docker-compose.homelab.yml`](deploy/compose/docker-compose.homelab.yml) |
-| **`standard`** | Startups, SMBs, Single Cloud Instances (VPS) | **~500MB RAM** | Independent API and Outbound Worker containers with MariaDB 11.4 & Redis 7.2 | [`deploy/compose/docker-compose.standard.yml`](deploy/compose/docker-compose.standard.yml) |
-| **`cluster`** | High-volume senders, Multi-node enterprise | **Dynamic Scale** | Horizontal API tier behind HAProxy, distributed Redis queue workers, Prometheus & Grafana | [`deploy/compose/docker-compose.cluster.yml`](deploy/compose/docker-compose.cluster.yml) |
+| **`homelab`** | Homelabs, Edge nodes, IoT hubs, Single-board computers | **< 200MB RAM** | Single unified process (API + Console + Inbound SMTP + Outbound Worker) with MariaDB 11.4 & Redis 7.2 | [`deploy/compose/docker-compose.homelab.yml`](../deploy/compose/docker-compose.homelab.yml) |
+| **`standard`** | Startups, SMBs, Single Cloud Instances (VPS) | **~500MB RAM** | Independent API and Outbound Worker containers with MariaDB 11.4 & Redis 7.2 | [`deploy/compose/docker-compose.standard.yml`](../deploy/compose/docker-compose.standard.yml) |
+| **`cluster`** | High-volume senders, Multi-node enterprise | **Dynamic Scale** | Horizontal API tier behind HAProxy, distributed Redis queue workers, Prometheus & Grafana | [`deploy/compose/docker-compose.cluster.yml`](../deploy/compose/docker-compose.cluster.yml) |
 
 ---
 

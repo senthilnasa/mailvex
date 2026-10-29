@@ -244,7 +244,7 @@ func RequirePermission(repo repository.Repository, permission string) func(http.
 			if apiKey, ok := r.Context().Value(APIKeyKey).(*domain.APIKey); ok && apiKey != nil {
 				hasScope := false
 				for _, s := range apiKey.Scopes {
-					if s == "*" || s == permission || (permission == "messages.send" && s == "send.email") {
+					if s == "*" || s == permission || (permission == "messages.send" && s == "send.email") || (permission == "send.email" && s == "messages.send") {
 						hasScope = true
 						break
 					}
