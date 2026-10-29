@@ -1,0 +1,59 @@
+{
+    "name": "mailvex/mailvex-php",
+    "description": "Official PHP & Laravel SDK for Mailvex Email Infrastructure. Supports single & batch emails, attachments, and webhook verification.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "mailvex",
+        "email",
+        "mailer",
+        "laravel",
+        "mail-transport",
+        "batch-email",
+        "attachments",
+        "webhooks",
+        "smtp"
+    ],
+    "authors": [
+        {
+            "name": "Mailvex Team",
+            "email": "support@mailvex.io"
+        }
+    ],
+    "require": {
+        "php": ">=8.1.0",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0 || ^11.0"
+    },
+    "suggest": {
+        "illuminate/support": "Required to use Laravel ServiceProvider and Facades (^9.0|^10.0|^11.0)",
+        "illuminate/mail": "Required to register the Mailvex Laravel Mail Transport (^9.0|^10.0|^11.0)",
+        "symfony/mailer": "Required for the Symfony/Laravel mail transport adapter (^6.0|^7.0)",
+        "symfony/mime": "Required for parsing MIME email messages (^6.0|^7.0)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Mailvex\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Mailvex\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Mailvex\\Laravel\\MailvexServiceProvider"
+            ],
+            "aliases": {
+                "Mailvex": "Mailvex\\Laravel\\Facades\\Mailvex"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

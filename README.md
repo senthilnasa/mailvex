@@ -240,4 +240,4 @@ cd console && npm run build
 
 ## License
 
-Mailvex is released under the **Apache 2.0 License**. See [LICENSE](LICENSE) for details.
+Mailvex is released under the **MIT License**. See [LICENSE](LICENSE) for details.
