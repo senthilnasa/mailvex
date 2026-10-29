@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Mailvex;
 
+use InvalidArgumentException;
+
 class Config
 {
     public const DEFAULT_BASE_URL = 'http://localhost:8080';
@@ -23,8 +25,18 @@ class Config
         int $timeout = 30,
         int $maxRetries = 3
     ) {
-        $this->apiKey = $apiKey;
-        $this->baseUrl = rtrim($baseUrl, '/');
+        $trimmedKey = trim($apiKey);
+        if ($trimmedKey === '') {
+            throw new InvalidArgumentException('Mailvex API key is required. Pass a valid API key or set MAILVEX_API_KEY.');
+        }
+
+        $trimmedUrl = trim($baseUrl);
+        if ($trimmedUrl === '') {
+            throw new InvalidArgumentException('Mailvex API base URL is required. Set MAILVEX_API_URL in your environment (e.g. https://api.mailvex.yourdomain.com).');
+        }
+
+        $this->apiKey = $trimmedKey;
+        $this->baseUrl = rtrim($trimmedUrl, '/');
         $this->tenantId = $tenantId;
         $this->webhookSecret = $webhookSecret;
         $this->timeout = $timeout;

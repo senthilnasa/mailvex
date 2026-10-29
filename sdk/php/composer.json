@@ -8,6 +8,11 @@
         "email",
         "mailer",
         "laravel",
+        "laravel-9",
+        "laravel-10",
+        "laravel-11",
+        "laravel-12",
+        "laravel-13",
         "mail-transport",
         "batch-email",
         "attachments",
@@ -31,10 +36,10 @@
         "phpunit/phpunit": "^10.0 || ^11.0"
     },
     "suggest": {
-        "illuminate/support": "Required to use Laravel ServiceProvider and Facades (^9.0|^10.0|^11.0)",
-        "illuminate/mail": "Required to register the Mailvex Laravel Mail Transport (^9.0|^10.0|^11.0)",
-        "symfony/mailer": "Required for the Symfony/Laravel mail transport adapter (^6.0|^7.0)",
-        "symfony/mime": "Required for parsing MIME email messages (^6.0|^7.0)"
+        "illuminate/support": "Required to use Laravel ServiceProvider and Facades (^9.0|^10.0|^11.0|^12.0|^13.0)",
+        "illuminate/mail": "Required to register the Mailvex Laravel Mail Transport (^9.0|^10.0|^11.0|^12.0|^13.0)",
+        "symfony/mailer": "Required for the Symfony/Laravel mail transport adapter (^6.0|^7.0|^8.0)",
+        "symfony/mime": "Required for parsing MIME email messages (^6.0|^7.0|^8.0)"
     },
     "autoload": {
         "psr-4": {

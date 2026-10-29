@@ -56,4 +56,33 @@ class WebhookTest extends TestCase
         $this->expectException(WebhookVerificationException::class);
         Webhook::verifySignature('{}', '', $this->secret);
     }
+
+    public function testBounceClassificationHelpers(): void
+    {
+        $payload = json_encode([
+            'id' => 'evt_01HZX_HARD',
+            'type' => 'message.bounced',
+            'data' => [
+                'message_id' => 'msg_456',
+                'recipient' => 'nobody@example.com',
+                'classification' => 'hard_bounce',
+                'reason' => '550 5.1.1 User unknown',
+                'smtp_code' => '550',
+                'enhanced_code' => '5.1.1',
+            ],
+        ]);
+
+        $t = time();
+        $v1 = hash_hmac('sha256', "{$t}.{$payload}", $this->secret);
+        $header = "t={$t},v1={$v1}";
+
+        $event = Webhook::constructEvent($payload, $header, $this->secret);
+        $this->assertTrue($event->isBounced());
+        $this->assertTrue($event->isHardBounce());
+        $this->assertFalse($event->isSoftBounce());
+        $this->assertSame('hard_bounce', $event->getBounceType());
+        $this->assertSame('550 5.1.1 User unknown', $event->getBounceReason());
+        $this->assertSame('550', $event->getSMTPCode());
+        $this->assertSame('5.1.1', $event->getEnhancedCode());
+    }
 }

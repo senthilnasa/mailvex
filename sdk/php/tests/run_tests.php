@@ -216,4 +216,81 @@ test('Webhook signature verification and event parsing', function () {
     assert($threwExpired === true, 'Expired timestamp must throw WebhookVerificationException');
 });
 
+// 6. Test Webhook Bounce and Complaint Classification Helpers
+test('Webhook Bounce and Complaint classification helpers', function () {
+    $hardBounceEvent = new \Mailvex\Webhooks\WebhookEvent(
+        'message.bounced',
+        [
+            'message_id' => 'msg_100',
+            'recipient' => 'nonexistent@example.com',
+            'classification' => 'hard_bounce',
+            'reason' => '550 5.1.1 User unknown',
+            'smtp_code' => '550',
+            'enhanced_code' => '5.1.1',
+        ],
+        'evt_001',
+        time()
+    );
+
+    assert($hardBounceEvent->isBounced() === true);
+    assert($hardBounceEvent->isHardBounce() === true);
+    assert($hardBounceEvent->isSoftBounce() === false);
+    assert($hardBounceEvent->getBounceType() === 'hard_bounce');
+    assert($hardBounceEvent->getSMTPCode() === '550');
+    assert($hardBounceEvent->getEnhancedCode() === '5.1.1');
+    assert($hardBounceEvent->getBounceReason() === '550 5.1.1 User unknown');
+
+    $softBounceEvent = new \Mailvex\Webhooks\WebhookEvent(
+        'message.bounced',
+        [
+            'message_id' => 'msg_101',
+            'recipient' => 'busy@example.com',
+            'classification' => 'rate_limited',
+            'reason' => '421 4.7.28 Too many connections',
+            'smtp_code' => '421',
+            'enhanced_code' => '4.7.28',
+        ],
+        'evt_002',
+        time()
+    );
+
+    assert($softBounceEvent->isBounced() === true);
+    assert($softBounceEvent->isHardBounce() === false);
+    assert($softBounceEvent->isSoftBounce() === true);
+    assert($softBounceEvent->getBounceType() === 'rate_limited');
+
+    $complaintEvent = new \Mailvex\Webhooks\WebhookEvent(
+        'message.complained',
+        [
+            'message_id' => 'msg_102',
+            'recipient' => 'user@example.com',
+            'feedback_type' => 'abuse',
+        ],
+        'evt_003',
+        time()
+    );
+
+    assert($complaintEvent->isComplained() === true);
+    assert($complaintEvent->getFeedbackType() === 'abuse');
+});
+
+// 7. Test Config Validation
+test('Config validation for missing key or base url', function () {
+    $threwKey = false;
+    try {
+        new Config('');
+    } catch (\InvalidArgumentException $e) {
+        $threwKey = true;
+    }
+    assert($threwKey === true, 'Config must throw on empty API key');
+
+    $threwUrl = false;
+    try {
+        new Config('mvx_test_123', '');
+    } catch (\InvalidArgumentException $e) {
+        $threwUrl = true;
+    }
+    assert($threwUrl === true, 'Config must throw on empty Base URL');
+});
+
 echo "\nAll Mailvex SDK tests passed successfully!\n";

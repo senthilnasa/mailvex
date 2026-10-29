@@ -18,10 +18,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | The base URL of your Mailvex deployment or local development edge.
-    | Defaults to http://localhost:8080 for local homelab / Docker setups.
+    | In production, set this explicitly (e.g. https://api.mailvex.yourdomain.com).
+    | Defaults to http://localhost:8080 in non-production environments.
     |
     */
-    'base_url' => env('MAILVEX_API_URL', 'http://localhost:8080'),
+    'base_url' => env('MAILVEX_API_URL', env('APP_ENV') === 'production' ? '' : 'http://localhost:8080'),
 
     /*
     |--------------------------------------------------------------------------

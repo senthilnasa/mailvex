@@ -6,6 +6,7 @@ namespace Mailvex\Laravel;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Mailvex\Client;
 use Mailvex\Config;
 use Mailvex\Laravel\Http\Controllers\WebhookController;
@@ -22,10 +23,25 @@ class MailvexServiceProvider extends ServiceProvider
 
         $this->app->singleton(Client::class, function ($app) {
             $config = $app['config']['mailvex'] ?? [];
+            $apiKey = (string) ($config['api_key'] ?? '');
+            $baseUrl = trim((string) ($config['base_url'] ?? ''));
+
+            // Safety check for production environment
+            if ($app->environment('production')) {
+                if ($baseUrl === '' || str_contains($baseUrl, 'localhost') || str_contains($baseUrl, '127.0.0.1')) {
+                    throw new InvalidArgumentException(
+                        'Mailvex configuration error: MAILVEX_API_URL must be explicitly configured in production (e.g. https://api.mailvex.yourdomain.com) and cannot be empty or point to localhost.'
+                    );
+                }
+            }
+
+            if ($baseUrl === '') {
+                $baseUrl = Config::DEFAULT_BASE_URL;
+            }
 
             $mailvexConfig = new Config(
-                apiKey: (string) ($config['api_key'] ?? ''),
-                baseUrl: (string) ($config['base_url'] ?? Config::DEFAULT_BASE_URL),
+                apiKey: $apiKey,
+                baseUrl: $baseUrl,
                 tenantId: $config['tenant_id'] ?? null,
                 webhookSecret: $config['webhook_secret'] ?? null,
                 timeout: (int) ($config['timeout'] ?? 30),
