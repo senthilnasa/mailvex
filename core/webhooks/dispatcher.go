@@ -30,6 +30,7 @@ var (
 
 type WebhookPayload struct {
 	ID         string    `json:"id"`
+	Type       string    `json:"type,omitempty"`
 	Event      string    `json:"event"`
 	TenantID   string    `json:"tenant_id"`
 	OccurredAt time.Time `json:"occurred_at"`
@@ -179,11 +180,16 @@ func (d *Dispatcher) DispatchPing(ctx context.Context, tenantID, endpointID stri
 	eventID := crypto.NewULID(crypto.PrefixEvent)
 	payloadObj := WebhookPayload{
 		ID:         eventID,
+		Type:       "webhook.test",
 		Event:      "webhook.test",
 		TenantID:   tenantID,
 		OccurredAt: time.Now().UTC(),
 		Data: map[string]any{
-			"message": "Mailvex webhook test event ping",
+			"message_id":  crypto.NewULID("msg_"),
+			"id":          crypto.NewULID("msg_"),
+			"type":        "webhook.test",
+			"recipient":   "test@krea.edu.in",
+			"message":     "Mailvex webhook test event ping",
 			"endpoint_id": endpointID,
 		},
 	}
