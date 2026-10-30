@@ -19,6 +19,9 @@ services:
       - MVX_MASTER_KEY=${MVX_MASTER_KEY:-}
       - MVX_KEK=${MVX_KEK:-}
       - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
+      - MVX_DATA_DIR=${MVX_DATA_DIR:-/var/lib/mailvex}
+    volumes:
+      - mailvex_data:/var/lib/mailvex
     depends_on:
       mariadb:
         condition: service_healthy
@@ -44,6 +47,9 @@ services:
       - MVX_KEK=${MVX_KEK:-}
       - MVX_KEK_PROVIDER=${MVX_KEK_PROVIDER:-env}
       - MVX_OUTBOUND_PORT=${MVX_OUTBOUND_PORT:-25}
+      - MVX_DATA_DIR=${MVX_DATA_DIR:-/var/lib/mailvex}
+    volumes:
+      - mailvex_data:/var/lib/mailvex
     depends_on:
       mariadb:
         condition: service_healthy
@@ -82,3 +88,4 @@ services:
 volumes:
   db_data:
   redis_data:
+  mailvex_data:

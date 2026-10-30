@@ -18,6 +18,7 @@ type Config struct {
 	AppPort    int
 	AppURL     string
 	ConsoleURL string
+	DataDir    string
 
 	MasterKey   []byte
 	KEKProvider string
@@ -55,6 +56,7 @@ func Load() (*Config, error) {
 		AppPort:            getEnvInt("MVX_APP_PORT", 8080),
 		AppURL:             getEnv("MVX_APP_URL", "http://localhost:8080"),
 		ConsoleURL:         getEnv("MVX_CONSOLE_URL", "http://localhost:3000"),
+		DataDir:            getEnv("MVX_DATA_DIR", "/var/lib/mailvex"),
 		KEKProvider:        getEnv("MVX_KEK_PROVIDER", "env"),
 		DBHost:             getEnv("MVX_DB_HOST", "127.0.0.1"),
 		DBPort:             getEnvInt("MVX_DB_PORT", 3306),

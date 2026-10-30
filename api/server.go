@@ -57,6 +57,12 @@ func (s *Server) SetDNSEngine(engine *dns.Engine) {
 	s.dnsEngine = engine
 }
 
+func (s *Server) SetStorage(store storage.Storage) {
+	s.storage = store
+	s.ingestEngine = core.NewIngestionEngine(s.repo, store)
+	s.setupRoutes()
+}
+
 func (s *Server) SetIngestEngine(engine *core.IngestionEngine, store storage.Storage) {
 	s.ingestEngine = engine
 	s.storage = store

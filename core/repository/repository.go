@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -290,6 +292,10 @@ type Repository interface {
 // MemoryRepository is an in-memory thread-safe implementation of Repository with strict tenant isolation
 type MemoryRepository struct {
 	mu            sync.RWMutex
+	dataDir       string
+	dirty         bool
+	closeChan     chan struct{}
+
 	organizations map[string]*domain.Organization
 	tenants       map[string]*domain.Tenant
 	tenantKeys    map[string][]*domain.TenantKey
@@ -479,6 +485,426 @@ func NewMemoryRepository() *MemoryRepository {
 	return repo
 }
 
+// RepositorySnapshot represents the serializable state of MemoryRepository for local directory persistence
+type persistedAPIKey struct {
+	*domain.APIKey
+	PersistedKeyHash string `json:"persisted_key_hash"`
+}
+
+type persistedDKIMKey struct {
+	*domain.DKIMKey
+	PersistedEncryptedPrivateKey string `json:"persisted_encrypted_private_key"`
+}
+
+type persistedUser struct {
+	*domain.User
+	PersistedPasswordHash string `json:"persisted_password_hash"`
+}
+
+type persistedTenantKey struct {
+	*domain.TenantKey
+	PersistedEncryptedDEK string `json:"persisted_encrypted_dek"`
+}
+
+type persistedSMTPCred struct {
+	*domain.SMTPCredential
+	PersistedPasswordHash string `json:"persisted_password_hash"`
+}
+
+type RepositorySnapshot struct {
+	Organizations         map[string]*domain.Organization        `json:"organizations,omitempty"`
+	Tenants               map[string]*domain.Tenant              `json:"tenants,omitempty"`
+	TenantKeys            map[string][]*persistedTenantKey       `json:"tenant_keys,omitempty"`
+	Users                 map[string]*persistedUser              `json:"users,omitempty"`
+	Roles                 map[string]*domain.Role                `json:"roles,omitempty"`
+	Permissions           map[string]*domain.Permission          `json:"permissions,omitempty"`
+	RolePerms             map[string][]string                    `json:"role_perms,omitempty"`
+	Memberships           map[string]*domain.TenantMembership    `json:"memberships,omitempty"`
+	AuditLogs             []*domain.AuditLog                     `json:"audit_logs,omitempty"`
+	Settings              map[string]string                      `json:"settings,omitempty"`
+	Domains               map[string]*domain.Domain              `json:"domains,omitempty"`
+	Delegations           []*domain.DomainDelegation             `json:"delegations,omitempty"`
+	DKIMKeys              map[string][]*persistedDKIMKey         `json:"dkim_keys,omitempty"`
+	DNSRecords            map[string][]*domain.DNSRecord         `json:"dns_records,omitempty"`
+	Streams               map[string][]*domain.MessageStream     `json:"streams,omitempty"`
+	OutboxItems           map[string]*domain.OutboxItem          `json:"outbox_items,omitempty"`
+	Messages              map[string]*domain.Message             `json:"messages,omitempty"`
+	Recipients            map[string][]*domain.MessageRecipient  `json:"recipients,omitempty"`
+	Events                map[string][]*domain.MessageEvent      `json:"events,omitempty"`
+	SMTPCreds             map[string]*persistedSMTPCred          `json:"smtp_creds,omitempty"`
+	Devices               map[string][]*domain.Device            `json:"devices,omitempty"`
+	TrustedNets           map[string][]*domain.TrustedNetwork    `json:"trusted_nets,omitempty"`
+	APIKeys               map[string]*persistedAPIKey            `json:"api_keys,omitempty"`
+	Templates             map[string]*domain.Template            `json:"templates,omitempty"`
+	TemplateVersions      map[string][]*domain.TemplateVersion   `json:"template_versions,omitempty"`
+	Idempotency           map[string]*domain.IdempotencyRecord   `json:"idempotency,omitempty"`
+	Suppressions          map[string]*domain.Suppression         `json:"suppressions,omitempty"`
+	IPPools               map[string]*domain.IPPool              `json:"ip_pools,omitempty"`
+	IPAddresses           map[string]*domain.IPAddress           `json:"ip_addresses,omitempty"`
+	Relays                map[string]*domain.Relay               `json:"relays,omitempty"`
+	BounceRules           []*domain.BounceRule                   `json:"bounce_rules,omitempty"`
+	ProviderMXRules       []*domain.ProviderMXRule               `json:"provider_mx_rules,omitempty"`
+	DeadLetters           []*domain.DeadLetterMessage            `json:"dead_letters,omitempty"`
+	DeliveryAttempts      []*domain.DeliveryAttempt              `json:"delivery_attempts,omitempty"`
+	FBLReports            []*domain.FBLReport                    `json:"fbl_reports,omitempty"`
+	UnmatchedBounces      []*domain.UnmatchedBounce              `json:"unmatched_bounces,omitempty"`
+	AbuseReports          map[string]*domain.AbuseReport         `json:"abuse_reports,omitempty"`
+	IPReputations         []*domain.IPReputationSnapshot         `json:"ip_reputations,omitempty"`
+	PostmasterSnaps       []*domain.PostmasterSnapshot           `json:"postmaster_snaps,omitempty"`
+	AnalyticsRollups      []*domain.AnalyticsRollup              `json:"analytics_rollups,omitempty"`
+	AnalyticsExports      map[string]*domain.AnalyticsExport     `json:"analytics_exports,omitempty"`
+	WebhookEndpoints      map[string]*domain.WebhookEndpoint     `json:"webhook_endpoints,omitempty"`
+	WebhookDeliveries     []*domain.WebhookDelivery              `json:"webhook_deliveries,omitempty"`
+	SuppressionImports    []*domain.SuppressionImport            `json:"suppression_imports,omitempty"`
+	PrivacyRequests       map[string]*domain.PrivacyRequest      `json:"privacy_requests,omitempty"`
+	RetentionPolicies     map[string]*domain.RetentionPolicy     `json:"retention_policies,omitempty"`
+	TrackingLinks         map[string]*domain.TrackingLink        `json:"tracking_links,omitempty"`
+	TrackingEvents        []*domain.TrackingEvent                `json:"tracking_events,omitempty"`
+	InboundRoutes         map[string]*domain.InboundRoute        `json:"inbound_routes,omitempty"`
+	InboundMessages       []*domain.InboundMessage               `json:"inbound_messages,omitempty"`
+	DNSBLProviders        map[string]*domain.DNSBLProvider       `json:"dnsbl_providers,omitempty"`
+	DNSBLResults          []*domain.DNSBLResult                  `json:"dnsbl_results,omitempty"`
+	WarmupPlans           map[string]*domain.WarmupPlan          `json:"warmup_plans,omitempty"`
+	IPWarmupStates        map[string]*domain.IPWarmupState       `json:"ip_warmup_states,omitempty"`
+	AlertRules            map[string]*domain.AlertRule           `json:"alert_rules,omitempty"`
+	AlertIncidents        map[string]*domain.AlertIncident       `json:"alert_incidents,omitempty"`
+	NotificationChannels  map[string]*domain.NotificationChannel `json:"notification_channels,omitempty"`
+	AlertNotifications    []*domain.AlertNotification            `json:"alert_notifications,omitempty"`
+	SSOProviders          map[string]*domain.SSOProvider         `json:"sso_providers,omitempty"`
+	ImpersonationSessions []*domain.ImpersonationSession         `json:"impersonation_sessions,omitempty"`
+	ComplianceChecks      []*domain.ComplianceCheck              `json:"compliance_checks,omitempty"`
+}
+
+// NewPersistentMemoryRepository creates a MemoryRepository backed by directory storage
+func NewPersistentMemoryRepository(dataDir string) (*MemoryRepository, error) {
+	repo := NewMemoryRepository()
+	if dataDir == "" {
+		return repo, nil
+	}
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		return nil, fmt.Errorf("failed to create data directory %s: %w", dataDir, err)
+	}
+	repo.dataDir = dataDir
+	repo.closeChan = make(chan struct{})
+
+	repo.mu.Lock()
+	if err := repo.loadStateLocked(); err != nil {
+		repo.mu.Unlock()
+		return nil, err
+	}
+	repo.mu.Unlock()
+
+	repo.startBackgroundSync()
+	return repo, nil
+}
+
+func (m *MemoryRepository) markDirtyLocked() {
+	m.dirty = true
+}
+
+func (m *MemoryRepository) saveImmediateLocked() {
+	m.dirty = true
+	if m.dataDir != "" {
+		_ = m.saveStateLocked()
+	}
+}
+
+// SaveState flushes repository state to disk immediately
+func (m *MemoryRepository) SaveState() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.saveStateLocked()
+}
+
+// Close flushes any pending changes and stops background persistence tasks
+func (m *MemoryRepository) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closeChan != nil {
+		select {
+		case <-m.closeChan:
+		default:
+			close(m.closeChan)
+		}
+	}
+	if m.dirty {
+		return m.saveStateLocked()
+	}
+	return nil
+}
+
+func (m *MemoryRepository) startBackgroundSync() {
+	if m.dataDir == "" {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-m.closeChan:
+				m.mu.Lock()
+				if m.dirty {
+					_ = m.saveStateLocked()
+				}
+				m.mu.Unlock()
+				return
+			case <-ticker.C:
+				m.mu.Lock()
+				if m.dirty {
+					_ = m.saveStateLocked()
+				}
+				m.mu.Unlock()
+			}
+		}
+	}()
+}
+
+func (m *MemoryRepository) snapshotLocked() *RepositorySnapshot {
+	users := make(map[string]*persistedUser, len(m.users))
+	for k, v := range m.users {
+		users[k] = &persistedUser{User: v, PersistedPasswordHash: v.PasswordHash}
+	}
+	tenantKeys := make(map[string][]*persistedTenantKey, len(m.tenantKeys))
+	for k, list := range m.tenantKeys {
+		persistedList := make([]*persistedTenantKey, len(list))
+		for i, v := range list {
+			persistedList[i] = &persistedTenantKey{TenantKey: v, PersistedEncryptedDEK: v.EncryptedDEK}
+		}
+		tenantKeys[k] = persistedList
+	}
+	dkimKeys := make(map[string][]*persistedDKIMKey, len(m.dkimKeys))
+	for k, list := range m.dkimKeys {
+		persistedList := make([]*persistedDKIMKey, len(list))
+		for i, v := range list {
+			persistedList[i] = &persistedDKIMKey{DKIMKey: v, PersistedEncryptedPrivateKey: v.EncryptedPrivateKey}
+		}
+		dkimKeys[k] = persistedList
+	}
+	apiKeys := make(map[string]*persistedAPIKey, len(m.apiKeys))
+	for k, v := range m.apiKeys {
+		apiKeys[k] = &persistedAPIKey{APIKey: v, PersistedKeyHash: v.KeyHash}
+	}
+	smtpCreds := make(map[string]*persistedSMTPCred, len(m.smtpCreds))
+	for k, v := range m.smtpCreds {
+		smtpCreds[k] = &persistedSMTPCred{SMTPCredential: v, PersistedPasswordHash: v.PasswordHash}
+	}
+
+	return &RepositorySnapshot{
+		Organizations:         m.organizations,
+		Tenants:               m.tenants,
+		TenantKeys:            tenantKeys,
+		Users:                 users,
+		Roles:                 m.roles,
+		Permissions:           m.permissions,
+		RolePerms:             m.rolePerms,
+		Memberships:           m.memberships,
+		AuditLogs:             m.auditLogs,
+		Settings:              m.settings,
+		Domains:               m.domains,
+		Delegations:           m.delegations,
+		DKIMKeys:              dkimKeys,
+		DNSRecords:            m.dnsRecords,
+		Streams:               m.streams,
+		OutboxItems:           m.outboxItems,
+		Messages:              m.messages,
+		Recipients:            m.recipients,
+		Events:                m.events,
+		SMTPCreds:             smtpCreds,
+		Devices:               m.devices,
+		TrustedNets:           m.trustedNets,
+		APIKeys:               apiKeys,
+		Templates:             m.templates,
+		TemplateVersions:      m.templateVersions,
+		Idempotency:           m.idempotency,
+		Suppressions:          m.suppressions,
+		IPPools:               m.ipPools,
+		IPAddresses:           m.ipAddresses,
+		Relays:                m.relays,
+		BounceRules:           m.bounceRules,
+		ProviderMXRules:       m.providerMXRules,
+		DeadLetters:           m.deadLetters,
+		DeliveryAttempts:      m.deliveryAttempts,
+		FBLReports:            m.fblReports,
+		UnmatchedBounces:      m.unmatchedBounces,
+		AbuseReports:          m.abuseReports,
+		IPReputations:         m.ipReputations,
+		PostmasterSnaps:       m.postmasterSnaps,
+		AnalyticsRollups:      m.analyticsRollups,
+		AnalyticsExports:      m.analyticsExports,
+		WebhookEndpoints:      m.webhookEndpoints,
+		WebhookDeliveries:     m.webhookDeliveries,
+		SuppressionImports:    m.suppressionImports,
+		PrivacyRequests:       m.privacyRequests,
+		RetentionPolicies:     m.retentionPolicies,
+		TrackingLinks:         m.trackingLinks,
+		TrackingEvents:        m.trackingEvents,
+		InboundRoutes:         m.inboundRoutes,
+		InboundMessages:       m.inboundMessages,
+		DNSBLProviders:        m.dnsblProviders,
+		DNSBLResults:          m.dnsblResults,
+		WarmupPlans:           m.warmupPlans,
+		IPWarmupStates:        m.ipWarmupStates,
+		AlertRules:            m.alertRules,
+		AlertIncidents:        m.alertIncidents,
+		NotificationChannels:  m.notificationChannels,
+		AlertNotifications:    m.alertNotifications,
+		SSOProviders:          m.ssoProviders,
+		ImpersonationSessions: m.impersonationSessions,
+		ComplianceChecks:      m.complianceChecks,
+	}
+}
+
+func (m *MemoryRepository) saveStateLocked() error {
+	if m.dataDir == "" {
+		return nil
+	}
+	snap := m.snapshotLocked()
+	data, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal repository snapshot: %w", err)
+	}
+	tmpFile := filepath.Join(m.dataDir, "repository_state.json.tmp")
+	destFile := filepath.Join(m.dataDir, "repository_state.json")
+	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
+		return fmt.Errorf("failed to write temp snapshot: %w", err)
+	}
+	_ = os.Remove(destFile)
+	if err := os.Rename(tmpFile, destFile); err != nil {
+		return fmt.Errorf("failed to commit snapshot file: %w", err)
+	}
+	m.dirty = false
+	return nil
+}
+
+func (m *MemoryRepository) loadStateLocked() error {
+	if m.dataDir == "" {
+		return nil
+	}
+	destFile := filepath.Join(m.dataDir, "repository_state.json")
+	data, err := os.ReadFile(destFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var snap RepositorySnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("failed to parse repository state: %w", err)
+	}
+
+	if snap.Organizations != nil { m.organizations = snap.Organizations }
+	if snap.Tenants != nil { m.tenants = snap.Tenants }
+	if snap.TenantKeys != nil {
+		m.tenantKeys = make(map[string][]*domain.TenantKey, len(snap.TenantKeys))
+		for k, list := range snap.TenantKeys {
+			restoredList := make([]*domain.TenantKey, len(list))
+			for i, v := range list {
+				tk := v.TenantKey
+				tk.EncryptedDEK = v.PersistedEncryptedDEK
+				restoredList[i] = tk
+			}
+			m.tenantKeys[k] = restoredList
+		}
+	}
+	if snap.Users != nil {
+		m.users = make(map[string]*domain.User, len(snap.Users))
+		for k, v := range snap.Users {
+			u := v.User
+			u.PasswordHash = v.PersistedPasswordHash
+			m.users[k] = u
+		}
+	}
+	if snap.Roles != nil { m.roles = snap.Roles }
+	if snap.Permissions != nil { m.permissions = snap.Permissions }
+	if snap.RolePerms != nil { m.rolePerms = snap.RolePerms }
+	if snap.Memberships != nil { m.memberships = snap.Memberships }
+	if snap.AuditLogs != nil { m.auditLogs = snap.AuditLogs }
+	if snap.Settings != nil { m.settings = snap.Settings }
+	if snap.Domains != nil { m.domains = snap.Domains }
+	if snap.Delegations != nil { m.delegations = snap.Delegations }
+	if snap.DKIMKeys != nil {
+		m.dkimKeys = make(map[string][]*domain.DKIMKey, len(snap.DKIMKeys))
+		for k, list := range snap.DKIMKeys {
+			restoredList := make([]*domain.DKIMKey, len(list))
+			for i, v := range list {
+				dk := v.DKIMKey
+				dk.EncryptedPrivateKey = v.PersistedEncryptedPrivateKey
+				restoredList[i] = dk
+			}
+			m.dkimKeys[k] = restoredList
+		}
+	}
+	if snap.DNSRecords != nil { m.dnsRecords = snap.DNSRecords }
+	if snap.Streams != nil { m.streams = snap.Streams }
+	if snap.OutboxItems != nil { m.outboxItems = snap.OutboxItems }
+	if snap.Messages != nil { m.messages = snap.Messages }
+	if snap.Recipients != nil { m.recipients = snap.Recipients }
+	if snap.Events != nil { m.events = snap.Events }
+	if snap.SMTPCreds != nil {
+		m.smtpCreds = make(map[string]*domain.SMTPCredential, len(snap.SMTPCreds))
+		for k, v := range snap.SMTPCreds {
+			sc := v.SMTPCredential
+			sc.PasswordHash = v.PersistedPasswordHash
+			m.smtpCreds[k] = sc
+		}
+	}
+	if snap.Devices != nil { m.devices = snap.Devices }
+	if snap.TrustedNets != nil { m.trustedNets = snap.TrustedNets }
+	if snap.APIKeys != nil {
+		m.apiKeys = make(map[string]*domain.APIKey, len(snap.APIKeys))
+		for k, v := range snap.APIKeys {
+			ak := v.APIKey
+			ak.KeyHash = v.PersistedKeyHash
+			m.apiKeys[k] = ak
+		}
+	}
+	if snap.Templates != nil { m.templates = snap.Templates }
+	if snap.TemplateVersions != nil { m.templateVersions = snap.TemplateVersions }
+	if snap.Idempotency != nil { m.idempotency = snap.Idempotency }
+	if snap.Suppressions != nil { m.suppressions = snap.Suppressions }
+	if snap.IPPools != nil && len(snap.IPPools) > 0 { m.ipPools = snap.IPPools }
+	if snap.IPAddresses != nil { m.ipAddresses = snap.IPAddresses }
+	if snap.Relays != nil { m.relays = snap.Relays }
+	if snap.BounceRules != nil && len(snap.BounceRules) > 0 { m.bounceRules = snap.BounceRules }
+	if snap.ProviderMXRules != nil && len(snap.ProviderMXRules) > 0 { m.providerMXRules = snap.ProviderMXRules }
+	if snap.DeadLetters != nil { m.deadLetters = snap.DeadLetters }
+	if snap.DeliveryAttempts != nil { m.deliveryAttempts = snap.DeliveryAttempts }
+	if snap.FBLReports != nil { m.fblReports = snap.FBLReports }
+	if snap.UnmatchedBounces != nil { m.unmatchedBounces = snap.UnmatchedBounces }
+	if snap.AbuseReports != nil { m.abuseReports = snap.AbuseReports }
+	if snap.IPReputations != nil { m.ipReputations = snap.IPReputations }
+	if snap.PostmasterSnaps != nil { m.postmasterSnaps = snap.PostmasterSnaps }
+	if snap.AnalyticsRollups != nil { m.analyticsRollups = snap.AnalyticsRollups }
+	if snap.AnalyticsExports != nil { m.analyticsExports = snap.AnalyticsExports }
+	if snap.WebhookEndpoints != nil { m.webhookEndpoints = snap.WebhookEndpoints }
+	if snap.WebhookDeliveries != nil { m.webhookDeliveries = snap.WebhookDeliveries }
+	if snap.SuppressionImports != nil { m.suppressionImports = snap.SuppressionImports }
+	if snap.PrivacyRequests != nil { m.privacyRequests = snap.PrivacyRequests }
+	if snap.RetentionPolicies != nil { m.retentionPolicies = snap.RetentionPolicies }
+	if snap.TrackingLinks != nil { m.trackingLinks = snap.TrackingLinks }
+	if snap.TrackingEvents != nil { m.trackingEvents = snap.TrackingEvents }
+	if snap.InboundRoutes != nil { m.inboundRoutes = snap.InboundRoutes }
+	if snap.InboundMessages != nil { m.inboundMessages = snap.InboundMessages }
+	if snap.DNSBLProviders != nil { m.dnsblProviders = snap.DNSBLProviders }
+	if snap.DNSBLResults != nil { m.dnsblResults = snap.DNSBLResults }
+	if snap.WarmupPlans != nil { m.warmupPlans = snap.WarmupPlans }
+	if snap.IPWarmupStates != nil { m.ipWarmupStates = snap.IPWarmupStates }
+	if snap.AlertRules != nil { m.alertRules = snap.AlertRules }
+	if snap.AlertIncidents != nil { m.alertIncidents = snap.AlertIncidents }
+	if snap.NotificationChannels != nil { m.notificationChannels = snap.NotificationChannels }
+	if snap.AlertNotifications != nil { m.alertNotifications = snap.AlertNotifications }
+	if snap.SSOProviders != nil { m.ssoProviders = snap.SSOProviders }
+	if snap.ImpersonationSessions != nil { m.impersonationSessions = snap.ImpersonationSessions }
+	if snap.ComplianceChecks != nil { m.complianceChecks = snap.ComplianceChecks }
+
+	for _, key := range m.apiKeys {
+		m.apiKeyHashes[key.KeyHash] = key
+	}
+	return nil
+}
+
 func (m *MemoryRepository) seedDefaults() {
 	// Standard permissions
 	perms := []string{
@@ -620,6 +1046,7 @@ func (m *MemoryRepository) CreateOrganization(ctx context.Context, org *domain.O
 		}
 	}
 	m.organizations[org.ID] = org
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -667,6 +1094,7 @@ func (m *MemoryRepository) CreateUser(ctx context.Context, user *domain.User) er
 		}
 	}
 	m.users[user.ID] = user
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -690,6 +1118,7 @@ func (m *MemoryRepository) UpdateUserPassword(ctx context.Context, email, passwo
 		if strings.EqualFold(strings.TrimSpace(user.Email), strings.TrimSpace(email)) {
 			user.PasswordHash = passwordHash
 			user.UpdatedAt = time.Now().UTC()
+			m.saveImmediateLocked()
 			return nil
 		}
 	}
@@ -705,6 +1134,7 @@ func (m *MemoryRepository) ResetPlatformAdmin(ctx context.Context, email, passwo
 			user.Email = strings.ToLower(strings.TrimSpace(email))
 			user.PasswordHash = passwordHash
 			user.UpdatedAt = time.Now().UTC()
+			m.saveImmediateLocked()
 			return user, nil
 		}
 	}
@@ -714,6 +1144,7 @@ func (m *MemoryRepository) ResetPlatformAdmin(ctx context.Context, email, passwo
 			user.PasswordHash = passwordHash
 			user.IsPlatformAdmin = true
 			user.UpdatedAt = time.Now().UTC()
+			m.saveImmediateLocked()
 			return user, nil
 		}
 	}
@@ -745,6 +1176,7 @@ func (m *MemoryRepository) CreateTenant(ctx context.Context, tenant *domain.Tena
 		}
 	}
 	m.tenants[tenant.ID] = tenant
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -820,6 +1252,7 @@ func (m *MemoryRepository) SaveTenantKey(ctx context.Context, key *domain.Tenant
 		return ErrNotFound
 	}
 	m.tenantKeys[key.TenantID] = append(m.tenantKeys[key.TenantID], key)
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -850,6 +1283,7 @@ func (m *MemoryRepository) AddTenantMembership(ctx context.Context, membership *
 
 	key := membership.TenantID + ":" + membership.UserID
 	m.memberships[key] = membership
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -907,6 +1341,7 @@ func (m *MemoryRepository) RecordAuditLog(ctx context.Context, log *domain.Audit
 	defer m.mu.Unlock()
 
 	m.auditLogs = append(m.auditLogs, log)
+	m.markDirtyLocked()
 	return nil
 }
 
@@ -946,6 +1381,7 @@ func (m *MemoryRepository) SetSetting(ctx context.Context, key, value string) er
 	defer m.mu.Unlock()
 
 	m.settings[key] = value
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -991,6 +1427,7 @@ func (m *MemoryRepository) CreateDomain(ctx context.Context, dom *domain.Domain)
 	}
 
 	m.domains[dom.ID] = dom
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1050,6 +1487,7 @@ func (m *MemoryRepository) UpdateDomain(ctx context.Context, dom *domain.Domain)
 
 	dom.UpdatedAt = time.Now().UTC()
 	m.domains[dom.ID] = dom
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1068,6 +1506,7 @@ func (m *MemoryRepository) DeleteDomain(ctx context.Context, tenantID, domainID 
 	delete(m.domains, domainID)
 	delete(m.dkimKeys, domainID)
 	delete(m.dnsRecords, domainID)
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1078,6 +1517,7 @@ func (m *MemoryRepository) SaveDKIMKey(ctx context.Context, key *domain.DKIMKey)
 	defer m.mu.Unlock()
 
 	m.dkimKeys[key.DomainID] = append(m.dkimKeys[key.DomainID], key)
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1125,6 +1565,7 @@ func (m *MemoryRepository) UpdateDKIMKeyStatus(ctx context.Context, keyID, statu
 				} else if status == "retired" {
 					k.RetiredAt = &now
 				}
+				m.saveImmediateLocked()
 				return nil
 			}
 		}
@@ -1139,6 +1580,7 @@ func (m *MemoryRepository) SaveDNSRecords(ctx context.Context, domainID string, 
 	defer m.mu.Unlock()
 
 	m.dnsRecords[domainID] = records
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1167,6 +1609,7 @@ func (m *MemoryRepository) CreateStream(ctx context.Context, stream *domain.Mess
 	}
 
 	m.streams[stream.TenantID] = append(m.streams[stream.TenantID], stream)
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1227,6 +1670,7 @@ func (m *MemoryRepository) SaveOutboxItem(ctx context.Context, item *domain.Outb
 	defer m.mu.Unlock()
 
 	m.outboxItems[item.ID] = item
+	m.markDirtyLocked()
 	return nil
 }
 
@@ -1257,6 +1701,7 @@ func (m *MemoryRepository) MarkOutboxPublished(ctx context.Context, id string) e
 	}
 	now := time.Now().UTC()
 	item.PublishedAt = &now
+	m.markDirtyLocked()
 	return nil
 }
 
@@ -1272,6 +1717,7 @@ func (m *MemoryRepository) SaveMessage(ctx context.Context, msg *domain.Message,
 	if outbox != nil {
 		m.outboxItems[outbox.ID] = outbox
 	}
+	m.markDirtyLocked()
 	return nil
 }
 
@@ -1444,6 +1890,7 @@ func (m *MemoryRepository) CreateAPIKey(ctx context.Context, key *domain.APIKey)
 
 	m.apiKeys[key.ID] = key
 	m.apiKeyHashes[key.KeyHash] = key
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1491,6 +1938,7 @@ func (m *MemoryRepository) RevokeAPIKey(ctx context.Context, tenantID, id string
 
 	now := time.Now()
 	key.RevokedAt = &now
+	m.saveImmediateLocked()
 	return nil
 }
 
@@ -1668,6 +2116,7 @@ func (m *MemoryRepository) UpdateMessageStatus(ctx context.Context, tenantID, me
 	}
 
 	msg.Status = status
+	m.markDirtyLocked()
 	return nil
 }
 

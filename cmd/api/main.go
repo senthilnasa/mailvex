@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -42,13 +43,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize repository
-	repo := repository.NewMemoryRepository()
+	// Initialize repository with disk persistence
+	repo, err := repository.NewPersistentMemoryRepository(cfg.DataDir)
+	if err != nil {
+		appLogger.Warn("failed to initialize persistent repository, falling back to memory repository", "error", err)
+		repo = repository.NewMemoryRepository()
+	}
+	defer repo.Close()
 	auditService := audit.NewService(repo)
 
-	server := api.NewServer(repo, auditService, enc, appLogger)
+	// Initialize blob storage
+	var store storage.Storage
+	if cfg.DataDir != "" {
+		if fsStore, err := storage.NewFSStorage(filepath.Join(cfg.DataDir, "storage")); err == nil {
+			store = fsStore
+			appLogger.Info("using persistent filesystem storage", "path", filepath.Join(cfg.DataDir, "storage"))
+		} else {
+			appLogger.Warn("failed to initialize fs storage, falling back to memory storage", "error", err)
+		}
+	}
+	if store == nil {
+		store = storage.NewMemoryStorage()
+	}
 
-	// Seed persistent tenant and domain state
+	server := api.NewServer(repo, auditService, enc, appLogger)
+	server.SetStorage(store)
+
+	// Seed persistent tenant and domain state if not already seeded
 	seedInitialState(context.Background(), repo, server.Storage(), enc)
 
 	// Initialize and run background outbound delivery worker loop
@@ -119,10 +140,15 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		appLogger.Error("error during server shutdown", "error", err)
 	}
+	_ = repo.Close()
 	appLogger.Info("mailvex api stopped")
 }
 
 func seedInitialState(ctx context.Context, repo repository.Repository, store storage.Storage, enc *crypto.EnvelopeEncryption) {
+	if orgs, err := repo.ListOrganizations(ctx); err == nil && len(orgs) > 0 {
+		return
+	}
+
 	orgID := "org_system"
 	_ = repo.CreateOrganization(ctx, &domain.Organization{
 		ID:        orgID,
