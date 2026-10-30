@@ -32,7 +32,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata curl && \
-    addgroup -S mailvex && adduser -S mailvex -G mailvex
+    addgroup -S mailvex && adduser -S mailvex -G mailvex && \
+    mkdir -p /var/lib/mailvex && chown -R mailvex:mailvex /var/lib/mailvex
 
 COPY --from=builder /bin/mailvex-api /usr/local/bin/mailvex-api
 COPY --from=frontend-builder /web/dist /var/www/mailvex
