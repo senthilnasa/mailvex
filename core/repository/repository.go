@@ -3102,6 +3102,7 @@ func (r *MemoryRepository) CreateWebhookEndpoint(ctx context.Context, endpoint *
 		return errors.New("tenant_id is required")
 	}
 	r.webhookEndpoints[endpoint.ID] = endpoint
+	r.saveImmediateLocked()
 	return nil
 }
 
@@ -3144,6 +3145,7 @@ func (r *MemoryRepository) UpdateWebhookEndpoint(ctx context.Context, endpoint *
 
 	endpoint.UpdatedAt = time.Now().UTC()
 	r.webhookEndpoints[endpoint.ID] = endpoint
+	r.saveImmediateLocked()
 	return nil
 }
 
@@ -3157,6 +3159,7 @@ func (r *MemoryRepository) DeleteWebhookEndpoint(ctx context.Context, tenantID, 
 	}
 
 	delete(r.webhookEndpoints, id)
+	r.saveImmediateLocked()
 	return nil
 }
 
