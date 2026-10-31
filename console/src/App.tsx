@@ -36,7 +36,9 @@ import {
   ChevronRight,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Menu,
+  X
 } from 'lucide-react'
 import { ExportMenu } from './components/ExportMenu'
 
@@ -503,6 +505,7 @@ export default function App() {
       return null
     }
   })
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'domains' | 'streams' | 'apikeys' | 'smtp_devices' | 'messages' | 'templates' | 'suppressions' | 'reputation' | 'analytics' | 'webhooks' | 'privacy_retention' | 'inbound' | 'alerts_warmup' | 'sso_compliance' | 'platform_admin'>(() => {
     try {
       const saved = localStorage.getItem('mvx_current_tab')
@@ -2985,27 +2988,178 @@ export default function App() {
     )
   }
 
+  // Navigation helper for closing mobile drawer
+  const navItemClick = (tab: any) => {
+    setCurrentTab(tab)
+    setMobileSidebarOpen(false)
+  }
+
+  const renderNavLinks = () => (
+    <>
+      <div className="space-y-4">
+        {/* Platform Admin Hub Quick Launcher (Visible only to Platform Admins) */}
+        {user.is_platform_admin && (
+          <div className="space-y-1">
+            <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-500 dark:text-amber-400 flex items-center justify-between">
+              <span className="flex items-center space-x-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                <span>Platform Admin</span>
+              </span>
+              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold">ROOT</span>
+            </div>
+            <button
+              onClick={() => navItemClick('platform_admin')}
+              className={`w-full text-left flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 ${
+                currentTab === 'platform_admin'
+                  ? 'bg-gradient-to-r from-amber-500/20 via-indigo-600/20 to-purple-600/10 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs'
+                  : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 border border-amber-500/20'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Shield className="w-4 h-4 text-amber-500" />
+                <span>Admin Center</span>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-amber-500/60" />
+            </button>
+          </div>
+        )}
+
+        {/* Core Operations Group */}
+        <div className="space-y-1">
+          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Core Operations
+          </div>
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'domains', label: 'Domains & DNS', icon: Globe },
+            { id: 'streams', label: 'Message Streams', icon: GitFork },
+            { id: 'apikeys', label: 'API Keys', icon: Key },
+            { id: 'smtp_devices', label: 'SMTP & Devices', icon: HardDrive },
+            { id: 'messages', label: 'Message Logs', icon: Inbox },
+            { id: 'templates', label: 'Templates', icon: FileCode },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = currentTab === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => navItemClick(item.id as any)}
+                className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
+                  isActive
+                    ? 'nav-item-active'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
+                }`}
+              >
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Deliverability & Safety Group */}
+        <div className="space-y-1">
+          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Deliverability & Safety
+          </div>
+          {[
+            { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3 },
+            { id: 'reputation', label: 'Reputation & Abuse', icon: ShieldAlert },
+            { id: 'suppressions', label: 'Suppressions', icon: Ban },
+            { id: 'alerts_warmup', label: 'Alerts & Warmup', icon: Flame },
+            { id: 'inbound', label: 'Inbound Routing', icon: ArrowDownLeft },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = currentTab === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => navItemClick(item.id as any)}
+                className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
+                  isActive
+                    ? 'nav-item-active'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
+                }`}
+              >
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Security & Infrastructure Group */}
+        <div className="space-y-1">
+          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Security & Platform
+          </div>
+          {[
+            { id: 'webhooks', label: 'Webhooks & Signing', icon: Webhook },
+            { id: 'privacy_retention', label: 'Privacy & Retention', icon: Lock },
+            { id: 'sso_compliance', label: 'SSO & Deliverability', icon: ShieldCheck },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = currentTab === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => navItemClick(item.id as any)}
+                className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
+                  isActive
+                    ? 'nav-item-active'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
+                }`}
+              >
+                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* System Footer Metadata */}
+      <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 px-2 flex items-center justify-between text-[11px] text-slate-500">
+        <div className="flex items-center space-x-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-mono text-slate-500 dark:text-slate-400 text-[10px]">v1.0 • MTA</span>
+        </div>
+        <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold">Ready</span>
+      </div>
+    </>
+  )
+
   // 3. Authenticated Dashboard Shell
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.08),rgba(255,255,255,0))] dark:bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.12),rgba(2,6,23,0))] text-slate-800 dark:text-slate-100 flex flex-col">
       {/* Top Header Navigation (Frosted Glassmorphism) */}
-      <header className="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 px-6 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-xs dark:shadow-black/20">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-sky-500/25 ring-1 ring-white/30">
-              <Zap className="w-4 h-4 text-white" />
+      <header className="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-xs dark:shadow-black/20 w-full">
+        <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+          {/* Mobile Hamburger Drawer Trigger */}
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="lg:hidden p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0"
+            aria-label="Toggle navigation"
+          >
+            {mobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+
+          <div className="flex items-center space-x-2 sm:space-x-2.5 flex-shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-sky-500/25 ring-1 ring-white/30">
+              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-black brand-logo-text leading-none tracking-tight">Mailvex</span>
-              <span className="text-[10px] text-sky-600 dark:text-sky-400 font-mono tracking-wider font-bold">ENTERPRISE MTA</span>
+              <span className="text-sm sm:text-base font-black brand-logo-text leading-none tracking-tight">Mailvex</span>
+              <span className="text-[9px] sm:text-[10px] text-sky-600 dark:text-sky-400 font-mono tracking-wider font-bold hidden xs:inline">ENTERPRISE MTA</span>
             </div>
           </div>
 
-          <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block flex-shrink-0"></div>
 
           {/* Tenant Switcher with Environment Badge */}
-          <div className="relative inline-flex items-center">
-            <div className="flex items-center space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/90 rounded-xl px-2.5 py-1.5 focus-within:border-sky-500/60 transition backdrop-blur-md shadow-xs">
+          <div className="relative inline-flex items-center min-w-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/90 rounded-xl px-2 sm:px-2.5 py-1 sm:py-1.5 focus-within:border-sky-500/60 transition backdrop-blur-md shadow-xs max-w-[130px] xs:max-w-[170px] sm:max-w-xs">
               <Layers className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
               <select
                 value={activeTenant?.id || ''}
@@ -3013,7 +3167,7 @@ export default function App() {
                   const selected = tenants.find((t) => t.id === e.target.value)
                   if (selected) setActiveTenant(selected)
                 }}
-                className="bg-transparent text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer pr-2"
+                className="bg-transparent text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none cursor-pointer pr-1 truncate w-full"
               >
                 {tenants.map((t) => (
                   <option key={t.id} value={t.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
@@ -3021,7 +3175,7 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${
+              <span className={`text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden xs:inline-block flex-shrink-0 ${
                 activeTenant?.environment === 'live'
                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                   : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
@@ -3033,7 +3187,7 @@ export default function App() {
         </div>
 
         {/* Global Cluster Status & User Controls */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-1.5 sm:space-x-3 flex-shrink-0">
           {/* Active Live Session Banner (Pulsing Monitor) */}
           <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold backdrop-blur-md">
             <span className="relative flex h-2.5 w-2.5">
@@ -3044,24 +3198,24 @@ export default function App() {
           </div>
 
           {/* 3-Mode Theme Toggle (Light / System / Dark) */}
-          <div className="inline-flex items-center p-1 bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
+          <div className="inline-flex items-center p-0.5 sm:p-1 bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
             <button
               onClick={() => setTheme('light')}
-              className={`p-1.5 rounded-lg transition ${theme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              className={`p-1 sm:p-1.5 rounded-lg transition ${theme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
               title="Light Mode"
             >
               <Sun className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setTheme('system')}
-              className={`p-1.5 rounded-lg transition ${theme === 'system' ? 'bg-white dark:bg-slate-700 text-sky-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              className={`p-1 sm:p-1.5 rounded-lg transition ${theme === 'system' ? 'bg-white dark:bg-slate-700 text-sky-500 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
               title="System Match"
             >
               <Monitor className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setTheme('dark')}
-              className={`p-1.5 rounded-lg transition ${theme === 'dark' ? 'bg-slate-700 text-sky-400 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              className={`p-1 sm:p-1.5 rounded-lg transition ${theme === 'dark' ? 'bg-slate-700 text-sky-400 shadow-xs' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
               title="Dark Mode"
             >
               <Moon className="w-3.5 h-3.5" />
@@ -3072,8 +3226,8 @@ export default function App() {
           {user.is_platform_admin && (
             <>
               <button
-                onClick={() => setCurrentTab('platform_admin')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${
+                onClick={() => navItemClick('platform_admin')}
+                className={`hidden sm:flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] ${
                   currentTab === 'platform_admin'
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm shadow-amber-500/20'
                     : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/30'
@@ -3096,19 +3250,19 @@ export default function App() {
           )}
 
           {/* User Profile Chip */}
-          <div className="flex items-center space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-xl py-1 pl-1.5 pr-2.5 backdrop-blur-md shadow-xs">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white text-[11px] font-bold">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 bg-white/70 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 rounded-xl py-1 pl-1 sm:pl-1.5 pr-1 sm:pr-2.5 backdrop-blur-md shadow-xs">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
               {user.email.charAt(0).toUpperCase()}
             </div>
-            <div className="flex flex-col text-left">
-              <span className="text-[11px] text-slate-800 dark:text-slate-200 font-semibold leading-none">{user.email.split('@')[0]}</span>
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="text-[11px] text-slate-800 dark:text-slate-200 font-semibold leading-none truncate max-w-[100px]">{user.email.split('@')[0]}</span>
               <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono leading-tight">{user.is_platform_admin ? 'Platform Admin' : 'Tenant User'}</span>
             </div>
           </div>
 
           <button
             onClick={handleSignOut}
-            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 p-2 rounded-xl hover:bg-rose-500/10 transition border border-transparent hover:border-rose-500/20"
+            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 p-1.5 sm:p-2 rounded-xl hover:bg-rose-500/10 transition border border-transparent hover:border-rose-500/20"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />
@@ -3118,13 +3272,13 @@ export default function App() {
 
       {/* Sticky Impersonation Warning Banner (§7.4) */}
       {isImpersonating && impersonatedTenant && (
-        <div className="bg-amber-500/15 border-b border-amber-500/30 px-6 py-2 flex items-center justify-between text-xs text-amber-200">
-          <div className="flex items-center space-x-3">
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3 sm:px-6 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-200">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold uppercase tracking-wider bg-amber-500/30 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 text-[10px]">
               ⚠️ Impersonation Active
             </span>
             <span>Viewing as Tenant: <strong>{impersonatedTenant.name}</strong></span>
-            <span className="text-amber-400/80 italic font-mono">"{impersonationReason}"</span>
+            <span className="text-amber-400/80 italic font-mono text-[11px]">"{impersonationReason}"</span>
             {isSupportMasking && (
               <span className="bg-blue-950 text-blue-400 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-semibold">
                 🔒 Support Masking Active
@@ -3133,7 +3287,7 @@ export default function App() {
           </div>
           <button
             onClick={handleExitImpersonation}
-            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-xs transition-colors"
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-xs transition-colors self-start sm:self-auto"
           >
             Exit Impersonation
           </button>
@@ -3218,148 +3372,53 @@ export default function App() {
       )}
 
       {/* Main Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Modern Frosted Glass Sidebar */}
-        <nav className="w-64 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/80 p-3 space-y-4 overflow-y-auto flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Platform Admin Hub Quick Launcher (Visible only to Platform Admins) */}
-            {user.is_platform_admin && (
-              <div className="space-y-1">
-                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-500 dark:text-amber-400 flex items-center justify-between">
-                  <span className="flex items-center space-x-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Platform Admin</span>
-                  </span>
-                  <span className="bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 text-[9px] px-1.5 py-0.2 rounded font-mono font-bold">ROOT</span>
-                </div>
-                <button
-                  onClick={() => setCurrentTab('platform_admin')}
-                  className={`w-full text-left flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 ${
-                    currentTab === 'platform_admin'
-                      ? 'bg-gradient-to-r from-amber-500/20 via-indigo-600/20 to-purple-600/10 text-amber-700 dark:text-amber-300 border border-amber-500/40 shadow-xs'
-                      : 'text-amber-700/80 dark:text-amber-300/80 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 border border-amber-500/20'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Shield className="w-4 h-4 text-amber-500" />
-                    <span>Admin Center</span>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-amber-500/60" />
-                </button>
-              </div>
-            )}
-
-            {/* Core Operations Group */}
-            <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Core Operations
-              </div>
-              {[
-                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                { id: 'domains', label: 'Domains & DNS', icon: Globe },
-                { id: 'streams', label: 'Message Streams', icon: GitFork },
-                { id: 'apikeys', label: 'API Keys', icon: Key },
-                { id: 'smtp_devices', label: 'SMTP & Devices', icon: HardDrive },
-                { id: 'messages', label: 'Message Logs', icon: Inbox },
-                { id: 'templates', label: 'Templates', icon: FileCode },
-              ].map((item) => {
-                const Icon = item.icon
-                const isActive = currentTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
-                      isActive
-                        ? 'nav-item-active'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Deliverability & Safety Group */}
-            <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Deliverability & Safety
-              </div>
-              {[
-                { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3 },
-                { id: 'reputation', label: 'Reputation & Abuse', icon: ShieldAlert },
-                { id: 'suppressions', label: 'Suppressions', icon: Ban },
-                { id: 'alerts_warmup', label: 'Alerts & Warmup', icon: Flame },
-                { id: 'inbound', label: 'Inbound Routing', icon: ArrowDownLeft },
-              ].map((item) => {
-                const Icon = item.icon
-                const isActive = currentTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
-                      isActive
-                        ? 'nav-item-active'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Security & Infrastructure Group */}
-            <div className="space-y-1">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Security & Platform
-              </div>
-              {[
-                { id: 'webhooks', label: 'Webhooks & Signing', icon: Webhook },
-                { id: 'privacy_retention', label: 'Privacy & Retention', icon: Lock },
-                { id: 'sso_compliance', label: 'SSO & Deliverability', icon: ShieldCheck },
-              ].map((item) => {
-                const Icon = item.icon
-                const isActive = currentTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentTab(item.id as any)}
-                    className={`w-full text-left flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl transition-all duration-150 ${
-                      isActive
-                        ? 'nav-item-active'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-950 dark:hover:text-white font-medium'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* System Footer Metadata */}
-          <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 px-2 flex items-center justify-between text-[11px] text-slate-500">
-            <div className="flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="font-mono text-slate-500 dark:text-slate-400 text-[10px]">v1.0 • MTA</span>
-            </div>
-            <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold">Ready</span>
-          </div>
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Modern Frosted Glass Sidebar (Desktop) */}
+        <nav className="hidden lg:flex w-64 flex-shrink-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-800/80 p-3 space-y-4 overflow-y-auto flex-col justify-between">
+          {renderNavLinks()}
         </nav>
 
+        {/* Mobile Sidebar Overlay Drawer */}
+        {mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border-r border-slate-200/80 dark:border-slate-800/80 p-4 space-y-4 overflow-y-auto flex flex-col justify-between shadow-2xl transition-transform duration-300 ease-in-out lg:hidden ${
+            mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800/80">
+            <div className="flex items-center space-x-2">
+              <div className="w-7 h-7 bg-gradient-to-tr from-sky-500 via-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+                <Zap className="w-3.5 h-3.5 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-black brand-logo-text leading-none">Mailvex</span>
+                <span className="text-[9px] text-sky-600 dark:text-sky-400 font-mono font-bold">ENTERPRISE MTA</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {renderNavLinks()}
+        </aside>
+
         {/* Workspace Body */}
-        <main className="flex-1 overflow-y-auto p-6 sm:p-8">
-          <div className="max-w-5xl mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 min-w-0 w-full">
+          <div className="max-w-5xl mx-auto w-full min-w-0">
             {/* Top Bar */}
-            <div className="flex items-center justify-between pb-6 border-b border-slate-200/80 dark:border-slate-800/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 sm:pb-6 border-b border-slate-200/80 dark:border-slate-800/80 gap-3">
               <div>
-                <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight break-words">
                   {currentTab === 'dashboard' && (activeTenant?.name || 'Dashboard Overview')}
                   {currentTab === 'platform_admin' && 'Platform Administration & Fleet Control'}
                   {currentTab === 'domains' && 'Domains & DNS Configuration'}
@@ -3377,16 +3436,16 @@ export default function App() {
                   {currentTab === 'alerts_warmup' && 'Reputation, DNSBL, Warmup & Alert Center'}
                   {currentTab === 'sso_compliance' && 'SSO, Impersonation & Compliance'}
                 </h1>
-                <p className="text-xs text-slate-400 mt-1 flex items-center space-x-2">
+                <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <span>Active Tenant:</span>
                   <span className="font-mono text-slate-200 bg-slate-800/80 px-2 py-0.5 rounded text-[11px] border border-slate-700/60 font-semibold">{activeTenant?.name}</span>
-                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
                   <span className="font-mono text-slate-400 text-[11px]">{activeTenant?.slug}</span>
-                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
                   <span className="uppercase text-[10px] font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">{activeTenant?.environment}</span>
                 </p>
               </div>
-              <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 self-start sm:self-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span className="text-xs text-emerald-400 font-semibold">Cluster Operational</span>
               </div>
