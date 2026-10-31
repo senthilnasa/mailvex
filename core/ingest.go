@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -17,6 +18,24 @@ import (
 	"github.com/senthilnasa/mailvex/core/repository"
 	"github.com/senthilnasa/mailvex/core/storage"
 )
+
+// ParseCleanAddress extracts the clean RFC 5321 addr-spec and domain, supporting "Display Name <email@domain>" and "<email@domain>"
+func ParseCleanAddress(raw string) (address, dom string, err error) {
+	raw = strings.TrimSpace(raw)
+	if parsed, pErr := mail.ParseAddress(raw); pErr == nil && parsed.Address != "" {
+		raw = parsed.Address
+	} else {
+		raw = strings.Trim(raw, "<>")
+	}
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	parts := strings.Split(raw, "@")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid email address: %s", raw)
+	}
+	cleanDomain := strings.Trim(parts[1], "> \t\r\n")
+	cleanAddr := parts[0] + "@" + cleanDomain
+	return cleanAddr, cleanDomain, nil
+}
 
 var (
 	ErrDomainNotVerified = errors.New("domain_not_verified")
@@ -81,11 +100,11 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 	}
 
 	// 2. Extract from domain and verify ownership
-	parts := strings.Split(req.FromAddress, "@")
-	if len(parts) != 2 {
+	cleanFrom, fromDomainName, err := ParseCleanAddress(req.FromAddress)
+	if err != nil {
 		return nil, errors.New("invalid from address format")
 	}
-	fromDomainName := strings.ToLower(parts[1])
+	req.FromAddress = cleanFrom
 
 	fromDom, err := eng.repo.GetDomainByName(ctx, fromDomainName)
 	if err != nil {
@@ -189,14 +208,9 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 	}
 
 	for _, item := range allAddrs {
-		addr := strings.TrimSpace(strings.ToLower(item.addr))
-		if addr == "" {
+		cleanAddr, rcptDomain, err := ParseCleanAddress(item.addr)
+		if err != nil || cleanAddr == "" {
 			continue
-		}
-		rcptParts := strings.Split(addr, "@")
-		rcptDomain := ""
-		if len(rcptParts) == 2 {
-			rcptDomain = rcptParts[1]
 		}
 
 		rcptID := crypto.NewULID(crypto.PrefixRecipient)
@@ -209,7 +223,7 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 
 		status := "queued"
 		var suppressedReason *string
-		isSuppressed, reason, _ := eng.repo.CheckSuppression(ctx, req.TenantID, streamID, addr)
+		isSuppressed, reason, _ := eng.repo.CheckSuppression(ctx, req.TenantID, streamID, cleanAddr)
 		if isSuppressed {
 			status = "suppressed"
 			suppressedReason = &reason
@@ -219,7 +233,7 @@ func (eng *IngestionEngine) Ingest(ctx context.Context, req *IngestRequest) (*In
 			ID:               rcptID,
 			MessageID:        msgID,
 			TenantID:         req.TenantID,
-			Address:          addr,
+			Address:          cleanAddr,
 			AddressDomain:    rcptDomain,
 			MXGroup:          "custom",
 			Type:             item.rcptType,

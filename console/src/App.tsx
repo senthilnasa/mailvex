@@ -41,6 +41,7 @@ import {
   X
 } from 'lucide-react'
 import { ExportMenu } from './components/ExportMenu'
+import { DataTableCard } from './components/DataTableCard'
 
 interface Tenant {
   id: string
@@ -3688,93 +3689,81 @@ export default function App() {
                 </div>
 
                 {/* Domains List */}
-                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-sky-500" />
-                      Configured Domains
-                    </span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">({domains.length} Total)</span>
-                      <ExportMenu
-                        filename={`mailvex-domains-${activeTenant?.slug || 'tenant'}`}
-                        sheetTitle="Domains"
-                        label="Export Domains"
-                        columns={[
-                          { header: 'Domain Name', key: 'name' },
-                          { header: 'Type', key: 'type' },
-                          { header: 'Status', key: 'status' },
-                          { header: 'Ownership Token', key: 'ownership_token' },
-                          { header: 'Verified At', key: 'verified_at' },
-                          { header: 'Last Checked', key: 'last_checked_at' },
-                        ]}
-                        data={domains.map((d) => ({
-                          name: d.name,
-                          type: d.type,
-                          status: d.status,
-                          ownership_token: d.ownership_token,
-                          verified_at: d.verified_at || 'Unverified',
-                          last_checked_at: d.last_checked_at || 'Never',
-                        }))}
-                      />
-                    </div>
-                  </div>
-                  {domains.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
-                      No domains added yet. Add your first domain above.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
-                          <tr>
-                            <th className="py-3 px-4">Domain</th>
-                            <th className="py-3 px-4">Type</th>
-                            <th className="py-3 px-4">Status</th>
-                            <th className="py-3 px-4 text-right">Action</th>
+                <DataTableCard
+                  title="Configured Domains"
+                  icon={Globe}
+                  data={domains}
+                  searchPlaceholder="Search domain name, status, type..."
+                  exportFilename={`mailvex-domains-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Domains"
+                  exportColumns={[
+                    { header: 'Domain Name', key: 'name' },
+                    { header: 'Type', key: 'type' },
+                    { header: 'Status', key: 'status' },
+                    { header: 'Ownership Token', key: 'ownership_token' },
+                    { header: 'Verified At', key: 'verified_at' },
+                    { header: 'Last Checked', key: 'last_checked_at' },
+                  ]}
+                  exportFormatter={(d) => ({
+                    name: d.name,
+                    type: d.type,
+                    status: d.status,
+                    ownership_token: d.ownership_token,
+                    verified_at: d.verified_at || 'Unverified',
+                    last_checked_at: d.last_checked_at || 'Never',
+                  })}
+                  emptyMessage="No domains added yet. Add your first domain above."
+                >
+                  {(paginatedDomains) => (
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                          <th className="py-3 px-4">Domain</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                        {paginatedDomains.map((d) => (
+                          <tr key={d.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold flex items-center justify-center text-xs">
+                                {d.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-mono text-xs">{d.name}</span>
+                            </td>
+                            <td className="py-3.5 px-4 capitalize text-xs">{d.type}</td>
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border ${
+                                  d.status === 'verified'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                    : d.status === 'degraded'
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  d.status === 'verified' ? 'bg-emerald-500' : d.status === 'degraded' ? 'bg-amber-500' : 'bg-slate-400'
+                                }`}></span>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={() => handleSelectDomain(d)}
+                                className="btn-secondary text-xs"
+                              >
+                                <span>View DNS Records</span>
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
-                          {domains.map((d) => (
-                            <tr key={d.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                              <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold flex items-center justify-center text-xs">
-                                  {d.name.charAt(0).toUpperCase()}
-                                </div>
-                                <span className="font-mono text-xs">{d.name}</span>
-                              </td>
-                              <td className="py-3.5 px-4 capitalize text-xs">{d.type}</td>
-                              <td className="py-3.5 px-4">
-                                <span
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border ${
-                                    d.status === 'verified'
-                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                      : d.status === 'degraded'
-                                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                      : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
-                                  }`}
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${
-                                    d.status === 'verified' ? 'bg-emerald-500' : d.status === 'degraded' ? 'bg-amber-500' : 'bg-slate-400'
-                                  }`}></span>
-                                  {d.status}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <button
-                                  onClick={() => handleSelectDomain(d)}
-                                  className="btn-secondary text-xs"
-                                >
-                                  <span>View DNS Records</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   )}
-                </div>
+                </DataTableCard>
 
                 {/* Selected Domain Records View */}
                 {selectedDomain && (
@@ -3871,39 +3860,59 @@ export default function App() {
 
             {/* TAB: STREAMS */}
             {currentTab === 'streams' && (
-              <div className="mt-6 bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                  <GitFork className="w-4 h-4 text-sky-500" />
-                  Message Streams
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
-                      <tr>
-                        <th className="py-3 px-4">Stream Name</th>
-                        <th className="py-3 px-4">Type</th>
-                        <th className="py-3 px-4">Default</th>
-                        <th className="py-3 px-4">Purpose</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
-                      {streams.map((s) => (
-                        <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">{s.name}</td>
-                          <td className="py-3.5 px-4 capitalize text-xs">
-                            <span className="badge-info">{s.type}</span>
-                          </td>
-                          <td className="py-3.5 px-4 text-xs font-semibold">{s.is_default ? 'Yes' : 'No'}</td>
-                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 text-xs">
-                            {s.type === 'transactional'
-                              ? 'Receipts, password resets, alerts (Priority p1)'
-                              : 'Broadcast newsletters, marketing (RFC 8058 One-Click unsub)'}
-                          </td>
+              <div className="mt-6">
+                <DataTableCard
+                  title="Message Streams"
+                  icon={GitFork}
+                  data={streams}
+                  searchPlaceholder="Search stream name, type, default status..."
+                  exportFilename={`mailvex-streams-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Message Streams"
+                  exportColumns={[
+                    { header: 'Stream Name', key: 'name' },
+                    { header: 'Type', key: 'type' },
+                    { header: 'Default', key: 'is_default' },
+                    { header: 'Purpose', key: 'purpose' },
+                  ]}
+                  exportFormatter={(s) => ({
+                    name: s.name,
+                    type: s.type,
+                    is_default: s.is_default ? 'Yes' : 'No',
+                    purpose: s.type === 'transactional'
+                      ? 'Receipts, password resets, alerts (Priority p1)'
+                      : 'Broadcast newsletters, marketing (RFC 8058 One-Click unsub)',
+                  })}
+                  emptyMessage="No streams found."
+                >
+                  {(paginatedStreams) => (
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/60 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                          <th className="py-3 px-4">Stream Name</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">Default</th>
+                          <th className="py-3 px-4">Purpose</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                        {paginatedStreams.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">{s.name}</td>
+                            <td className="py-3.5 px-4 capitalize text-xs">
+                              <span className="badge-info">{s.type}</span>
+                            </td>
+                            <td className="py-3.5 px-4 text-xs font-semibold">{s.is_default ? 'Yes' : 'No'}</td>
+                            <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 text-xs">
+                              {s.type === 'transactional'
+                                ? 'Receipts, password resets, alerts (Priority p1)'
+                                : 'Broadcast newsletters, marketing (RFC 8058 One-Click unsub)'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </DataTableCard>
               </div>
             )}
 
@@ -3982,30 +3991,45 @@ export default function App() {
                 </div>
 
                 {/* API Keys Table */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 font-semibold text-white">
-                    Active API Keys
-                  </div>
-                  <table className="w-full text-left text-sm text-slate-300">
-                    <thead className="bg-slate-950/50 text-slate-400">
-                      <tr>
-                        <th className="p-4">Name</th>
-                        <th className="p-4">Prefix / Last 4</th>
-                        <th className="p-4">Environment</th>
-                        <th className="p-4">Scopes</th>
-                        <th className="p-4">Created</th>
-                        <th className="p-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {apiKeys.length === 0 ? (
+                <DataTableCard
+                  title="Active API Keys"
+                  icon={Key}
+                  data={apiKeys}
+                  searchPlaceholder="Search key name, prefix, scope, environment..."
+                  exportFilename={`mailvex-apikeys-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="API Keys"
+                  exportColumns={[
+                    { header: 'Key Name', key: 'name' },
+                    { header: 'Prefix', key: 'prefix' },
+                    { header: 'Last 4', key: 'last_four' },
+                    { header: 'Environment', key: 'environment' },
+                    { header: 'Scopes', key: 'scopes' },
+                    { header: 'Created', key: 'created_at' },
+                  ]}
+                  exportFormatter={(k) => ({
+                    name: k.name,
+                    prefix: k.prefix,
+                    last_four: k.last_four,
+                    environment: k.environment,
+                    scopes: k.scopes ? k.scopes.join(', ') : 'send.email',
+                    created_at: new Date(k.created_at).toLocaleDateString(),
+                  })}
+                  emptyMessage="No API keys found. Generate one to start sending via REST API."
+                >
+                  {(paginatedKeys) => (
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-950/50 text-slate-400">
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-slate-500">
-                            No API keys found. Generate one to start sending via REST API.
-                          </td>
+                          <th className="p-4">Name</th>
+                          <th className="p-4">Prefix / Last 4</th>
+                          <th className="p-4">Environment</th>
+                          <th className="p-4">Scopes</th>
+                          <th className="p-4">Created</th>
+                          <th className="p-4 text-right">Actions</th>
                         </tr>
-                      ) : (
-                        apiKeys.map((k) => (
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {paginatedKeys.map((k) => (
                           <tr key={k.id} className="hover:bg-slate-800/40">
                             <td className="p-4 font-medium text-white">{k.name}</td>
                             <td className="p-4 font-mono text-xs text-indigo-400">
@@ -4037,11 +4061,11 @@ export default function App() {
                               </button>
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </DataTableCard>
               </div>
             )}
 
@@ -4309,13 +4333,24 @@ export default function App() {
             {/* TAB: MESSAGES LOGS & INSPECTOR */}
             {currentTab === 'messages' && (
               <div className="space-y-6 mt-6">
-                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Inbox className="w-4 h-4 text-sky-500" />
-                      <span className="font-bold text-sm text-slate-900 dark:text-white">Message Activity Logs</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">({messagesList.length} Total)</span>
-                    </div>
+                <DataTableCard
+                  title="Message Activity Logs"
+                  icon={Inbox}
+                  data={messagesList}
+                  searchPlaceholder="Search by ID, sender, subject, status..."
+                  searchFields={['id', 'from_address', 'subject', 'status', 'environment']}
+                  exportFilename={`mailvex-messages-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Message Logs"
+                  exportColumns={[
+                    { header: 'Message ID', key: 'id' },
+                    { header: 'From Address', key: 'from_address' },
+                    { header: 'Subject', key: 'subject' },
+                    { header: 'Status', key: 'status' },
+                    { header: 'Stream', key: 'stream_id' },
+                    { header: 'Environment', key: 'environment' },
+                    { header: 'Timestamp', key: 'created_at' },
+                  ]}
+                  extraHeaderActions={
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => {
@@ -4338,52 +4373,25 @@ export default function App() {
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Refresh</span>
                       </button>
-                      <ExportMenu
-                        filename={`mailvex-messages-${activeTenant?.slug || 'tenant'}`}
-                        sheetTitle="Message Logs"
-                        label="Export Logs"
-                        columns={[
-                          { header: 'Message ID', key: 'id' },
-                          { header: 'From Address', key: 'from_address' },
-                          { header: 'Subject', key: 'subject' },
-                          { header: 'Status', key: 'status' },
-                          { header: 'Stream', key: 'stream_id' },
-                          { header: 'Environment', key: 'environment' },
-                          { header: 'Timestamp', key: 'created_at' },
-                        ]}
-                        data={messagesList.map((m) => ({
-                          id: m.id,
-                          from_address: m.from_address,
-                          subject: m.subject,
-                          status: m.status,
-                          stream_id: m.stream_id,
-                          environment: m.environment,
-                          created_at: m.created_at,
-                        }))}
-                      />
                     </div>
-                  </div>
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                      <tr>
-                        <th className="py-3 px-4">Message ID</th>
-                        <th className="py-3 px-4">Sender</th>
-                        <th className="py-3 px-4">Subject</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4">Environment</th>
-                        <th className="py-3 px-4">Time</th>
-                        <th className="py-3 px-4 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
-                      {messagesList.length === 0 ? (
+                  }
+                  emptyMessage="No messages recorded yet. Send your first email via SMTP or REST API."
+                >
+                  {(paginatedMessages) => (
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
-                            No messages recorded yet. Send your first email via SMTP or REST API.
-                          </td>
+                          <th className="py-3 px-4">Message ID</th>
+                          <th className="py-3 px-4">Sender</th>
+                          <th className="py-3 px-4">Subject</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Environment</th>
+                          <th className="py-3 px-4">Time</th>
+                          <th className="py-3 px-4 text-right">Action</th>
                         </tr>
-                      ) : (
-                        messagesList.map((m) => (
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                        {paginatedMessages.map((m) => (
                           <tr key={m.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                             <td className="py-3.5 px-4 font-mono text-xs text-sky-600 dark:text-sky-400 font-bold">{m.id}</td>
                             <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200">{m.from_address}</td>
@@ -4414,11 +4422,11 @@ export default function App() {
                               </button>
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </DataTableCard>
 
                 {/* Send Test Email Modal */}
                 {sendModalOpen && (
@@ -4812,13 +4820,30 @@ export default function App() {
                   </form>
                 </div>
 
-                <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 rounded-2xl shadow-glass dark:shadow-glass-dark overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between font-bold text-sm text-slate-900 dark:text-white">
-                    <div className="flex items-center space-x-2">
-                      <Ban className="w-4 h-4 text-sky-500" />
-                      <span>Suppressed Recipients</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({suppressionsList.length} Total)</span>
-                    </div>
+                <DataTableCard
+                  title="Suppressed Recipients"
+                  icon={Ban}
+                  data={suppressionsList}
+                  searchPlaceholder="Search address, domain, suppression type, reason..."
+                  exportFilename={`mailvex-suppressions-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Suppressions"
+                  exportColumns={[
+                    { header: 'Address / Domain', key: 'address' },
+                    { header: 'Domain Name', key: 'address_domain' },
+                    { header: 'Suppression Type', key: 'type' },
+                    { header: 'Reason', key: 'reason' },
+                    { header: 'Source', key: 'source' },
+                    { header: 'Timestamp', key: 'created_at' },
+                  ]}
+                  exportFormatter={(s) => ({
+                    address: s.address,
+                    address_domain: s.address_domain,
+                    type: s.type,
+                    reason: s.reason || 'N/A',
+                    source: s.source,
+                    created_at: s.created_at,
+                  })}
+                  extraHeaderActions={
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setImportModalOpen(true)}
@@ -4826,27 +4851,6 @@ export default function App() {
                       >
                         Import CSV
                       </button>
-                      <ExportMenu
-                        filename={`mailvex-suppressions-${activeTenant?.slug || 'tenant'}`}
-                        sheetTitle="Suppressions"
-                        label="Export Suppressions"
-                        columns={[
-                          { header: 'Address / Domain', key: 'address' },
-                          { header: 'Domain Name', key: 'address_domain' },
-                          { header: 'Suppression Type', key: 'type' },
-                          { header: 'Reason', key: 'reason' },
-                          { header: 'Source', key: 'source' },
-                          { header: 'Timestamp', key: 'created_at' },
-                        ]}
-                        data={suppressionsList.map((s) => ({
-                          address: s.address,
-                          address_domain: s.address_domain,
-                          type: s.type,
-                          reason: s.reason || 'N/A',
-                          source: s.source,
-                          created_at: s.created_at,
-                        }))}
-                      />
                       <button
                         onClick={loadSuppressions}
                         className="btn-secondary text-xs px-3 py-1.5"
@@ -4855,8 +4859,10 @@ export default function App() {
                         <span>Refresh</span>
                       </button>
                     </div>
-                  </div>
-                  <div className="overflow-x-auto">
+                  }
+                  emptyMessage="No addresses currently suppressed."
+                >
+                  {(paginatedSupps) => (
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                         <tr>
@@ -4869,53 +4875,45 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
-                        {suppressionsList.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                              No addresses currently suppressed.
+                        {paginatedSupps.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-800/40">
+                            <td className="px-6 py-4 font-mono font-medium text-white">{s.address}</td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  s.type === 'hard_bounce'
+                                    ? 'bg-red-950 text-red-400 border border-red-800'
+                                    : s.type === 'complaint'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : s.type === 'unsubscribe'
+                                    ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                                    : s.type === 'domain_block'
+                                    ? 'bg-yellow-950 text-yellow-400 border border-yellow-800'
+                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                }`}
+                              >
+                                {s.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">{s.reason || '—'}</td>
+                            <td className="px-6 py-4 text-xs text-slate-400 font-mono">{s.source}</td>
+                            <td className="px-6 py-4 text-xs text-slate-500">
+                              {new Date(s.created_at).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => handleDeleteSuppression(s.id)}
+                                className="text-xs text-red-400 hover:text-red-300 font-medium"
+                              >
+                                Remove
+                              </button>
                             </td>
                           </tr>
-                        ) : (
-                          suppressionsList.map((s) => (
-                            <tr key={s.id} className="hover:bg-slate-800/40">
-                              <td className="px-6 py-4 font-mono font-medium text-white">{s.address}</td>
-                              <td className="px-6 py-4">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                    s.type === 'hard_bounce'
-                                      ? 'bg-red-950 text-red-400 border border-red-800'
-                                      : s.type === 'complaint'
-                                      ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                                      : s.type === 'unsubscribe'
-                                      ? 'bg-purple-950 text-purple-400 border border-purple-800'
-                                      : s.type === 'domain_block'
-                                      ? 'bg-yellow-950 text-yellow-400 border border-yellow-800'
-                                      : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                  }`}
-                                >
-                                  {s.type}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">{s.reason || '—'}</td>
-                              <td className="px-6 py-4 text-xs text-slate-400 font-mono">{s.source}</td>
-                              <td className="px-6 py-4 text-xs text-slate-500">
-                                {new Date(s.created_at).toLocaleString()}
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  onClick={() => handleDeleteSuppression(s.id)}
-                                  className="text-xs text-red-400 hover:text-red-300 font-medium"
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
 
                 {/* Import CSV Modal */}
                 {importModalOpen && (

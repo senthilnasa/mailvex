@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -275,9 +276,23 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 	}
 
 	// 11. Prepare Delivery Request
+	cleanRcptAddr := rcpt.Address
+	if parsed, pErr := mail.ParseAddress(cleanRcptAddr); pErr == nil && parsed.Address != "" {
+		cleanRcptAddr = parsed.Address
+	} else {
+		cleanRcptAddr = strings.Trim(cleanRcptAddr, "<>")
+	}
+	cleanRcptAddr = strings.ToLower(strings.TrimSpace(cleanRcptAddr))
+
+	cleanRcptDomain := rcpt.AddressDomain
+	if idx := strings.Index(cleanRcptAddr, "@"); idx != -1 {
+		cleanRcptDomain = cleanRcptAddr[idx+1:]
+	}
+	cleanRcptDomain = strings.ToLower(strings.Trim(cleanRcptDomain, "> \t\r\n"))
+
 	delReq := &DeliveryRequest{
 		RecipientID:   rcpt.ID,
-		RecipientAddr: rcpt.Address,
+		RecipientAddr: cleanRcptAddr,
 		ReturnPath:    returnPath,
 		MIMEData:      finalMIME,
 		EHLOHostname:  ehloHost,
@@ -295,7 +310,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 		delResp, err = w.relayTransport.Deliver(ctx, delReq)
 	} else {
 		// Direct MX resolution
-		mxRecords, err := w.resolver.Resolve(ctx, rcpt.AddressDomain)
+		mxRecords, err := w.resolver.Resolve(ctx, cleanRcptDomain)
 		if err != nil {
 			// RFC 7505 Null MX or permanent DNS resolution failure -> hard bounce
 			delResp = &DeliveryResponse{
@@ -303,7 +318,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 				SMTPCode:     "550",
 				EnhancedCode: "5.1.2",
 				ResponseText: fmt.Sprintf("MX resolution failed: %v", err),
-				RemoteMX:     rcpt.AddressDomain,
+				RemoteMX:     cleanRcptDomain,
 			}
 		} else {
 			// Pick highest preference MX
@@ -554,12 +569,46 @@ func (w *DeliveryWorker) ProcessOutboxBatch(ctx context.Context, limit int) (int
 			rcpts, err := w.repo.GetMessageRecipients(ctx, payload.TenantID, payload.MessageID)
 			if err == nil {
 				hasActive := false
+				var earliestNextAttempt *time.Time
+
 				for _, r := range rcpts {
 					if r.Status == "queued" || r.Status == "deferred" {
 						hasActive = true
+						if r.NextAttemptAt != nil && time.Now().Before(*r.NextAttemptAt) {
+							if earliestNextAttempt == nil || r.NextAttemptAt.Before(*earliestNextAttempt) {
+								earliestNextAttempt = r.NextAttemptAt
+							}
+							continue
+						}
 						_ = w.ProcessRecipient(ctx, r.ID)
 					}
 				}
+
+				// Check updated statuses
+				updatedRcpts, err2 := w.repo.GetMessageRecipients(ctx, payload.TenantID, payload.MessageID)
+				if err2 == nil {
+					hasPending := false
+					for _, r := range updatedRcpts {
+						if r.Status == "queued" || r.Status == "deferred" {
+							hasPending = true
+							if r.NextAttemptAt != nil && (earliestNextAttempt == nil || r.NextAttemptAt.Before(*earliestNextAttempt)) {
+								earliestNextAttempt = r.NextAttemptAt
+							}
+						}
+					}
+					if hasPending {
+						// Keep outbox item active for next attempt
+						if earliestNextAttempt != nil {
+							item.AvailableAt = *earliestNextAttempt
+						} else {
+							item.AvailableAt = time.Now().UTC().Add(1 * time.Minute)
+						}
+						_ = w.repo.SaveOutboxItem(ctx, item)
+						processed++
+						continue
+					}
+				}
+
 				if !hasActive {
 					_ = w.updateMessageSummary(ctx, payload.TenantID, payload.MessageID)
 				}

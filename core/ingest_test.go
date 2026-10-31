@@ -100,3 +100,38 @@ func TestIngestEngineRetainsCcAndBccRecipients(t *testing.T) {
 		t.Errorf("expected 1 To, 2 Cc, 1 Bcc; got %d To, %d Cc, %d Bcc", toCount, ccCount, bccCount)
 	}
 }
+
+func TestParseCleanAddress(t *testing.T) {
+	tests := []struct {
+		input        string
+		expectedAddr string
+		expectedDom  string
+		expectErr    bool
+	}{
+		{"senthil prabhu k <erpadmin@krea.edu.in>", "erpadmin@krea.edu.in", "krea.edu.in", false},
+		{"<erpadmin@krea.edu.in>", "erpadmin@krea.edu.in", "krea.edu.in", false},
+		{"erpadmin@krea.edu.in", "erpadmin@krea.edu.in", "krea.edu.in", false},
+		{"No Reply <noreply@crm.krea.edu.in>", "noreply@crm.krea.edu.in", "crm.krea.edu.in", false},
+		{"invalid-address", "", "", true},
+		{"", "", "", true},
+	}
+
+	for _, tc := range tests {
+		addr, dom, err := core.ParseCleanAddress(tc.input)
+		if tc.expectErr {
+			if err == nil {
+				t.Errorf("expected error for %q, got nil", tc.input)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error for %q: %v", tc.input, err)
+			}
+			if addr != tc.expectedAddr {
+				t.Errorf("for %q, expected addr %q, got %q", tc.input, tc.expectedAddr, addr)
+			}
+			if dom != tc.expectedDom {
+				t.Errorf("for %q, expected dom %q, got %q", tc.input, tc.expectedDom, dom)
+			}
+		}
+	}
+}

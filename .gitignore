@@ -33,3 +33,4 @@ composer.lock
 Thumbs.db
 .edge-profile*
 *.cjs
+scratch/
