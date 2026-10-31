@@ -19,6 +19,7 @@ import (
 	"github.com/senthilnasa/mailvex/core/logger"
 	"github.com/senthilnasa/mailvex/core/repository"
 	"github.com/senthilnasa/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core/webhooks"
 	"github.com/senthilnasa/mailvex/worker"
 )
 
@@ -87,6 +88,7 @@ func main() {
 	}
 	deliveryWorker := worker.NewDeliveryWorker(repo, server.Storage(), router, resolver, classifier, workerCfg)
 	deliveryWorker.SetEncryption(enc)
+	deliveryWorker.SetWebhookDispatcher(webhooks.NewDispatcher(repo, nil))
 
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()

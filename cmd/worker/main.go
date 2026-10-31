@@ -13,6 +13,7 @@ import (
 	"github.com/senthilnasa/mailvex/core/logger"
 	"github.com/senthilnasa/mailvex/core/repository"
 	"github.com/senthilnasa/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core/webhooks"
 	"github.com/senthilnasa/mailvex/worker"
 )
 
@@ -56,6 +57,7 @@ func main() {
 	}
 
 	deliveryWorker := worker.NewDeliveryWorker(repo, store, router, resolver, classifier, workerCfg)
+	deliveryWorker.SetWebhookDispatcher(webhooks.NewDispatcher(repo, nil))
 
 	// Background worker processing loop
 	ctx, cancel := context.WithCancel(context.Background())

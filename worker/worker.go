@@ -16,6 +16,7 @@ import (
 	"github.com/senthilnasa/mailvex/core/mime"
 	"github.com/senthilnasa/mailvex/core/repository"
 	"github.com/senthilnasa/mailvex/core/storage"
+	"github.com/senthilnasa/mailvex/core/webhooks"
 )
 
 type WorkerConfig struct {
@@ -35,8 +36,9 @@ type DeliveryWorker struct {
 	retry           *RetryScheduler
 	directTransport Transport
 	relayTransport  Transport
-	encryption      *crypto.EnvelopeEncryption
-	cfg             WorkerConfig
+	encryption        *crypto.EnvelopeEncryption
+	webhookDispatcher *webhooks.Dispatcher
+	cfg               WorkerConfig
 
 	inFlightWg      sync.WaitGroup
 	draining        atomic.Bool
@@ -88,6 +90,51 @@ func (w *DeliveryWorker) SetTransports(direct, relay Transport) {
 func (w *DeliveryWorker) SetEncryption(enc *crypto.EnvelopeEncryption) {
 	w.encryption = enc
 }
+
+func (w *DeliveryWorker) SetWebhookDispatcher(d *webhooks.Dispatcher) {
+	w.webhookDispatcher = d
+}
+
+func (w *DeliveryWorker) recordAndDispatchEvent(ctx context.Context, tenantID string, msg *domain.Message, rcpt *domain.MessageRecipient, eventType string, eventData string, webhookData map[string]any) {
+	evtID := crypto.NewULID(crypto.PrefixEvent)
+	var rcptID *string
+	if rcpt != nil {
+		rcptID = &rcpt.ID
+	}
+	now := time.Now().UTC()
+	_ = w.repo.AddMessageEvent(ctx, &domain.MessageEvent{
+		ID:          evtID,
+		TenantID:    tenantID,
+		MessageID:   msg.ID,
+		RecipientID: rcptID,
+		Type:        eventType,
+		Data:        eventData,
+		OccurredAt:  now,
+		CreatedAt:   now,
+	})
+	if w.webhookDispatcher != nil {
+		payload := map[string]any{
+			"id":           msg.ID,
+			"message_id":   msg.ID,
+			"type":         eventType,
+			"event":        eventType,
+			"from_address": msg.FromAddress,
+			"subject":      msg.Subject,
+			"metadata":     msg.Metadata,
+			"tags":         msg.Tags,
+		}
+		if rcpt != nil {
+			payload["recipient_id"] = rcpt.ID
+			payload["recipient"] = rcpt.Address
+			payload["status"] = rcpt.Status
+		}
+		for k, v := range webhookData {
+			payload[k] = v
+		}
+		_ = w.webhookDispatcher.DispatchEvent(ctx, tenantID, evtID, eventType, payload)
+	}
+}
+
 
 // IsDraining returns true if the worker is draining for shutdown
 func (w *DeliveryWorker) IsDraining() bool {
@@ -375,16 +422,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 	if delResp.Success {
 		// 2xx Success: Delivered
 		_ = w.repo.UpdateRecipientDelivery(ctx, rcpt.ID, "delivered", attemptNo, &delResp.SMTPCode, &delResp.ResponseText, &now, nil, nil, nil)
-		_ = w.repo.AddMessageEvent(ctx, &domain.MessageEvent{
-			ID:          crypto.NewULID(crypto.PrefixEvent),
-			TenantID:    rcpt.TenantID,
-			MessageID:   msg.ID,
-			RecipientID: &rcpt.ID,
-			Type:        "message.delivered",
-			Data:        fmt.Sprintf(`{"smtp_code":"%s","response":"%s"}`, delResp.SMTPCode, delResp.ResponseText),
-			OccurredAt:  now,
-			CreatedAt:   now,
-		})
+		w.recordAndDispatchEvent(ctx, rcpt.TenantID, msg, rcpt, "message.delivered", fmt.Sprintf(`{"smtp_code":"%s","response":"%s"}`, delResp.SMTPCode, delResp.ResponseText), map[string]any{"smtp_code": delResp.SMTPCode, "response": delResp.ResponseText})
 		campaignTag := hygieneParams.CampaignTag
 		_ = w.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "message.delivered", &msg.StreamID, &msg.DomainID, rcpt.AddressDomain, campaignTag, delResp.Duration.Seconds(), now)
 		_ = w.updateMessageSummary(ctx, msg.TenantID, msg.ID)
@@ -409,16 +447,7 @@ func (w *DeliveryWorker) ProcessRecipient(ctx context.Context, recipientID strin
 		})
 
 		_ = w.repo.UpdateRecipientDelivery(ctx, rcpt.ID, "bounced", attemptNo, &delResp.SMTPCode, &delResp.ResponseText, nil, &now, nil, nil)
-		_ = w.repo.AddMessageEvent(ctx, &domain.MessageEvent{
-			ID:          crypto.NewULID(crypto.PrefixEvent),
-			TenantID:    rcpt.TenantID,
-			MessageID:   msg.ID,
-			RecipientID: &rcpt.ID,
-			Type:        "message.bounced",
-			Data:        fmt.Sprintf(`{"classification":"%s","reason":"%s"}`, classification.Classification, delResp.ResponseText),
-			OccurredAt:  now,
-			CreatedAt:   now,
-		})
+		w.recordAndDispatchEvent(ctx, rcpt.TenantID, msg, rcpt, "message.bounced", fmt.Sprintf(`{"classification":"%s","reason":"%s"}`, classification.Classification, delResp.ResponseText), map[string]any{"classification": classification.Classification, "smtp_code": delResp.SMTPCode, "response": delResp.ResponseText})
 		_ = w.repo.RecordAnalyticsEvent(ctx, rcpt.TenantID, "hard_bounce", &msg.StreamID, &msg.DomainID, rcpt.AddressDomain, campaignTag, 0, now)
 
 		// Record to DLQ (§15.2)
