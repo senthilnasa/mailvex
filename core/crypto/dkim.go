@@ -5,13 +5,13 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"strings"
+
+	"github.com/emersion/go-msgauth/dkim"
 )
 
 type DKIMKeyPair struct {
@@ -76,147 +76,21 @@ func SignDKIM(rawMIME []byte, domain, selector, privateKeyPEM string) ([]byte, e
 		return nil, errors.New("not an RSA private key")
 	}
 
-	// Split message into headers and body
-	parts := bytes.SplitN(rawMIME, []byte("\r\n\r\n"), 2)
-	var headerBytes, bodyBytes []byte
-	if len(parts) == 2 {
-		headerBytes = parts[0]
-		bodyBytes = parts[1]
-	} else {
-		// Fallback for \n\n
-		parts = bytes.SplitN(rawMIME, []byte("\n\n"), 2)
-		if len(parts) == 2 {
-			headerBytes = parts[0]
-			bodyBytes = parts[1]
-		} else {
-			headerBytes = rawMIME
-			bodyBytes = []byte{}
-		}
+	options := &dkim.SignOptions{
+		Domain:                 domain,
+		Selector:               selector,
+		Signer:                 rsaPriv,
+		Hash:                   crypto.SHA256,
+		HeaderCanonicalization: dkim.CanonicalizationRelaxed,
+		BodyCanonicalization:   dkim.CanonicalizationRelaxed,
+		HeaderKeys:             []string{"From", "To", "Subject", "Date", "Message-ID"},
 	}
 
-	// 1. Canonicalize body (relaxed)
-	canonicalBody := canonicalizeBodyRelaxed(bodyBytes)
-	bodyHash := sha256.Sum256(canonicalBody)
-	bhB64 := base64.StdEncoding.EncodeToString(bodyHash[:])
-
-	// Headers to sign
-	headersToSign := []string{"from", "to", "subject", "date", "message-id"}
-	var signedHeadersList []string
-
-	// Parse headers into key -> value
-	rawHeaders := parseHeaders(headerBytes)
-	var canonicalHeaders bytes.Buffer
-	for _, hName := range headersToSign {
-		for _, h := range rawHeaders {
-			if strings.EqualFold(h.key, hName) {
-				signedHeadersList = append(signedHeadersList, hName)
-				canonicalHeaders.WriteString(canonicalizeHeaderRelaxed(h.key, h.val))
-				canonicalHeaders.WriteString("\r\n")
-				break
-			}
-		}
+	var signed bytes.Buffer
+	if err := dkim.Sign(&signed, bytes.NewReader(rawMIME), options); err != nil {
+		return nil, fmt.Errorf("failed to sign DKIM: %w", err)
 	}
 
-	hTag := strings.Join(signedHeadersList, ":")
-	if hTag == "" {
-		hTag = "from:to:subject"
-	}
-
-	// 2. Prepare DKIM-Signature header without b=
-	dkimHeaderPrefix := fmt.Sprintf("v=1; a=rsa-sha256; c=relaxed/relaxed; d=%s; s=%s; bh=%s; h=%s; b=",
-		domain, selector, bhB64, hTag)
-
-	dkimHeaderCanonical := canonicalizeHeaderRelaxed("dkim-signature", dkimHeaderPrefix)
-	canonicalHeaders.WriteString(dkimHeaderCanonical)
-
-	// 3. Compute RSA-SHA256 signature
-	headerHash := sha256.Sum256(canonicalHeaders.Bytes())
-	sig, err := rsa.SignPKCS1v15(rand.Reader, rsaPriv, crypto.SHA256, headerHash[:])
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign header hash: %w", err)
-	}
-	sigB64 := base64.StdEncoding.EncodeToString(sig)
-
-	finalDKIMHeader := fmt.Sprintf("DKIM-Signature: %s%s\r\n", dkimHeaderPrefix, sigB64)
-
-	// Prepend DKIM-Signature to raw MIME
-	var result bytes.Buffer
-	result.WriteString(finalDKIMHeader)
-	result.Write(rawMIME)
-
-	return result.Bytes(), nil
-}
-
-type headerKV struct {
-	key string
-	val string
-}
-
-func parseHeaders(headerBytes []byte) []headerKV {
-	lines := strings.Split(string(headerBytes), "\n")
-	var headers []headerKV
-	var currentKey, currentVal string
-
-	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
-		if len(line) == 0 {
-			continue
-		}
-		if line[0] == ' ' || line[0] == '\t' {
-			currentVal += " " + strings.TrimSpace(line)
-		} else {
-			if currentKey != "" {
-				headers = append(headers, headerKV{key: currentKey, val: currentVal})
-			}
-			colonIdx := strings.Index(line, ":")
-			if colonIdx > 0 {
-				currentKey = strings.TrimSpace(line[:colonIdx])
-				currentVal = strings.TrimSpace(line[colonIdx+1:])
-			}
-		}
-	}
-	if currentKey != "" {
-		headers = append(headers, headerKV{key: currentKey, val: currentVal})
-	}
-	return headers
-}
-
-func canonicalizeHeaderRelaxed(k, v string) string {
-	k = strings.ToLower(strings.TrimSpace(k))
-	// Compress multiple spaces
-	v = strings.Join(strings.Fields(v), " ")
-	return k + ":" + v
-}
-
-func canonicalizeBodyRelaxed(body []byte) []byte {
-	if len(body) == 0 {
-		return []byte{}
-	}
-	lines := bytes.Split(body, []byte("\n"))
-	var processed [][]byte
-
-	for _, line := range lines {
-		line = bytes.TrimRight(line, "\r")
-		// Collapse whitespace
-		fields := bytes.Fields(line)
-		collapsed := bytes.Join(fields, []byte(" "))
-		processed = append(processed, collapsed)
-	}
-
-	// Remove trailing empty lines
-	for len(processed) > 0 && len(processed[len(processed)-1]) == 0 {
-		processed = processed[:len(processed)-1]
-	}
-
-	if len(processed) == 0 {
-		return []byte{}
-	}
-
-	var result bytes.Buffer
-	for _, l := range processed {
-		result.Write(l)
-		result.WriteString("\r\n")
-	}
-	return result.Bytes()
+	return signed.Bytes(), nil
 }
 

@@ -1,8 +1,12 @@
 package crypto
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/emersion/go-msgauth/dkim"
 )
 
 func TestDKIMKeyGeneration(t *testing.T) {
@@ -40,11 +44,49 @@ func TestSignDKIM(t *testing.T) {
 	}
 
 	signedStr := string(signed)
-	if !strings.HasPrefix(signedStr, "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=default;") {
+	if !strings.HasPrefix(signedStr, "DKIM-Signature:") {
 		t.Fatalf("expected DKIM-Signature header, got: %s", signedStr[:100])
+	}
+	if !strings.Contains(signedStr, "d=example.com") || !strings.Contains(signedStr, "s=default") {
+		t.Fatalf("expected domain and selector in signature, got: %s", signedStr[:200])
 	}
 	if !strings.Contains(signedStr, "bh=") || !strings.Contains(signedStr, "b=") {
 		t.Fatalf("expected bh= and b= tags in signature, got: %s", signedStr[:150])
+	}
+}
+
+func TestSignAndVerifyDKIM(t *testing.T) {
+	keyPair, err := GenerateDKIMKey(2048)
+	if err != nil {
+		t.Fatalf("failed to generate DKIM key: %v", err)
+	}
+
+	rawEmail := []byte("From: erpadmin@crm.krea.edu.in\r\nTo: senthilprabu005@gmail.com\r\nSubject: DKIM Test\r\nDate: Sat, 31 Oct 2026 02:46:21 +0000\r\nMessage-ID: <01m67xkpgkmqjdnmgm35nkya2z@crm.krea.edu.in>\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>Testing DKIM signature verification.</p>\r\n")
+
+	signed, err := SignDKIM(rawEmail, "crm.krea.edu.in", "mvx", keyPair.PrivateKeyPEM)
+	if err != nil {
+		t.Fatalf("failed to sign email: %v", err)
+	}
+
+	// Verify using go-msgauth
+	verifications, err := dkim.VerifyWithOptions(bytes.NewReader(signed), &dkim.VerifyOptions{
+		LookupTXT: func(domain string) ([]string, error) {
+			if domain == "mvx._domainkey.crm.krea.edu.in" {
+				return []string{"v=DKIM1; k=rsa; p=" + keyPair.PublicKeyB64}, nil
+			}
+			return nil, fmt.Errorf("domain not found")
+		},
+	})
+	if err != nil {
+		t.Fatalf("verification error: %v", err)
+	}
+	if len(verifications) == 0 {
+		t.Fatalf("no verifications returned")
+	}
+	for _, v := range verifications {
+		if v.Err != nil {
+			t.Fatalf("verification failed: %v", v.Err)
+		}
 	}
 }
 
