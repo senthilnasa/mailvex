@@ -38,7 +38,11 @@ import {
   Moon,
   Monitor,
   Menu,
-  X
+  X,
+  FileText,
+  Radio,
+  CornerDownRight,
+  Bell
 } from 'lucide-react'
 import { ExportMenu } from './components/ExportMenu'
 import { DataTableCard } from './components/DataTableCard'
@@ -562,7 +566,6 @@ export default function App() {
   const [adminCreateTenantSuccess, setAdminCreateTenantSuccess] = useState<string | null>(null)
   const [adminAuditLogs, setAdminAuditLogs] = useState<any[]>([])
   const [adminAuditLoading, setAdminAuditLoading] = useState(false)
-  const [adminSearchTenant, setAdminSearchTenant] = useState('')
 
   // Domains state
   const [domains, setDomains] = useState<Domain[]>([])
@@ -4141,14 +4144,34 @@ export default function App() {
                   </div>
 
                   {/* Active SMTP Credentials List */}
-                  <div className="glass-card overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-900 dark:text-white">Active SMTP Credentials ({smtpCredentials.length})</span>
+                  <DataTableCard
+                    title="Active SMTP Credentials"
+                    icon={Key}
+                    data={smtpCredentials}
+                    searchPlaceholder="Search SMTP username or domain..."
+                    searchFields={['username']}
+                    exportFilename={`mailvex-smtp-credentials-${activeTenant?.slug || 'tenant'}`}
+                    exportSheetTitle="SMTP Credentials"
+                    exportColumns={[
+                      { header: 'Username', key: 'username' },
+                      { header: 'Rate Limit', key: 'rate_limit' },
+                      { header: 'Allowed Domains', key: 'allowed_domains' },
+                      { header: 'Created At', key: 'created_at' },
+                    ]}
+                    exportFormatter={(c) => ({
+                      username: c.username,
+                      rate_limit: `${c.rate_limit} req/min`,
+                      allowed_domains: c.allowed_domains && c.allowed_domains.length > 0 ? c.allowed_domains.join(', ') : 'Any',
+                      created_at: c.created_at,
+                    })}
+                    extraHeaderActions={
                       <button onClick={loadSMTPCredentials} className="btn-secondary text-xs px-2.5 py-1">
                         <RefreshCw className="w-3 h-3" />
                       </button>
-                    </div>
-                    <div className="overflow-x-auto flex-1">
+                    }
+                    emptyMessage="No credentials generated yet."
+                  >
+                    {(paginatedCreds) => (
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-800">
                           <tr>
@@ -4159,24 +4182,18 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                          {smtpCredentials.length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="p-6 text-center text-slate-400">No credentials generated yet.</td>
+                          {paginatedCreds.map((c) => (
+                            <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                              <td className="p-3 font-mono font-semibold text-slate-900 dark:text-white">{c.username}</td>
+                              <td className="p-3">{c.rate_limit} req/min</td>
+                              <td className="p-3 text-slate-500">{c.allowed_domains && c.allowed_domains.length > 0 ? c.allowed_domains.join(', ') : 'Any'}</td>
+                              <td className="p-3 text-slate-400">{new Date(c.created_at).toLocaleDateString()}</td>
                             </tr>
-                          ) : (
-                            smtpCredentials.map((c) => (
-                              <tr key={c.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                                <td className="p-3 font-mono font-semibold text-slate-900 dark:text-white">{c.username}</td>
-                                <td className="p-3">{c.rate_limit} req/min</td>
-                                <td className="p-3 text-slate-500">{c.allowed_domains && c.allowed_domains.length > 0 ? c.allowed_domains.join(', ') : 'Any'}</td>
-                                <td className="p-3 text-slate-400">{new Date(c.created_at).toLocaleDateString()}</td>
-                              </tr>
-                            ))
-                          )}
+                          ))}
                         </tbody>
                       </table>
-                    </div>
-                  </div>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4248,14 +4265,34 @@ export default function App() {
                   </div>
 
                   {/* Registered Devices List */}
-                  <div className="glass-card overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-900 dark:text-white">Registered LAN Devices ({devicesList.length})</span>
+                  <DataTableCard
+                    title="Registered LAN Devices"
+                    icon={HardDrive}
+                    data={devicesList}
+                    searchPlaceholder="Search device name, type, LAN IP..."
+                    searchFields={['name', 'type', 'expected_ip']}
+                    exportFilename={`mailvex-devices-${activeTenant?.slug || 'tenant'}`}
+                    exportSheetTitle="Registered Devices"
+                    exportColumns={[
+                      { header: 'Device Name', key: 'name' },
+                      { header: 'Device Type', key: 'type' },
+                      { header: 'LAN IP', key: 'expected_ip' },
+                      { header: 'Allowed Senders', key: 'allowed_from' },
+                    ]}
+                    exportFormatter={(d) => ({
+                      name: d.name,
+                      type: d.type,
+                      expected_ip: d.expected_ip,
+                      allowed_from: d.allowed_from && d.allowed_from.length > 0 ? d.allowed_from.join(', ') : 'Any',
+                    })}
+                    extraHeaderActions={
                       <button onClick={loadDevices} className="btn-secondary text-xs px-2.5 py-1">
                         <RefreshCw className="w-3 h-3" />
                       </button>
-                    </div>
-                    <div className="overflow-x-auto flex-1">
+                    }
+                    emptyMessage="No appliances registered yet."
+                  >
+                    {(paginatedDevs) => (
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50/70 dark:bg-slate-950/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-800">
                           <tr>
@@ -4266,24 +4303,18 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                          {devicesList.length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="p-6 text-center text-slate-400">No appliances registered yet.</td>
+                          {paginatedDevs.map((d) => (
+                            <tr key={d.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                              <td className="p-3 font-semibold text-slate-900 dark:text-white">{d.name}</td>
+                              <td className="p-3 capitalize text-sky-600 dark:text-sky-400">{d.type}</td>
+                              <td className="p-3 font-mono text-slate-600 dark:text-slate-300">{d.expected_ip}</td>
+                              <td className="p-3 text-slate-500">{d.allowed_from && d.allowed_from.length > 0 ? d.allowed_from.join(', ') : 'Any'}</td>
                             </tr>
-                          ) : (
-                            devicesList.map((d) => (
-                              <tr key={d.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                                <td className="p-3 font-semibold text-slate-900 dark:text-white">{d.name}</td>
-                                <td className="p-3 capitalize text-sky-600 dark:text-sky-400">{d.type}</td>
-                                <td className="p-3 font-mono text-slate-600 dark:text-slate-300">{d.expected_ip}</td>
-                                <td className="p-3 text-slate-500">{d.allowed_from && d.allowed_from.length > 0 ? d.allowed_from.join(', ') : 'Any'}</td>
-                              </tr>
-                            ))
-                          )}
+                          ))}
                         </tbody>
                       </table>
-                    </div>
-                  </div>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 {/* Add Trusted Network Subnet */}
@@ -4686,37 +4717,31 @@ export default function App() {
                   </form>
                 </div>
 
-                <div className="glass-card overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">Published Templates</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">({templatesList.length} Total)</span>
-                      <ExportMenu
-                        filename={`mailvex-templates-${activeTenant?.slug || 'tenant'}`}
-                        sheetTitle="Templates"
-                        label="Export Templates"
-                        columns={[
-                          { header: 'Template ID', key: 'id' },
-                          { header: 'Template Name', key: 'name' },
-                          { header: 'Description', key: 'description' },
-                          { header: 'Created At', key: 'created_at' },
-                        ]}
-                        data={templatesList.map((t) => ({
-                          id: t.id,
-                          name: t.name,
-                          description: t.description || '—',
-                          created_at: t.created_at,
-                        }))}
-                      />
-                    </div>
-                  </div>
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {templatesList.length === 0 ? (
-                      <div className="p-6 text-center text-slate-500 text-sm">
-                        No templates created yet.
-                      </div>
-                    ) : (
-                      templatesList.map((t) => (
+                <DataTableCard
+                  title="Published Templates"
+                  icon={FileText}
+                  data={templatesList}
+                  searchPlaceholder="Search template name or ID..."
+                  searchFields={['name', 'id', 'description']}
+                  exportFilename={`mailvex-templates-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Templates"
+                  exportColumns={[
+                    { header: 'Template ID', key: 'id' },
+                    { header: 'Template Name', key: 'name' },
+                    { header: 'Description', key: 'description' },
+                    { header: 'Created At', key: 'created_at' },
+                  ]}
+                  exportFormatter={(t) => ({
+                    id: t.id,
+                    name: t.name,
+                    description: t.description || '—',
+                    created_at: t.created_at,
+                  })}
+                  emptyMessage="No templates created yet."
+                >
+                  {(paginatedTemplates) => (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {paginatedTemplates.map((t) => (
                         <div key={t.id} className="p-4 flex items-center justify-between hover:bg-slate-800/40">
                           <div>
                             <span className="font-semibold text-white">{t.name}</span>
@@ -4738,10 +4763,10 @@ export default function App() {
                             </button>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                      ))}
+                    </div>
+                  )}
+                </DataTableCard>
 
                 {/* Rendered Preview Modal / Card */}
                 {renderedPreview && (
@@ -5040,14 +5065,25 @@ export default function App() {
                 </div>
 
                 {/* Abuse Intake Queue (§18.1, RFC 5321 §4.5.1) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-white">Abuse &amp; Postmaster Intake Queue</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Mandatory abuse@ and postmaster@ inbound mailbox reports requiring operator inspection.
-                      </p>
-                    </div>
+                <DataTableCard
+                  title="Abuse & Postmaster Intake Queue"
+                  subtitle="Mandatory abuse@ and postmaster@ inbound mailbox reports requiring operator inspection."
+                  icon={AlertTriangle}
+                  data={abuseReports}
+                  searchPlaceholder="Search recipient, sender, subject, notes..."
+                  searchFields={['id', 'recipient', 'sender', 'subject', 'notes']}
+                  exportFilename={`mailvex-abuse-reports-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Abuse Reports"
+                  exportColumns={[
+                    { header: 'Report ID', key: 'id' },
+                    { header: 'Status', key: 'status' },
+                    { header: 'Recipient Mailbox', key: 'recipient' },
+                    { header: 'Sender', key: 'sender' },
+                    { header: 'Subject', key: 'subject' },
+                    { header: 'Notes', key: 'notes' },
+                    { header: 'Received', key: 'created_at' },
+                  ]}
+                  extraHeaderActions={
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setAbuseStatusFilter('pending')}
@@ -5080,9 +5116,10 @@ export default function App() {
                         Escalated
                       </button>
                     </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
+                  }
+                  emptyMessage={`No ${abuseStatusFilter} abuse reports found.`}
+                >
+                  {(paginatedReports) => (
                     <table className="w-full text-left text-sm text-slate-300">
                       <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
                         <tr>
@@ -5096,74 +5133,76 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {abuseReports.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
-                              No {abuseStatusFilter} abuse reports found.
+                        {paginatedReports.map((r) => (
+                          <tr key={r.id} className="hover:bg-slate-800/40">
+                            <td className="px-6 py-4 font-mono text-xs text-white">{r.id}</td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  r.status === 'pending'
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : r.status === 'resolved'
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                    : 'bg-red-950 text-red-400 border border-red-800'
+                                }`}
+                              >
+                                {r.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-mono text-indigo-300">{r.recipient}</td>
+                            <td className="px-6 py-4 text-xs text-slate-300">{r.sender}</td>
+                            <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
+                              {r.subject || 'No subject'}
+                              {r.notes && <span className="block text-slate-500 text-[11px] mt-0.5">Notes: {r.notes}</span>}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500">
+                              {new Date(r.created_at).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 text-right space-x-2">
+                              {r.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleResolveAbuse(r.id)}
+                                    className="text-xs bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 px-2.5 py-1 rounded border border-emerald-700/50"
+                                  >
+                                    Resolve
+                                  </button>
+                                  <button
+                                    onClick={() => handleEscalateAbuse(r.id)}
+                                    className="text-xs bg-red-900/60 hover:bg-red-800 text-red-300 px-2.5 py-1 rounded border border-red-700/50"
+                                  >
+                                    Escalate
+                                  </button>
+                                </>
+                              )}
                             </td>
                           </tr>
-                        ) : (
-                          abuseReports.map((r) => (
-                            <tr key={r.id} className="hover:bg-slate-800/40">
-                              <td className="px-6 py-4 font-mono text-xs text-white">{r.id}</td>
-                              <td className="px-6 py-4">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                    r.status === 'pending'
-                                      ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                                      : r.status === 'resolved'
-                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                      : 'bg-red-950 text-red-400 border border-red-800'
-                                  }`}
-                                >
-                                  {r.status}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-xs font-mono text-indigo-300">{r.recipient}</td>
-                              <td className="px-6 py-4 text-xs text-slate-300">{r.sender}</td>
-                              <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">
-                                {r.subject || 'No subject'}
-                                {r.notes && <span className="block text-slate-500 text-[11px] mt-0.5">Notes: {r.notes}</span>}
-                              </td>
-                              <td className="px-6 py-4 text-xs text-slate-500">
-                                {new Date(r.created_at).toLocaleString()}
-                              </td>
-                              <td className="px-6 py-4 text-right space-x-2">
-                                {r.status === 'pending' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleResolveAbuse(r.id)}
-                                      className="text-xs bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 px-2.5 py-1 rounded border border-emerald-700/50"
-                                    >
-                                      Resolve
-                                    </button>
-                                    <button
-                                      onClick={() => handleEscalateAbuse(r.id)}
-                                      className="text-xs bg-red-900/60 hover:bg-red-800 text-red-300 px-2.5 py-1 rounded border border-red-700/50"
-                                    >
-                                      Escalate
-                                    </button>
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
 
                 {/* Feedback Loop (FBL) Reports Table (§18.1, RFC 5965) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="px-6 py-5 border-b border-slate-800">
-                    <h3 className="text-base font-semibold text-white">Inbound ARF Feedback Loop Complaints</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Complaints parsed via RFC 5965 ARF. Addresses are immediately suppressed.
-                    </p>
-                  </div>
-
-                  <div className="overflow-x-auto">
+                <DataTableCard
+                  title="Inbound ARF Feedback Loop Complaints"
+                  subtitle="Complaints parsed via RFC 5965 ARF. Addresses are immediately suppressed."
+                  icon={ShieldAlert}
+                  data={fblReports}
+                  searchPlaceholder="Search reported domain or recipient..."
+                  searchFields={['id', 'reported_domain', 'recipient_id', 'feedback_type']}
+                  exportFilename={`mailvex-fbl-reports-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="FBL Complaints"
+                  exportColumns={[
+                    { header: 'Report ID', key: 'id' },
+                    { header: 'Feedback Type', key: 'feedback_type' },
+                    { header: 'Reported Domain', key: 'reported_domain' },
+                    { header: 'Correlated Recipient', key: 'recipient_id' },
+                    { header: 'Logged Date', key: 'created_at' },
+                  ]}
+                  emptyMessage="No feedback loop complaints recorded for this tenant."
+                >
+                  {(paginatedFBL) => (
                     <table className="w-full text-left text-sm text-slate-300">
                       <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
                         <tr>
@@ -5175,33 +5214,25 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {fblReports.length === 0 ? (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                              No feedback loop complaints recorded for this tenant.
+                        {paginatedFBL.map((f) => (
+                          <tr key={f.id} className="hover:bg-slate-800/40">
+                            <td className="px-6 py-4 font-mono text-xs text-white">{f.id}</td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-950 text-amber-400 border border-amber-800">
+                                {f.feedback_type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-300">{f.reported_domain || '—'}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-indigo-300">{f.recipient_id || 'Correlated via Header'}</td>
+                            <td className="px-6 py-4 text-xs text-slate-500">
+                              {new Date(f.created_at).toLocaleString()}
                             </td>
                           </tr>
-                        ) : (
-                          fblReports.map((f) => (
-                            <tr key={f.id} className="hover:bg-slate-800/40">
-                              <td className="px-6 py-4 font-mono text-xs text-white">{f.id}</td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-950 text-amber-400 border border-amber-800">
-                                  {f.feedback_type}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-xs font-mono text-slate-300">{f.reported_domain || '—'}</td>
-                              <td className="px-6 py-4 text-xs font-mono text-indigo-300">{f.recipient_id || 'Correlated via Header'}</td>
-                              <td className="px-6 py-4 text-xs text-slate-500">
-                                {new Date(f.created_at).toLocaleString()}
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
 
                 {/* Provider Checklists & Integration Guide */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -5436,57 +5467,73 @@ export default function App() {
                 </div>
 
                 {/* Outbound Traffic Volume Trends */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                  <div className="border-b border-slate-800 pb-4 mb-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-white">Outbound Traffic Volume &amp; Trends</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Chronological delivery volume and deliverability performance by time bucket.
-                      </p>
-                    </div>
+                <DataTableCard
+                  title="Outbound Traffic Volume & Trends"
+                  subtitle="Chronological delivery volume and deliverability performance by time bucket."
+                  icon={Activity}
+                  data={analyticsTimeSeries}
+                  searchPlaceholder="Search timestamp or metric..."
+                  searchFields={['timestamp']}
+                  exportFilename={`mailvex-traffic-trends-${analyticsRange}`}
+                  exportSheetTitle="Traffic Trends"
+                  exportColumns={[
+                    { header: 'Time Bucket', key: 'timestamp' },
+                    { header: 'Sent', key: 'sent', type: 'number' },
+                    { header: 'Delivered', key: 'delivered', type: 'number' },
+                    { header: 'Bounced', key: 'bounced', type: 'number' },
+                    { header: 'Complained', key: 'complained', type: 'number' },
+                    { header: 'Delivery Rate', key: 'delivery_rate' },
+                    { header: 'Complaint Rate', key: 'complaint_rate' },
+                  ]}
+                  exportFormatter={(p) => ({
+                    timestamp: new Date(p.timestamp).toLocaleString(),
+                    sent: p.sent,
+                    delivered: p.delivered,
+                    bounced: p.bounced,
+                    complained: p.complained,
+                    delivery_rate: `${(p.delivery_rate * 100).toFixed(2)}%`,
+                    complaint_rate: `${(p.complaint_rate * 100).toFixed(3)}%`,
+                  })}
+                  extraHeaderActions={
                     <span className="text-xs font-mono text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
                       {analyticsRange === '30d' ? 'Daily Resolution' : 'Hourly Resolution'}
                     </span>
-                  </div>
-                  {analyticsTimeSeries.length === 0 ? (
-                    <div className="text-center py-6 text-slate-500 text-xs">
-                      No time-series data recorded for this window. Outbound SMTP and API dispatches will appear here.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm text-slate-300">
-                        <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
-                          <tr>
-                            <th className="px-4 py-2.5">Time Bucket</th>
-                            <th className="px-4 py-2.5">Sent</th>
-                            <th className="px-4 py-2.5">Delivered</th>
-                            <th className="px-4 py-2.5">Bounced</th>
-                            <th className="px-4 py-2.5">Complained</th>
-                            <th className="px-4 py-2.5">Delivery Rate</th>
-                            <th className="px-4 py-2.5">Complaint Rate</th>
+                  }
+                  emptyMessage="No time-series data recorded for this window. Outbound SMTP and API dispatches will appear here."
+                >
+                  {(paginatedPoints) => (
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <tr>
+                          <th className="px-4 py-2.5">Time Bucket</th>
+                          <th className="px-4 py-2.5">Sent</th>
+                          <th className="px-4 py-2.5">Delivered</th>
+                          <th className="px-4 py-2.5">Bounced</th>
+                          <th className="px-4 py-2.5">Complained</th>
+                          <th className="px-4 py-2.5">Delivery Rate</th>
+                          <th className="px-4 py-2.5">Complaint Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 font-mono text-xs">
+                        {paginatedPoints.map((point) => (
+                          <tr key={point.timestamp} className="hover:bg-slate-800/40">
+                            <td className="px-4 py-2.5 text-slate-300 font-sans">{new Date(point.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                            <td className="px-4 py-2.5 text-white font-bold">{point.sent.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-emerald-400">{point.delivered.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-rose-400">{point.bounced.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-amber-400">{point.complained.toLocaleString()}</td>
+                            <td className="px-4 py-2.5 text-slate-200">{(point.delivery_rate * 100).toFixed(1)}%</td>
+                            <td className="px-4 py-2.5">
+                              <span className={point.complaint_rate >= 0.001 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                                {(point.complaint_rate * 100).toFixed(3)}%
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800 font-mono text-xs">
-                          {analyticsTimeSeries.map((point) => (
-                            <tr key={point.timestamp} className="hover:bg-slate-800/40">
-                              <td className="px-4 py-2.5 text-slate-300 font-sans">{new Date(point.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                              <td className="px-4 py-2.5 text-white font-bold">{point.sent.toLocaleString()}</td>
-                              <td className="px-4 py-2.5 text-emerald-400">{point.delivered.toLocaleString()}</td>
-                              <td className="px-4 py-2.5 text-rose-400">{point.bounced.toLocaleString()}</td>
-                              <td className="px-4 py-2.5 text-amber-400">{point.complained.toLocaleString()}</td>
-                              <td className="px-4 py-2.5 text-slate-200">{(point.delivery_rate * 100).toFixed(1)}%</td>
-                              <td className="px-4 py-2.5">
-                                <span className={point.complaint_rate >= 0.001 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
-                                  {(point.complaint_rate * 100).toFixed(3)}%
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   )}
-                </div>
+                </DataTableCard>
 
                 {/* Latency Distribution Histogram */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -5519,15 +5566,38 @@ export default function App() {
                 </div>
 
                 {/* Provider Breakdown Table */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="px-6 py-5 border-b border-slate-800">
-                    <h3 className="text-base font-semibold text-white">Major ISP / Provider Breakdown</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Deliverability performance classified by destination MX (Google, Microsoft, Yahoo, Apple, Fastmail).
-                    </p>
-                  </div>
-
-                  <div className="overflow-x-auto">
+                <DataTableCard
+                  title="Major ISP / Provider Breakdown"
+                  subtitle="Deliverability performance classified by destination MX (Google, Microsoft, Yahoo, Apple, Fastmail)."
+                  icon={Globe}
+                  data={analyticsProviders}
+                  searchPlaceholder="Search provider (e.g. google, microsoft)..."
+                  searchFields={['provider']}
+                  exportFilename={`mailvex-provider-breakdown-${analyticsRange}`}
+                  exportSheetTitle="Provider Deliverability"
+                  exportColumns={[
+                    { header: 'Provider', key: 'provider' },
+                    { header: 'Sent', key: 'sent', type: 'number' },
+                    { header: 'Delivered', key: 'delivered', type: 'number' },
+                    { header: 'Delivery Rate', key: 'delivery_rate' },
+                    { header: 'Bounces', key: 'bounced', type: 'number' },
+                    { header: 'Bounce Rate', key: 'bounce_rate' },
+                    { header: 'Complaints', key: 'complained', type: 'number' },
+                    { header: 'Complaint Rate', key: 'complaint_rate' },
+                  ]}
+                  exportFormatter={(p) => ({
+                    provider: p.provider,
+                    sent: p.sent ?? p.sent_count ?? 0,
+                    delivered: p.delivered ?? p.delivered_count ?? 0,
+                    delivery_rate: `${((p.delivery_rate || 0) * 100).toFixed(2)}%`,
+                    bounced: p.bounced ?? p.bounce_count ?? 0,
+                    bounce_rate: `${((p.bounce_rate || 0) * 100).toFixed(2)}%`,
+                    complained: p.complained ?? p.complaint_count ?? 0,
+                    complaint_rate: `${((p.complaint_rate || 0) * 100).toFixed(3)}%`,
+                  })}
+                  emptyMessage="No provider breakdown data available for this range."
+                >
+                  {(paginatedProviders) => (
                     <table className="w-full text-left text-sm text-slate-300">
                       <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
                         <tr>
@@ -5542,34 +5612,26 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {analyticsProviders.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
-                              No provider breakdown data available for this range.
+                        {paginatedProviders.map((p) => (
+                          <tr key={p.provider} className="hover:bg-slate-800/40">
+                            <td className="px-6 py-4 font-semibold text-white capitalize">{p.provider}</td>
+                            <td className="px-6 py-4 text-slate-300 font-mono text-xs">{(p.sent ?? p.sent_count ?? 0).toLocaleString()}</td>
+                            <td className="px-6 py-4 text-emerald-400 font-mono text-xs">{(p.delivered ?? p.delivered_count ?? 0).toLocaleString()}</td>
+                            <td className="px-6 py-4 text-slate-200">{((p.delivery_rate || 0) * 100).toFixed(1)}%</td>
+                            <td className="px-6 py-4 text-rose-400 font-mono text-xs">{p.bounced ?? p.bounce_count ?? 0}</td>
+                            <td className="px-6 py-4 text-slate-200">{((p.bounce_rate || 0) * 100).toFixed(2)}%</td>
+                            <td className="px-6 py-4 text-amber-400 font-mono text-xs">{p.complained ?? p.complaint_count ?? 0}</td>
+                            <td className="px-6 py-4 font-semibold">
+                              <span className={(p.complaint_rate || 0) >= 0.001 ? 'text-red-400' : 'text-slate-300'}>
+                                {((p.complaint_rate || 0) * 100).toFixed(3)}%
+                              </span>
                             </td>
                           </tr>
-                        ) : (
-                          analyticsProviders.map((p) => (
-                            <tr key={p.provider} className="hover:bg-slate-800/40">
-                              <td className="px-6 py-4 font-semibold text-white capitalize">{p.provider}</td>
-                              <td className="px-6 py-4 text-slate-300 font-mono text-xs">{(p.sent ?? p.sent_count ?? 0).toLocaleString()}</td>
-                              <td className="px-6 py-4 text-emerald-400 font-mono text-xs">{(p.delivered ?? p.delivered_count ?? 0).toLocaleString()}</td>
-                              <td className="px-6 py-4 text-slate-200">{((p.delivery_rate || 0) * 100).toFixed(1)}%</td>
-                              <td className="px-6 py-4 text-rose-400 font-mono text-xs">{p.bounced ?? p.bounce_count ?? 0}</td>
-                              <td className="px-6 py-4 text-slate-200">{((p.bounce_rate || 0) * 100).toFixed(2)}%</td>
-                              <td className="px-6 py-4 text-amber-400 font-mono text-xs">{p.complained ?? p.complaint_count ?? 0}</td>
-                              <td className="px-6 py-4 font-semibold">
-                                <span className={(p.complaint_rate || 0) >= 0.001 ? 'text-red-400' : 'text-slate-300'}>
-                                  {((p.complaint_rate || 0) * 100).toFixed(3)}%
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
               </div>
             )}
 
@@ -5646,15 +5708,32 @@ export default function App() {
                 </div>
 
                 {/* Webhooks Endpoints Table */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="px-6 py-5 border-b border-slate-800">
-                    <h3 className="text-base font-semibold text-white">Registered Webhooks</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Configured endpoints receiving signed HTTP POST dispatches.
-                    </p>
-                  </div>
-
-                  <div className="overflow-x-auto">
+                <DataTableCard
+                  title="Registered Webhooks"
+                  subtitle="Configured endpoints receiving signed HTTP POST dispatches."
+                  icon={Radio}
+                  data={webhooksList}
+                  searchPlaceholder="Search endpoint URL or description..."
+                  searchFields={['url', 'description', 'status']}
+                  exportFilename={`mailvex-webhooks-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Webhooks"
+                  exportColumns={[
+                    { header: 'Endpoint URL', key: 'url' },
+                    { header: 'Description', key: 'description' },
+                    { header: 'Events', key: 'events' },
+                    { header: 'Status', key: 'status' },
+                    { header: 'Consecutive Failures', key: 'consecutive_failures' },
+                  ]}
+                  exportFormatter={(ep) => ({
+                    url: ep.url,
+                    description: ep.description || '—',
+                    events: ep.events.join(', '),
+                    status: ep.status,
+                    consecutive_failures: ep.consecutive_failures,
+                  })}
+                  emptyMessage="No webhooks registered. Add an endpoint above to receive real-time event notifications."
+                >
+                  {(paginatedWebhooks) => (
                     <table className="w-full text-left text-sm text-slate-300">
                       <thead className="bg-slate-950/60 text-xs uppercase font-semibold text-slate-400 border-b border-slate-800">
                         <tr>
@@ -5666,95 +5745,87 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {webhooksList.length === 0 ? (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                              No webhooks registered. Add an endpoint above to receive real-time event notifications.
+                        {paginatedWebhooks.map((ep) => (
+                          <tr key={ep.id} className="hover:bg-slate-800/40">
+                            <td className="px-6 py-4">
+                              <div className="font-mono text-xs text-white font-semibold">{ep.url}</div>
+                              {ep.description && (
+                                <div className="text-xs text-slate-400 mt-0.5">{ep.description}</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                {ep.events.map((ev) => (
+                                  <span
+                                    key={ev}
+                                    className="px-2 py-0.5 rounded text-xs font-mono bg-indigo-950 text-indigo-300 border border-indigo-800"
+                                  >
+                                    {ev}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="font-mono text-xs text-slate-400">
+                                {ep.secret.slice(0, 10)}••••••••
+                              </div>
+                              <button
+                                onClick={() => handleRotateWebhookSecret(ep.id)}
+                                className="text-xs text-indigo-400 hover:text-indigo-300 underline mt-1"
+                              >
+                                Rotate Secret (24h overlap)
+                              </button>
+                            </td>
+                            <td className="px-6 py-4">
+                              {ep.status === 'active' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                  Active
+                                </span>
+                              )}
+                              {ep.status === 'disabled_failing' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-950 text-rose-400 border border-rose-800">
+                                  Circuit Broken (10+ Failures)
+                                </span>
+                              )}
+                              {ep.status === 'disabled_manual' && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                                  Disabled
+                                </span>
+                              )}
+                              {ep.consecutive_failures > 0 && (
+                                <div className="text-xs text-rose-400 mt-0.5">
+                                  {ep.consecutive_failures} failures
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleTestWebhook(ep.id)}
+                                  className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
+                                >
+                                  Test Ping
+                                </button>
+                                <button
+                                  onClick={() => handleViewDeliveries(ep)}
+                                  className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
+                                >
+                                  Deliveries
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteWebhook(ep.id)}
+                                  className="text-xs text-rose-400 hover:text-rose-300"
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        ) : (
-                          webhooksList.map((ep) => (
-                            <tr key={ep.id} className="hover:bg-slate-800/40">
-                              <td className="px-6 py-4">
-                                <div className="font-mono text-xs text-white font-semibold">{ep.url}</div>
-                                {ep.description && (
-                                  <div className="text-xs text-slate-400 mt-0.5">{ep.description}</div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex flex-wrap gap-1">
-                                  {ep.events.map((ev) => (
-                                    <span
-                                      key={ev}
-                                      className="px-2 py-0.5 rounded text-xs font-mono bg-indigo-950 text-indigo-300 border border-indigo-800"
-                                    >
-                                      {ev}
-                                    </span>
-                                  ))}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="font-mono text-xs text-slate-400">
-                                  {ep.secret.slice(0, 10)}••••••••
-                                </div>
-                                <button
-                                  onClick={() => handleRotateWebhookSecret(ep.id)}
-                                  className="text-xs text-indigo-400 hover:text-indigo-300 underline mt-1"
-                                >
-                                  Rotate Secret (24h overlap)
-                                </button>
-                              </td>
-                              <td className="px-6 py-4">
-                                {ep.status === 'active' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
-                                    Active
-                                  </span>
-                                )}
-                                {ep.status === 'disabled_failing' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-950 text-rose-400 border border-rose-800">
-                                    Circuit Broken (10+ Failures)
-                                  </span>
-                                )}
-                                {ep.status === 'disabled_manual' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                                    Disabled
-                                  </span>
-                                )}
-                                {ep.consecutive_failures > 0 && (
-                                  <div className="text-xs text-rose-400 mt-0.5">
-                                    {ep.consecutive_failures} failures
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    onClick={() => handleTestWebhook(ep.id)}
-                                    className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
-                                  >
-                                    Test Ping
-                                  </button>
-                                  <button
-                                    onClick={() => handleViewDeliveries(ep)}
-                                    className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700"
-                                  >
-                                    Deliveries
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteWebhook(ep.id)}
-                                    className="text-xs text-rose-400 hover:text-rose-300"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
 
                 {/* Webhook Signature & Security Docs Box */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -6355,22 +6426,42 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                 </div>
 
                 {/* Section 2: Inbound Routes Table */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
-                    <div className="flex items-center space-x-3">
-                      <span>Inbound Routing Rules ({inboundRoutes.length})</span>
-                      <span className="text-xs text-slate-400 font-normal">
-                        Evaluated in ascending priority order (1 first)
-                      </span>
-                    </div>
+                <DataTableCard
+                  title="Inbound Routing Rules"
+                  subtitle="Evaluated in ascending priority order (1 first)"
+                  icon={CornerDownRight}
+                  data={inboundRoutes}
+                  searchPlaceholder="Search pattern, target, match type..."
+                  searchFields={['pattern', 'action_target', 'match_type', 'action']}
+                  exportFilename={`mailvex-inbound-routes-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Inbound Routes"
+                  exportColumns={[
+                    { header: 'Priority', key: 'priority' },
+                    { header: 'Match Type', key: 'match_type' },
+                    { header: 'Pattern', key: 'pattern' },
+                    { header: 'Action', key: 'action' },
+                    { header: 'Target', key: 'action_target' },
+                    { header: 'Status', key: 'is_active' },
+                  ]}
+                  exportFormatter={(r) => ({
+                    priority: r.priority,
+                    match_type: r.match_type,
+                    pattern: r.pattern,
+                    action: r.action,
+                    action_target: r.action_target || '—',
+                    is_active: r.is_active ? 'Active' : 'Disabled',
+                  })}
+                  extraHeaderActions={
                     <button
                       onClick={loadInboundRoutes}
                       className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
                     >
                       Refresh
                     </button>
-                  </div>
-                  <div className="overflow-x-auto">
+                  }
+                  emptyMessage="No inbound routing rules configured yet. Create a route above to start processing incoming emails."
+                >
+                  {(paginatedRoutes) => (
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                         <tr>
@@ -6384,77 +6475,84 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {inboundRoutes.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                              No inbound routing rules configured yet. Create a route above to start processing incoming emails.
+                        {paginatedRoutes.map((route) => (
+                          <tr key={route.id} className="hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-mono font-bold text-white">#{route.priority}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                route.match_type === 'exact'
+                                  ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                                  : route.match_type === 'wildcard'
+                                  ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                                  : 'bg-amber-950 text-amber-400 border border-amber-800'
+                              }`}>
+                                {route.match_type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-mono font-medium text-white">{route.pattern}</td>
+                            <td className="px-4 py-3 font-mono text-indigo-300">{route.action}</td>
+                            <td className="px-4 py-3 text-slate-400 max-w-xs truncate font-mono text-xs">
+                              {route.action_target || '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => handleToggleInboundRoute(route)}
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
+                                  route.is_active
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'
+                                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                                }`}
+                              >
+                                {route.is_active ? 'Active' : 'Disabled'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleDeleteInboundRoute(route.id)}
+                                className="text-red-400 hover:text-red-300 text-xs font-medium"
+                              >
+                                Delete
+                              </button>
                             </td>
                           </tr>
-                        ) : (
-                          inboundRoutes.map((route) => (
-                            <tr key={route.id} className="hover:bg-slate-800/40">
-                              <td className="px-4 py-3 font-mono font-bold text-white">#{route.priority}</td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  route.match_type === 'exact'
-                                    ? 'bg-blue-950 text-blue-400 border border-blue-800'
-                                    : route.match_type === 'wildcard'
-                                    ? 'bg-purple-950 text-purple-400 border border-purple-800'
-                                    : 'bg-amber-950 text-amber-400 border border-amber-800'
-                                }`}>
-                                  {route.match_type}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 font-mono font-medium text-white">{route.pattern}</td>
-                              <td className="px-4 py-3 font-mono text-indigo-300">{route.action}</td>
-                              <td className="px-4 py-3 text-slate-400 max-w-xs truncate font-mono text-xs">
-                                {route.action_target || '—'}
-                              </td>
-                              <td className="px-4 py-3">
-                                <button
-                                  onClick={() => handleToggleInboundRoute(route)}
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                                    route.is_active
-                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800 hover:bg-emerald-900'
-                                      : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
-                                  }`}
-                                >
-                                  {route.is_active ? 'Active' : 'Disabled'}
-                                </button>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <button
-                                  onClick={() => handleDeleteInboundRoute(route.id)}
-                                  className="text-red-400 hover:text-red-300 text-xs font-medium"
-                                >
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
 
                 {/* Section 3: Inbound Message History Table */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 flex items-center justify-between font-semibold text-white">
-                    <div className="flex items-center space-x-3">
-                      <span>Inbound Mail Logs ({inboundMessages.length})</span>
-                      <span className="text-xs text-slate-400 font-normal">
-                        Recent inbound SMTP deliveries with SPF / DKIM / DMARC authentication verdicts
-                      </span>
-                    </div>
+                <DataTableCard
+                  title="Inbound Mail Logs"
+                  subtitle="Recent inbound SMTP deliveries with SPF / DKIM / DMARC authentication verdicts"
+                  icon={Inbox}
+                  data={inboundMessages}
+                  searchPlaceholder="Search message ID, sender, recipient, subject..."
+                  searchFields={['id', 'from_address', 'to_address', 'subject']}
+                  exportFilename={`mailvex-inbound-messages-${activeTenant?.slug || 'tenant'}`}
+                  exportSheetTitle="Inbound Messages"
+                  exportColumns={[
+                    { header: 'Message ID', key: 'id' },
+                    { header: 'From Address', key: 'from_address' },
+                    { header: 'To Address', key: 'to_address' },
+                    { header: 'Subject', key: 'subject' },
+                    { header: 'SPF Status', key: 'spf_status' },
+                    { header: 'DKIM Status', key: 'dkim_status' },
+                    { header: 'DMARC Status', key: 'dmarc_status' },
+                    { header: 'Delivery Status', key: 'status' },
+                    { header: 'Received At', key: 'created_at' },
+                  ]}
+                  extraHeaderActions={
                     <button
                       onClick={loadInboundMessages}
                       className="text-xs text-indigo-400 hover:text-indigo-300 font-normal"
                     >
                       Refresh
                     </button>
-                  </div>
-                  <div className="overflow-x-auto">
+                  }
+                  emptyMessage="No inbound messages received yet."
+                >
+                  {(paginatedInbound) => (
                     <table className="w-full text-left text-xs text-slate-300">
                       <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                         <tr>
@@ -6468,59 +6566,49 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {inboundMessages.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                              No inbound messages received yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          inboundMessages.map((msg) => (
-                            <tr key={msg.id} className="hover:bg-slate-800/40">
-                              <td className="px-4 py-3 font-mono text-white">{msg.id}</td>
-                              <td className="px-4 py-3 font-mono text-slate-300">{msg.from_address}</td>
-                              <td className="px-4 py-3 font-mono text-slate-300">{msg.to_address}</td>
-                              <td className="px-4 py-3 text-white max-w-xs truncate">{msg.subject || '(no subject)'}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center space-x-1 font-mono text-[10px]">
-                                  <span className={`px-1.5 py-0.5 rounded ${
-                                    msg.spf_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                                  }`}>
-                                    SPF:{msg.spf_status || 'none'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded ${
-                                    msg.dkim_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                                  }`}>
-                                    DKIM:{msg.dkim_status || 'none'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded ${
-                                    msg.dmarc_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                                  }`}>
-                                    DMARC:{msg.dmarc_status || 'none'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  msg.status === 'dispatched'
-                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                    : msg.status === 'stored'
-                                    ? 'bg-blue-950 text-blue-400 border border-blue-800'
-                                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        {paginatedInbound.map((msg) => (
+                          <tr key={msg.id} className="hover:bg-slate-800/40">
+                            <td className="px-4 py-3 font-mono text-white">{msg.id}</td>
+                            <td className="px-4 py-3 font-mono text-slate-300">{msg.from_address}</td>
+                            <td className="px-4 py-3 font-mono text-slate-300">{msg.to_address}</td>
+                            <td className="px-4 py-3 text-white max-w-xs truncate">{msg.subject || '(no subject)'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center space-x-1 font-mono text-[10px]">
+                                <span className={`px-1.5 py-0.5 rounded ${
+                                  msg.spf_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
                                 }`}>
-                                  {msg.status}
+                                  SPF:{msg.spf_status || 'none'}
                                 </span>
-                              </td>
-                              <td className="px-4 py-3 text-slate-500">
-                                {new Date(msg.created_at).toLocaleString()}
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                                <span className={`px-1.5 py-0.5 rounded ${
+                                  msg.dkim_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                }`}>
+                                  DKIM:{msg.dkim_status || 'none'}
+                                </span>
+                                <span className={`px-1.5 py-0.5 rounded ${
+                                  msg.dmarc_status === 'pass' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                }`}>
+                                  DMARC:{msg.dmarc_status || 'none'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                msg.status === 'dispatched'
+                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  : msg.status === 'stored'
+                                  ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              }`}>
+                                {msg.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-500">{new Date(msg.created_at).toLocaleString()}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                  )}
+                </DataTableCard>
               </div>
             )}
 
@@ -6637,27 +6725,45 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                   </form>
 
                   {/* DNSBL Results Table */}
-                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
-                        <tr>
-                          <th className="px-4 py-2.5">IP Address</th>
-                          <th className="px-4 py-2.5">Provider</th>
-                          <th className="px-4 py-2.5">Status</th>
-                          <th className="px-4 py-2.5">Return Meaning</th>
-                          <th className="px-4 py-2.5">Checked At</th>
-                          <th className="px-4 py-2.5 text-right">Delist Guidance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {dnsblResults.length === 0 ? (
+                  <DataTableCard
+                    title="DNSBL Blocklist Monitor"
+                    subtitle="Query public IP addresses against major DNSBL blocklists"
+                    icon={ShieldAlert}
+                    data={dnsblResults}
+                    searchPlaceholder="Search IP or provider..."
+                    searchFields={['ip_address', 'provider_name', 'return_meaning']}
+                    exportFilename="mailvex-dnsbl-results"
+                    exportSheetTitle="DNSBL Results"
+                    exportColumns={[
+                      { header: 'IP Address', key: 'ip_address' },
+                      { header: 'Provider', key: 'provider_name' },
+                      { header: 'Status', key: 'is_listed' },
+                      { header: 'Return Meaning', key: 'return_meaning' },
+                      { header: 'Checked At', key: 'checked_at' },
+                    ]}
+                    exportFormatter={(r) => ({
+                      ip_address: r.ip_address,
+                      provider_name: r.provider_name || 'DNSBL',
+                      is_listed: r.is_listed ? 'LISTED' : 'CLEAN',
+                      return_meaning: r.return_meaning || '—',
+                      checked_at: r.checked_at,
+                    })}
+                    emptyMessage="No DNSBL check results yet. Run a check above to verify your sending IPs."
+                  >
+                    {(paginatedDNSBL) => (
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                           <tr>
-                            <td colSpan={6} className="px-4 py-4 text-center text-slate-500">
-                              No DNSBL check results yet. Run a check above to verify your sending IPs.
-                            </td>
+                            <th className="px-4 py-2.5">IP Address</th>
+                            <th className="px-4 py-2.5">Provider</th>
+                            <th className="px-4 py-2.5">Status</th>
+                            <th className="px-4 py-2.5">Return Meaning</th>
+                            <th className="px-4 py-2.5">Checked At</th>
+                            <th className="px-4 py-2.5 text-right">Delist Guidance</th>
                           </tr>
-                        ) : (
-                          dnsblResults.map((r) => (
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {paginatedDNSBL.map((r) => (
                             <tr key={r.id} className="hover:bg-slate-800/40">
                               <td className="px-4 py-2.5 font-mono text-white">{r.ip_address}</td>
                               <td className="px-4 py-2.5 font-medium">{r.provider_name || 'DNSBL'}</td>
@@ -6689,11 +6795,11 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                                 )}
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 {/* Section 3: IP Warmup Engine (§11.5) */}
@@ -6938,30 +7044,44 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                   </form>
 
                   {/* Configured Rules Table */}
-                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
-                    <div className="p-3 bg-slate-950 border-b border-slate-800 font-semibold text-xs text-white flex justify-between">
-                      <span>Configured Alert Rules ({alertRules.length})</span>
-                    </div>
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
-                        <tr>
-                          <th className="px-4 py-2.5">Rule Name</th>
-                          <th className="px-4 py-2.5">Metric</th>
-                          <th className="px-4 py-2.5">Condition</th>
-                          <th className="px-4 py-2.5">Severity</th>
-                          <th className="px-4 py-2.5">Cooldown</th>
-                          <th className="px-4 py-2.5 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {alertRules.length === 0 ? (
+                  <DataTableCard
+                    title="Configured Alert Rules"
+                    icon={Bell}
+                    data={alertRules}
+                    searchPlaceholder="Search rule name or metric..."
+                    searchFields={['name', 'metric_type', 'severity']}
+                    exportFilename="mailvex-alert-rules"
+                    exportSheetTitle="Alert Rules"
+                    exportColumns={[
+                      { header: 'Rule Name', key: 'name' },
+                      { header: 'Metric', key: 'metric_type' },
+                      { header: 'Condition', key: 'condition' },
+                      { header: 'Severity', key: 'severity' },
+                      { header: 'Cooldown (m)', key: 'cooldown_minutes' },
+                    ]}
+                    exportFormatter={(r) => ({
+                      name: r.name,
+                      metric_type: r.metric_type,
+                      condition: `${r.comparison_operator} ${r.threshold}`,
+                      severity: r.severity,
+                      cooldown_minutes: r.cooldown_minutes,
+                    })}
+                    emptyMessage="No custom alert rules configured yet."
+                  >
+                    {(paginatedRules) => (
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                           <tr>
-                            <td colSpan={6} className="px-4 py-4 text-center text-slate-500">
-                              No custom alert rules configured yet.
-                            </td>
+                            <th className="px-4 py-2.5">Rule Name</th>
+                            <th className="px-4 py-2.5">Metric</th>
+                            <th className="px-4 py-2.5">Condition</th>
+                            <th className="px-4 py-2.5">Severity</th>
+                            <th className="px-4 py-2.5">Cooldown</th>
+                            <th className="px-4 py-2.5 text-right">Actions</th>
                           </tr>
-                        ) : (
-                          alertRules.map((r) => (
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {paginatedRules.map((r) => (
                             <tr key={r.id} className="hover:bg-slate-800/40">
                               <td className="px-4 py-2.5 font-medium text-white">{r.name}</td>
                               <td className="px-4 py-2.5 font-mono text-slate-400">{r.metric_type}</td>
@@ -6987,36 +7107,42 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                                 </button>
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </DataTableCard>
 
                   {/* Active Incidents Table */}
-                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
-                    <div className="p-3 bg-slate-950 border-b border-slate-800 font-semibold text-xs text-white flex justify-between">
-                      <span>Alert Incidents Log ({alertIncidents.length})</span>
-                    </div>
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
-                        <tr>
-                          <th className="px-4 py-2.5">Severity</th>
-                          <th className="px-4 py-2.5">Summary</th>
-                          <th className="px-4 py-2.5">Status</th>
-                          <th className="px-4 py-2.5">Fired At</th>
-                          <th className="px-4 py-2.5 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {alertIncidents.length === 0 ? (
+                  <DataTableCard
+                    title="Alert Incidents Log"
+                    icon={Activity}
+                    data={alertIncidents}
+                    searchPlaceholder="Search incident summary..."
+                    searchFields={['summary', 'status', 'severity']}
+                    exportFilename="mailvex-alert-incidents"
+                    exportSheetTitle="Alert Incidents"
+                    exportColumns={[
+                      { header: 'Severity', key: 'severity' },
+                      { header: 'Summary', key: 'summary' },
+                      { header: 'Status', key: 'status' },
+                      { header: 'Fired At', key: 'fired_at' },
+                    ]}
+                    emptyMessage="No active or past incidents. System deliverability is within safe thresholds."
+                  >
+                    {(paginatedIncidents) => (
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                           <tr>
-                            <td colSpan={5} className="px-4 py-4 text-center text-slate-500">
-                              No active or past incidents. System deliverability is within safe thresholds.
-                            </td>
+                            <th className="px-4 py-2.5">Severity</th>
+                            <th className="px-4 py-2.5">Summary</th>
+                            <th className="px-4 py-2.5">Status</th>
+                            <th className="px-4 py-2.5">Fired At</th>
+                            <th className="px-4 py-2.5 text-right">Actions</th>
                           </tr>
-                        ) : (
-                          alertIncidents.map((inc) => (
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {paginatedIncidents.map((inc) => (
                             <tr key={inc.id} className="hover:bg-slate-800/40">
                               <td className="px-4 py-2.5">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -7061,11 +7187,11 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                                 )}
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 {/* Section 5: Multi-Channel Notification Dispatchers (§22.4) */}
@@ -7128,25 +7254,33 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                   </form>
 
                   {/* Channels Table */}
-                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
-                        <tr>
-                          <th className="px-4 py-2.5">Channel Name</th>
-                          <th className="px-4 py-2.5">Type</th>
-                          <th className="px-4 py-2.5">Configuration</th>
-                          <th className="px-4 py-2.5 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {notificationChannels.length === 0 ? (
+                  <DataTableCard
+                    title="Notification Channels"
+                    icon={Radio}
+                    data={notificationChannels}
+                    searchPlaceholder="Search channel name, type, configuration..."
+                    searchFields={['name', 'type', 'config']}
+                    exportFilename="mailvex-notification-channels"
+                    exportSheetTitle="Notification Channels"
+                    exportColumns={[
+                      { header: 'Channel Name', key: 'name' },
+                      { header: 'Type', key: 'type' },
+                      { header: 'Configuration', key: 'config' },
+                    ]}
+                    emptyMessage="No notification channels configured. Add Slack, Teams, or PagerDuty channels above."
+                  >
+                    {(paginatedChannels) => (
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
                           <tr>
-                            <td colSpan={4} className="px-4 py-4 text-center text-slate-500">
-                              No notification channels configured. Add Slack, Teams, or PagerDuty channels above.
-                            </td>
+                            <th className="px-4 py-2.5">Channel Name</th>
+                            <th className="px-4 py-2.5">Type</th>
+                            <th className="px-4 py-2.5">Configuration</th>
+                            <th className="px-4 py-2.5 text-right">Actions</th>
                           </tr>
-                        ) : (
-                          notificationChannels.map((ch) => (
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {paginatedChannels.map((ch) => (
                             <tr key={ch.id} className="hover:bg-slate-800/40">
                               <td className="px-4 py-2.5 font-medium text-white">{ch.name}</td>
                               <td className="px-4 py-2.5 font-mono text-indigo-400">{ch.type}</td>
@@ -7166,11 +7300,11 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                                 </button>
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 {/* Section 6: In-App Notification Center Feed */}
@@ -7476,58 +7610,51 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                   )}
 
                   {/* Impersonation Audit Log Table */}
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                      Impersonation Session Audit Trail
-                    </h3>
-                    <ExportMenu
-                      filename="mailvex-impersonation-sessions"
-                      sheetTitle="Impersonations"
-                      label="Export Sessions"
-                      columns={[
-                        { header: 'Session ID', key: 'id' },
-                        { header: 'Actor Admin', key: 'actor_user_id' },
-                        { header: 'Target Tenant ID', key: 'target_tenant_id' },
-                        { header: 'Reason', key: 'reason' },
-                        { header: 'Mode', key: 'access_type' },
-                        { header: 'Body Masking', key: 'is_support_masking' },
-                        { header: 'Started At', key: 'started_at' },
-                        { header: 'Status', key: 'status' },
-                      ]}
-                      data={impersonationSessions.map((s) => ({
-                        id: s.id,
-                        actor_user_id: s.actor_user_id,
-                        target_tenant_id: s.target_tenant_id,
-                        reason: s.reason,
-                        access_type: s.access_type,
-                        is_support_masking: s.is_support_masking ? 'Masked' : 'Full',
-                        started_at: s.started_at,
-                        status: !s.ended_at ? 'Active' : 'Ended',
-                      }))}
-                    />
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-                        <tr>
-                          <th className="p-3">Actor Admin</th>
-                          <th className="p-3">Target Tenant ID</th>
-                          <th className="p-3">Reason</th>
-                          <th className="p-3">Mode</th>
-                          <th className="p-3">Body Masking</th>
-                          <th className="p-3">Started At</th>
-                          <th className="p-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {impersonationSessions.length === 0 ? (
+                  <DataTableCard
+                    title="Impersonation Session Audit Trail"
+                    icon={ShieldCheck}
+                    data={impersonationSessions}
+                    searchPlaceholder="Search actor, tenant ID, reason..."
+                    searchFields={['actor_user_id', 'target_tenant_id', 'reason', 'access_type']}
+                    exportFilename="mailvex-impersonation-sessions"
+                    exportSheetTitle="Impersonations"
+                    exportColumns={[
+                      { header: 'Session ID', key: 'id' },
+                      { header: 'Actor Admin', key: 'actor_user_id' },
+                      { header: 'Target Tenant ID', key: 'target_tenant_id' },
+                      { header: 'Reason', key: 'reason' },
+                      { header: 'Mode', key: 'access_type' },
+                      { header: 'Body Masking', key: 'is_support_masking' },
+                      { header: 'Started At', key: 'started_at' },
+                      { header: 'Status', key: 'status' },
+                    ]}
+                    exportFormatter={(s) => ({
+                      id: s.id,
+                      actor_user_id: s.actor_user_id,
+                      target_tenant_id: s.target_tenant_id,
+                      reason: s.reason,
+                      access_type: s.access_type,
+                      is_support_masking: s.is_support_masking ? 'Masked' : 'Full',
+                      started_at: s.started_at,
+                      status: !s.ended_at ? 'Active' : 'Ended',
+                    })}
+                    emptyMessage="No impersonation sessions recorded."
+                  >
+                    {(paginatedSessions) => (
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
                           <tr>
-                            <td colSpan={7} className="p-4 text-center text-slate-500">
-                              No impersonation sessions recorded.
-                            </td>
+                            <th className="p-3">Actor Admin</th>
+                            <th className="p-3">Target Tenant ID</th>
+                            <th className="p-3">Reason</th>
+                            <th className="p-3">Mode</th>
+                            <th className="p-3">Body Masking</th>
+                            <th className="p-3">Started At</th>
+                            <th className="p-3">Status</th>
                           </tr>
-                        ) : (
-                          impersonationSessions.map((s) => (
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {paginatedSessions.map((s) => (
                             <tr key={s.id} className="hover:bg-slate-850/50 transition">
                               <td className="p-3 font-mono text-[11px] text-slate-300">{s.actor_user_id}</td>
                               <td className="p-3 font-mono text-[11px] text-indigo-300">{s.target_tenant_id}</td>
@@ -7557,11 +7684,11 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                                 )}
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </DataTableCard>
                 </div>
 
                 {/* Section 3: Deliverability Compliance Checklist (§22) */}
@@ -7955,26 +8082,24 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                     </div>
 
                     {/* Fleet Directory Table */}
-                    <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl overflow-hidden shadow-sm">
-                      <div className="p-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center space-x-2">
-                          <Users className="w-4 h-4 text-indigo-400" />
-                          <h3 className="text-sm font-bold text-white">Cluster Tenants Directory</h3>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-mono font-semibold">
-                            {tenants.length} Tenants
-                          </span>
-                        </div>
-
-                        <input
-                          type="text"
-                          placeholder="Filter by name or slug..."
-                          value={adminSearchTenant}
-                          onChange={(e) => setAdminSearchTenant(e.target.value)}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-xl focus:border-indigo-500 outline-none w-full sm:w-64"
-                        />
-                      </div>
-
-                      <div className="overflow-x-auto">
+                    <DataTableCard
+                      title="Cluster Tenants Directory"
+                      icon={Users}
+                      data={tenants}
+                      searchPlaceholder="Search tenant name, slug, ID..."
+                      searchFields={['name', 'slug', 'id', 'environment']}
+                      exportFilename="mailvex-cluster-tenants"
+                      exportSheetTitle="Tenants"
+                      exportColumns={[
+                        { header: 'Tenant Name', key: 'name' },
+                        { header: 'Slug', key: 'slug' },
+                        { header: 'Tenant ID', key: 'id' },
+                        { header: 'Environment', key: 'environment' },
+                        { header: 'Created At', key: 'created_at' },
+                      ]}
+                      emptyMessage="No tenants found."
+                    >
+                      {(paginatedTenants) => (
                         <table className="w-full text-left text-xs text-slate-300">
                           <thead className="bg-slate-950/70 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800/80">
                             <tr>
@@ -7987,74 +8112,68 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
-                            {tenants
-                              .filter((t) =>
-                                adminSearchTenant.trim() === '' ||
-                                t.name.toLowerCase().includes(adminSearchTenant.toLowerCase()) ||
-                                t.slug.toLowerCase().includes(adminSearchTenant.toLowerCase())
-                              )
-                              .map((t) => (
-                                <tr key={t.id} className="hover:bg-slate-850/40 transition">
-                                  <td className="p-4 font-bold text-white flex items-center space-x-2">
-                                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-300 font-mono text-xs">
-                                      {t.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <span>{t.name}</span>
-                                    {activeTenant?.id === t.id && (
-                                      <span className="px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] rounded font-bold uppercase">Active</span>
-                                    )}
-                                  </td>
-                                  <td className="p-4 font-mono text-[11px] text-slate-400">
-                                    <div>{t.slug}</div>
-                                    <div className="text-[10px] text-slate-600">{t.id}</div>
-                                  </td>
-                                  <td className="p-4">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                      t.environment === 'live'
-                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                    }`}>
-                                      {t.environment}
-                                    </span>
-                                  </td>
-                                  <td className="p-4">
-                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono border border-slate-700/60 flex items-center space-x-1 w-max">
-                                      <Lock className="w-2.5 h-2.5 text-indigo-400" />
-                                      <span>DEK Active</span>
-                                    </span>
-                                  </td>
-                                  <td className="p-4">
-                                    <span className="flex items-center space-x-1.5 text-emerald-400 text-xs">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                      <span>Active</span>
-                                    </span>
-                                  </td>
-                                  <td className="p-4 text-right space-x-2">
-                                    <button
-                                      onClick={() => {
-                                        setActiveTenant(t)
-                                        setCurrentTab('dashboard')
-                                      }}
-                                      className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium transition"
-                                    >
-                                      Switch To
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setTargetImpTenantID(t.id)
-                                        setImpModalOpen(true)
-                                      }}
-                                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition"
-                                    >
-                                      Impersonate
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                            {paginatedTenants.map((t) => (
+                              <tr key={t.id} className="hover:bg-slate-850/40 transition">
+                                <td className="p-4 font-bold text-white flex items-center space-x-2">
+                                  <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-300 font-mono text-xs">
+                                    {t.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span>{t.name}</span>
+                                  {activeTenant?.id === t.id && (
+                                    <span className="px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] rounded font-bold uppercase">Active</span>
+                                  )}
+                                </td>
+                                <td className="p-4 font-mono text-[11px] text-slate-400">
+                                  <div>{t.slug}</div>
+                                  <div className="text-[10px] text-slate-600">{t.id}</div>
+                                </td>
+                                <td className="p-4">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                    t.environment === 'live'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  }`}>
+                                    {t.environment}
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono border border-slate-700/60 flex items-center space-x-1 w-max">
+                                    <Lock className="w-2.5 h-2.5 text-indigo-400" />
+                                    <span>DEK Active</span>
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <span className="flex items-center space-x-1.5 text-emerald-400 text-xs">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                    <span>Active</span>
+                                  </span>
+                                </td>
+                                <td className="p-4 text-right space-x-2">
+                                  <button
+                                    onClick={() => {
+                                      setActiveTenant(t)
+                                      setCurrentTab('dashboard')
+                                    }}
+                                    className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium transition"
+                                  >
+                                    Switch To
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setTargetImpTenantID(t.id)
+                                      setImpModalOpen(true)
+                                    }}
+                                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs transition"
+                                  >
+                                    Impersonate
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
-                      </div>
-                    </div>
+                      )}
+                    </DataTableCard>
                   </div>
                 )}
 
@@ -8200,46 +8319,43 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
 
                 {/* SUBTAB 3: SECURITY AUDIT TRAIL */}
                 {adminActiveSubTab === 'audit' && (
-                  <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <ShieldCheck className="w-4 h-4 text-amber-400" />
-                        <h3 className="text-sm font-bold text-white">Administrative Security Audit Trail</h3>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={fetchAdminAuditLogs}
-                          disabled={adminAuditLoading}
-                          className="btn-secondary text-xs px-3 py-1.5 flex items-center space-x-1"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${adminAuditLoading ? 'animate-spin text-sky-500' : ''}`} />
-                          <span>Refresh Logs</span>
-                        </button>
-                        <ExportMenu
-                          filename="mailvex-platform-security-audit"
-                          sheetTitle="Audit Logs"
-                          label="Export Audit"
-                          columns={[
-                            { header: 'Log ID', key: 'id' },
-                            { header: 'Actor User', key: 'actor_user_id' },
-                            { header: 'Action', key: 'action' },
-                            { header: 'Resource Type', key: 'resource_type' },
-                            { header: 'Resource ID', key: 'resource_id' },
-                            { header: 'Timestamp', key: 'created_at' },
-                          ]}
-                          data={adminAuditLogs.map((log: any) => ({
-                            id: log.id,
-                            actor_user_id: log.actor_user_id || 'system',
-                            action: log.action,
-                            resource_type: log.resource_type,
-                            resource_id: log.resource_id,
-                            created_at: log.created_at,
-                          }))}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
+                  <DataTableCard
+                    title="Administrative Security Audit Trail"
+                    icon={ShieldCheck}
+                    data={adminAuditLogs}
+                    searchPlaceholder="Search actor, action, resource..."
+                    searchFields={['actor_user_id', 'action', 'resource_type', 'resource_id']}
+                    exportFilename="mailvex-platform-security-audit"
+                    exportSheetTitle="Audit Logs"
+                    exportColumns={[
+                      { header: 'Log ID', key: 'id' },
+                      { header: 'Actor User', key: 'actor_user_id' },
+                      { header: 'Action', key: 'action' },
+                      { header: 'Resource Type', key: 'resource_type' },
+                      { header: 'Resource ID', key: 'resource_id' },
+                      { header: 'Timestamp', key: 'created_at' },
+                    ]}
+                    exportFormatter={(log: any) => ({
+                      id: log.id,
+                      actor_user_id: log.actor_user_id || 'system',
+                      action: log.action,
+                      resource_type: log.resource_type,
+                      resource_id: log.resource_id,
+                      created_at: log.created_at,
+                    })}
+                    extraHeaderActions={
+                      <button
+                        onClick={fetchAdminAuditLogs}
+                        disabled={adminAuditLoading}
+                        className="btn-secondary text-xs px-3 py-1.5 flex items-center space-x-1"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${adminAuditLoading ? 'animate-spin text-sky-500' : ''}`} />
+                        <span>Refresh Logs</span>
+                      </button>
+                    }
+                    emptyMessage={adminAuditLoading ? 'Loading security audit logs...' : 'No administrative audit events recorded yet.'}
+                  >
+                    {(paginatedLogs) => (
                       <table className="w-full text-left text-xs text-slate-300">
                         <thead className="bg-slate-950/70 text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-800/80">
                           <tr>
@@ -8251,39 +8367,31 @@ Secret rotation: dual \`v1=\` signatures for 24 hours during secret rollover`}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60">
-                          {adminAuditLogs.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="p-6 text-center text-slate-500">
-                                {adminAuditLoading ? 'Loading security audit logs...' : 'No administrative audit events recorded yet.'}
+                          {paginatedLogs.map((log: any) => (
+                            <tr key={log.id} className="hover:bg-slate-850/40 transition">
+                              <td className="p-3.5 font-mono text-[11px] text-slate-300">
+                                {log.actor_user_id || 'system'}
+                              </td>
+                              <td className="p-3.5">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="p-3.5 capitalize font-medium text-slate-200">
+                                {log.resource_type}
+                              </td>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-400">
+                                {log.resource_id}
+                              </td>
+                              <td className="p-3.5 text-slate-400 font-mono text-[11px]">
+                                {new Date(log.created_at).toLocaleString()}
                               </td>
                             </tr>
-                          ) : (
-                            adminAuditLogs.map((log: any) => (
-                              <tr key={log.id} className="hover:bg-slate-850/40 transition">
-                                <td className="p-3.5 font-mono text-[11px] text-slate-300">
-                                  {log.actor_user_id || 'system'}
-                                </td>
-                                <td className="p-3.5">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                                    {log.action}
-                                  </span>
-                                </td>
-                                <td className="p-3.5 capitalize font-medium text-slate-200">
-                                  {log.resource_type}
-                                </td>
-                                <td className="p-3.5 font-mono text-[11px] text-slate-400">
-                                  {log.resource_id}
-                                </td>
-                                <td className="p-3.5 text-slate-400 font-mono text-[11px]">
-                                  {new Date(log.created_at).toLocaleString()}
-                                </td>
-                              </tr>
-                            ))
-                          )}
+                          ))}
                         </tbody>
                       </table>
-                    </div>
-                  </div>
+                    )}
+                  </DataTableCard>
                 )}
               </div>
             )}

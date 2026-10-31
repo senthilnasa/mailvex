@@ -152,6 +152,7 @@ func (d *Dispatcher) DispatchEvent(ctx context.Context, tenantID, eventID, event
 
 	payloadObj := WebhookPayload{
 		ID:         eventID,
+		Type:       eventType,
 		Event:      eventType,
 		TenantID:   tenantID,
 		OccurredAt: time.Now().UTC(),
