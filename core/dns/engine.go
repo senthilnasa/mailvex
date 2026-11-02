@@ -124,15 +124,21 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 				Status:        "pass",
 			},
 		}
+		dkimSelector := "mvx"
+		dkimPub := ""
 		if dkim != nil {
-			results = append(results, CheckResult{
-				RecordType:    "TXT",
-				Name:          fmt.Sprintf("%s._domainkey.%s", dkim.Selector, dom.Name),
-				ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkim.PublicKey),
-				ObservedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkim.PublicKey),
-				Status:        "pass",
-			})
+			if dkim.Selector != "" {
+				dkimSelector = dkim.Selector
+			}
+			dkimPub = dkim.PublicKey
 		}
+		results = append(results, CheckResult{
+			RecordType:    "TXT",
+			Name:          fmt.Sprintf("%s._domainkey.%s", dkimSelector, dom.Name),
+			ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkimPub),
+			ObservedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkimPub),
+			Status:        "pass",
+		})
 		results = append(results, CheckResult{
 			RecordType:    "SPF",
 			Name:          dom.Name,
@@ -144,6 +150,20 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 			RecordType:    "DMARC",
 			Name:          fmt.Sprintf("_dmarc.%s", dom.Name),
 			ExpectedValue: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc-reports@%s", platformHost),
+			ObservedValue: "local-domain-bypass",
+			Status:        "pass",
+		})
+		results = append(results, CheckResult{
+			RecordType:    "CNAME",
+			Name:          fmt.Sprintf("bounce.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("bounce.%s", platformHost),
+			ObservedValue: "local-domain-bypass",
+			Status:        "pass",
+		})
+		results = append(results, CheckResult{
+			RecordType:    "CNAME",
+			Name:          fmt.Sprintf("track.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("track.%s", platformHost),
 			ObservedValue: "local-domain-bypass",
 			Status:        "pass",
 		})
@@ -189,15 +209,27 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 	results = append(results, ownershipResult)
 
 	// 2. DKIM verification
+	dkimSelector := "mvx"
+	dkimPub := ""
 	if dkim != nil {
-		dkimHost := fmt.Sprintf("%s._domainkey.%s", dkim.Selector, dom.Name)
-		expectedDKIM := fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkim.PublicKey)
-		dkimResult := CheckResult{
-			RecordType:    "TXT",
-			Name:          dkimHost,
-			ExpectedValue: expectedDKIM,
+		if dkim.Selector != "" {
+			dkimSelector = dkim.Selector
 		}
+		dkimPub = dkim.PublicKey
+	}
+	dkimHost := fmt.Sprintf("%s._domainkey.%s", dkimSelector, dom.Name)
+	expectedDKIM := fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkimPub)
+	dkimResult := CheckResult{
+		RecordType:    "TXT",
+		Name:          dkimHost,
+		ExpectedValue: expectedDKIM,
+	}
 
+	if dkim == nil || dkim.PublicKey == "" {
+		dkimResult.Status = "fail"
+		dkimResult.ErrorMessage = "No active DKIM key found for domain"
+		allPassed = false
+	} else {
 		dtxts, err := e.resolver.LookupTXT(ctx, dkimHost)
 		if err != nil {
 			dkimResult.Status = "fail"
@@ -222,8 +254,8 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 				allPassed = false
 			}
 		}
-		results = append(results, dkimResult)
 	}
+	results = append(results, dkimResult)
 
 	// 3. SPF check (Optional / Health warning)
 	spfHost := dom.Name
@@ -284,6 +316,54 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 		}
 	}
 	results = append(results, dmarcResult)
+
+	// 5. Bounce CNAME check
+	bounceHost := fmt.Sprintf("bounce.%s", dom.Name)
+	expectedBounce := fmt.Sprintf("bounce.%s", platformHost)
+	bounceResult := CheckResult{
+		RecordType:    "CNAME",
+		Name:          bounceHost,
+		ExpectedValue: expectedBounce,
+	}
+	cname, err := e.resolver.LookupCNAME(ctx, bounceHost)
+	if err != nil {
+		bounceResult.Status = "warning"
+		bounceResult.ErrorMessage = fmt.Sprintf("No CNAME record found at %s", bounceHost)
+	} else {
+		cleanCname := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(cname)), ".")
+		bounceResult.ObservedValue = cleanCname
+		if cleanCname == strings.ToLower(expectedBounce) {
+			bounceResult.Status = "pass"
+		} else {
+			bounceResult.Status = "warning"
+			bounceResult.ErrorMessage = fmt.Sprintf("Expected CNAME '%s', got '%s'", expectedBounce, cleanCname)
+		}
+	}
+	results = append(results, bounceResult)
+
+	// 6. Track CNAME check
+	trackHost := fmt.Sprintf("track.%s", dom.Name)
+	expectedTrack := fmt.Sprintf("track.%s", platformHost)
+	trackResult := CheckResult{
+		RecordType:    "CNAME",
+		Name:          trackHost,
+		ExpectedValue: expectedTrack,
+	}
+	tcname, err := e.resolver.LookupCNAME(ctx, trackHost)
+	if err != nil {
+		trackResult.Status = "warning"
+		trackResult.ErrorMessage = fmt.Sprintf("No CNAME record found at %s", trackHost)
+	} else {
+		cleanTrack := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(tcname)), ".")
+		trackResult.ObservedValue = cleanTrack
+		if cleanTrack == strings.ToLower(expectedTrack) {
+			trackResult.Status = "pass"
+		} else {
+			trackResult.Status = "warning"
+			trackResult.ErrorMessage = fmt.Sprintf("Expected CNAME '%s', got '%s'", expectedTrack, cleanTrack)
+		}
+	}
+	results = append(results, trackResult)
 
 	return results, allPassed
 }

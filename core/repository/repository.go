@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -822,7 +824,17 @@ func (m *MemoryRepository) loadStateLocked() error {
 	if snap.Memberships != nil { m.memberships = snap.Memberships }
 	if snap.AuditLogs != nil { m.auditLogs = snap.AuditLogs }
 	if snap.Settings != nil { m.settings = snap.Settings }
-	if snap.Domains != nil { m.domains = snap.Domains }
+	if snap.Domains != nil {
+		m.domains = snap.Domains
+		for _, d := range m.domains {
+			if d.OwnershipToken == "" {
+				tokenBytes := make([]byte, 16)
+				_, _ = rand.Read(tokenBytes)
+				d.OwnershipToken = hex.EncodeToString(tokenBytes)
+				m.dirty = true
+			}
+		}
+	}
 	if snap.Delegations != nil { m.delegations = snap.Delegations }
 	if snap.DKIMKeys != nil {
 		m.dkimKeys = make(map[string][]*domain.DKIMKey, len(snap.DKIMKeys))
@@ -1419,6 +1431,13 @@ func (m *MemoryRepository) CreateDomain(ctx context.Context, dom *domain.Domain)
 		}
 	}
 
+	// Ensure ownership token exists
+	if dom.OwnershipToken == "" {
+		tokenBytes := make([]byte, 16)
+		_, _ = rand.Read(tokenBytes)
+		dom.OwnershipToken = hex.EncodeToString(tokenBytes)
+	}
+
 	// Local domain handling (§28.1): Skips public DNS verification, ownership implied
 	if dom.Type == "local" {
 		dom.Status = "verified"
@@ -1432,8 +1451,8 @@ func (m *MemoryRepository) CreateDomain(ctx context.Context, dom *domain.Domain)
 }
 
 func (m *MemoryRepository) GetDomain(ctx context.Context, tenantID, domainID string) (*domain.Domain, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	dom, exists := m.domains[domainID]
 	if !exists {
@@ -1445,15 +1464,28 @@ func (m *MemoryRepository) GetDomain(ctx context.Context, tenantID, domainID str
 		return nil, ErrCrossTenant
 	}
 
+	if dom.OwnershipToken == "" {
+		tokenBytes := make([]byte, 16)
+		_, _ = rand.Read(tokenBytes)
+		dom.OwnershipToken = hex.EncodeToString(tokenBytes)
+		m.saveImmediateLocked()
+	}
+
 	return dom, nil
 }
 
 func (m *MemoryRepository) GetDomainByName(ctx context.Context, name string) (*domain.Domain, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	for _, dom := range m.domains {
 		if dom.Name == name {
+			if dom.OwnershipToken == "" {
+				tokenBytes := make([]byte, 16)
+				_, _ = rand.Read(tokenBytes)
+				dom.OwnershipToken = hex.EncodeToString(tokenBytes)
+				m.saveImmediateLocked()
+			}
 			return dom, nil
 		}
 	}

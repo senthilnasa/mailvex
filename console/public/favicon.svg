@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Tri-Color Gradient matching Mailvex Branding -->
+    <linearGradient id="mvxBg" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#9333ea" />
+    </linearGradient>
+
+    <!-- Top-left subtle specular highlight -->
+    <linearGradient id="mvxGloss" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Symbol Drop Shadow -->
+    <filter id="mvxShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.45" />
+    </filter>
+
+    <!-- Subtle Inner Glow -->
+    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f0f9ff" />
+    </linearGradient>
+  </defs>
+
+  <!-- Base Squircle -->
+  <rect width="512" height="512" rx="120" fill="url(#mvxBg)" />
+
+  <!-- Inner Gloss Overlay -->
+  <rect x="8" y="8" width="496" height="496" rx="114" fill="url(#mvxGloss)" />
+
+  <!-- Outer Border Ring -->
+  <rect x="12" y="12" width="488" height="488" rx="110" fill="none" stroke="#ffffff" stroke-width="6" stroke-opacity="0.25" />
+
+  <!-- Central Emblem: Mail Envelope Contour + Lightning Bolt (Speed MTA) -->
+  <g filter="url(#mvxShadow)">
+    <!-- Stylized Mailvex Energy Bolt -->
+    <polygon points="284 56 104 280 252 280 228 456 408 232 260 232 284 56" fill="url(#boltGrad)" />
+  </g>
+
+  <!-- Energy Accent Dot/Streak -->
+  <circle cx="360" cy="150" r="14" fill="#38bdf8" opacity="0.9" />
+</svg>

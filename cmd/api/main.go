@@ -211,14 +211,15 @@ func seedInitialState(ctx context.Context, repo repository.Repository, store sto
 	domainID := "dom_01m64jadpxnbkk6rx6wt9wfmft"
 	now := time.Now().UTC()
 	_ = repo.CreateDomain(ctx, &domain.Domain{
-		ID:            domainID,
-		TenantID:      tenantID,
-		Name:          "crm.krea.edu.in",
-		Type:          "public",
-		Status:        "verified",
-		VerifiedAt:    &now,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:             domainID,
+		TenantID:       tenantID,
+		Name:           "crm.krea.edu.in",
+		Type:           "public",
+		Status:         "verified",
+		OwnershipToken: "0192e4ab5c6d7e8f90123456789abcde",
+		VerifiedAt:     &now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	})
 
 	const defaultDKIMPrivKey = `-----BEGIN PRIVATE KEY-----
@@ -261,6 +262,71 @@ Uj2MO4wLvHQdWEG2gcUS55xI
 		PublicKey:           defaultDKIMPubKey,
 		Status:              "active",
 		CreatedAt:           now,
+	})
+
+	platformHost := os.Getenv("MVX_PLATFORM_HOST")
+	if platformHost == "" {
+		platformHost = os.Getenv("MVX_SMTP_HOSTNAME")
+	}
+	if platformHost == "" {
+		platformHost = "mail.example.com"
+	}
+
+	_ = repo.SaveDNSRecords(ctx, domainID, []*domain.DNSRecord{
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "TXT",
+			Name:          "_mailvex-verify.crm.krea.edu.in",
+			ExpectedValue: "mailvex-verify=0192e4ab5c6d7e8f90123456789abcde",
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "TXT",
+			Name:          "crm.krea.edu.in",
+			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "TXT",
+			Name:          "mvx._domainkey.crm.krea.edu.in",
+			ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", defaultDKIMPubKey),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "TXT",
+			Name:          "_dmarc.crm.krea.edu.in",
+			ExpectedValue: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc-reports@%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "CNAME",
+			Name:          "bounce.crm.krea.edu.in",
+			ExpectedValue: fmt.Sprintf("bounce.%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      domainID,
+			RecordType:    "CNAME",
+			Name:          "track.crm.krea.edu.in",
+			ExpectedValue: fmt.Sprintf("track.%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
 	})
 
 	streamID := "stream_01m64jyhzg4whb3vkckwm6wsyf"

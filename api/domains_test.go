@@ -244,3 +244,111 @@ func TestDomainVerification_NilDNSEngineSafe(t *testing.T) {
 		t.Fatalf("expected 200 OK on verify with nil-safe engine, got %d (body: %s)", w.Code, w.Body.String())
 	}
 }
+
+func TestDNSVerificationRecordsAndRepair(t *testing.T) {
+	server, repo := setupTestServer(t)
+	stubResolver := dns.NewStubResolver()
+	server.SetDNSEngine(dns.NewEngine(stubResolver))
+
+	orgID := crypto.NewULID(crypto.PrefixOrg)
+	_ = repo.CreateOrganization(t.Context(), &domain.Organization{
+		ID: orgID, Name: "Krea Org", Slug: "krea-org", Status: "active",
+	})
+	tenantID := crypto.NewULID(crypto.PrefixTenant)
+	_ = repo.CreateTenant(t.Context(), &domain.Tenant{
+		ID: tenantID, OrganizationID: orgID, Name: "Krea Tenant", Slug: "krea-tenant", Status: "active",
+	})
+	userID := crypto.NewULID(crypto.PrefixUser)
+	_ = repo.CreateUser(t.Context(), &domain.User{
+		ID: userID, OrganizationID: orgID, Email: "erpadmin@krea.edu.in", IsPlatformAdmin: true,
+	})
+	_ = repo.AddTenantMembership(t.Context(), &domain.TenantMembership{
+		ID: crypto.NewULID(crypto.PrefixMembership), TenantID: tenantID, UserID: userID, RoleID: "role_tenant_owner",
+	})
+
+	// Add domain without ownership token and without DNS records
+	domID := crypto.NewULID(crypto.PrefixDomain)
+	dom := &domain.Domain{
+		ID:             domID,
+		TenantID:       tenantID,
+		Name:           "crm.krea.edu.in",
+		Type:           "public",
+		Status:         "pending",
+		OwnershipToken: "", // empty!
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	_ = repo.CreateDomain(t.Context(), dom)
+
+	// GET /v1/domains/{id} should auto-generate token and all 6 DNS records
+	req := httptest.NewRequest("GET", "/v1/domains/"+domID, nil)
+	req.Header.Set("X-User-ID", userID)
+	req.Header.Set("X-Tenant-ID", tenantID)
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on GET /v1/domains/{id}, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	var getResp map[string]any
+	_ = json.NewDecoder(w.Body).Decode(&getResp)
+	retDom := getResp["domain"].(map[string]any)
+	token := retDom["ownership_token"].(string)
+	if token == "" {
+		t.Fatalf("expected non-empty ownership token to be generated")
+	}
+
+	records := getResp["dns_records"].([]any)
+	if len(records) != 6 {
+		t.Fatalf("expected 6 DNS records generated (4 TXT + 2 CNAME), got %d", len(records))
+	}
+
+	// Verify records contain valid mailvex-verify token and CNAMEs
+	hasVerify := false
+	hasBounce := false
+	hasTrack := false
+	for _, raw := range records {
+		rec := raw.(map[string]any)
+		name := rec["name"].(string)
+		val := rec["expected_value"].(string)
+		rtype := rec["record_type"].(string)
+		if name == "_mailvex-verify.crm.krea.edu.in" {
+			hasVerify = true
+			if val != "mailvex-verify="+token {
+				t.Fatalf("expected 'mailvex-verify=%s', got '%s'", token, val)
+			}
+		}
+		if name == "bounce.crm.krea.edu.in" && rtype == "CNAME" {
+			hasBounce = true
+		}
+		if name == "track.crm.krea.edu.in" && rtype == "CNAME" {
+			hasTrack = true
+		}
+	}
+
+	if !hasVerify || !hasBounce || !hasTrack {
+		t.Fatalf("expected verify TXT and bounce/track CNAME records, got records: %+v", records)
+	}
+
+	// Test verify keeps all 6 records and reports proper status
+	stubResolver.TXTRecords["_mailvex-verify.crm.krea.edu.in"] = []string{"mailvex-verify=" + token}
+	stubResolver.CNAMERecords["bounce.crm.krea.edu.in"] = "bounce.mail.example.com"
+
+	vreq := httptest.NewRequest("POST", "/v1/domains/"+domID+"/verify", nil)
+	vreq.Header.Set("X-User-ID", userID)
+	vreq.Header.Set("X-Tenant-ID", tenantID)
+	vw := httptest.NewRecorder()
+	server.Handler().ServeHTTP(vw, vreq)
+
+	if vw.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on verify, got %d (body: %s)", vw.Code, vw.Body.String())
+	}
+
+	var vResp map[string]any
+	_ = json.NewDecoder(vw.Body).Decode(&vResp)
+	vRecords := vResp["dns_results"].([]any)
+	if len(vRecords) != 6 {
+		t.Fatalf("expected 6 verified records returned, got %d", len(vRecords))
+	}
+}

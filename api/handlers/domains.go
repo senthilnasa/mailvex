@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -103,63 +104,8 @@ func (a *API) CreateDomainHandler(w http.ResponseWriter, r *http.Request) {
 	_ = a.repo.SaveDKIMKey(r.Context(), dkimKey)
 
 	// 3. Generate default DNS records
-	platformHost := "mail.example.com"
-	records := []*domain.DNSRecord{
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "TXT",
-			Name:          fmt.Sprintf("_mailvex-verify.%s", dom.Name),
-			ExpectedValue: fmt.Sprintf("mailvex-verify=%s", ownershipToken),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "TXT",
-			Name:          dom.Name,
-			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "TXT",
-			Name:          fmt.Sprintf("mvx._domainkey.%s", dom.Name),
-			ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkimPair.PublicKeyB64),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "TXT",
-			Name:          fmt.Sprintf("_dmarc.%s", dom.Name),
-			ExpectedValue: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc-reports@%s", platformHost),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "CNAME",
-			Name:          fmt.Sprintf("bounce.%s", dom.Name),
-			ExpectedValue: fmt.Sprintf("bounce.%s", platformHost),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-		{
-			ID:            crypto.NewULID("dns_"),
-			DomainID:      domID,
-			RecordType:    "CNAME",
-			Name:          fmt.Sprintf("track.%s", dom.Name),
-			ExpectedValue: fmt.Sprintf("track.%s", platformHost),
-			Status:        "pending",
-			CreatedAt:     time.Now().UTC(),
-		},
-	}
+	platformHost := a.GetPlatformHost()
+	records := a.GenerateDefaultDNSRecords(dom, dkimKey, platformHost)
 	_ = a.repo.SaveDNSRecords(r.Context(), domID, records)
 
 	// Audit Log
@@ -200,6 +146,86 @@ func (a *API) ListDomainsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetPlatformHost returns configured public platform host for DNS records
+func (a *API) GetPlatformHost() string {
+	if host := os.Getenv("MVX_PLATFORM_HOST"); host != "" {
+		return host
+	}
+	if host := os.Getenv("MVX_SMTP_HOSTNAME"); host != "" {
+		return host
+	}
+	return "mail.example.com"
+}
+
+// GenerateDefaultDNSRecords creates default 6 DNS records for domain ownership, SPF, DKIM, DMARC, bounce, and tracking
+func (a *API) GenerateDefaultDNSRecords(dom *domain.Domain, dkim *domain.DKIMKey, platformHost string) []*domain.DNSRecord {
+	now := time.Now().UTC()
+	dkimPub := ""
+	dkimSelector := "mvx"
+	if dkim != nil {
+		dkimPub = dkim.PublicKey
+		if dkim.Selector != "" {
+			dkimSelector = dkim.Selector
+		}
+	}
+	return []*domain.DNSRecord{
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "TXT",
+			Name:          fmt.Sprintf("_mailvex-verify.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("mailvex-verify=%s", dom.OwnershipToken),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "TXT",
+			Name:          dom.Name,
+			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "TXT",
+			Name:          fmt.Sprintf("%s._domainkey.%s", dkimSelector, dom.Name),
+			ExpectedValue: fmt.Sprintf("v=DKIM1; k=rsa; p=%s", dkimPub),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "TXT",
+			Name:          fmt.Sprintf("_dmarc.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc-reports@%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "CNAME",
+			Name:          fmt.Sprintf("bounce.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("bounce.%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+		{
+			ID:            crypto.NewULID("dns_"),
+			DomainID:      dom.ID,
+			RecordType:    "CNAME",
+			Name:          fmt.Sprintf("track.%s", dom.Name),
+			ExpectedValue: fmt.Sprintf("track.%s", platformHost),
+			Status:        "pending",
+			CreatedAt:     now,
+		},
+	}
+}
+
 // GetDomainHandler returns domain details, active DKIM key, and DNS records
 func (a *API) GetDomainHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -212,8 +238,66 @@ func (a *API) GetDomainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure ownership token exists
+	if dom.OwnershipToken == "" {
+		tokenBytes := make([]byte, 16)
+		_, _ = rand.Read(tokenBytes)
+		dom.OwnershipToken = hex.EncodeToString(tokenBytes)
+		_ = a.repo.UpdateDomain(r.Context(), dom)
+	}
+
 	dkim, _ := a.repo.GetActiveDKIMKey(r.Context(), domainID)
 	records, _ := a.repo.GetDNSRecords(r.Context(), domainID)
+	platformHost := a.GetPlatformHost()
+
+	if len(records) == 0 {
+		records = a.GenerateDefaultDNSRecords(dom, dkim, platformHost)
+		_ = a.repo.SaveDNSRecords(r.Context(), domainID, records)
+	} else {
+		// Repair records if ownership token was empty or missing CNAME records
+		repaired := false
+		hasBounce := false
+		hasTrack := false
+		for _, rec := range records {
+			if strings.HasPrefix(rec.Name, "_mailvex-verify") && (rec.ExpectedValue == "mailvex-verify=" || rec.ExpectedValue == "") {
+				rec.ExpectedValue = fmt.Sprintf("mailvex-verify=%s", dom.OwnershipToken)
+				repaired = true
+			}
+			if strings.HasPrefix(rec.Name, "bounce.") {
+				hasBounce = true
+			}
+			if strings.HasPrefix(rec.Name, "track.") {
+				hasTrack = true
+			}
+		}
+		if !hasBounce {
+			records = append(records, &domain.DNSRecord{
+				ID:            crypto.NewULID("dns_"),
+				DomainID:      domainID,
+				RecordType:    "CNAME",
+				Name:          fmt.Sprintf("bounce.%s", dom.Name),
+				ExpectedValue: fmt.Sprintf("bounce.%s", platformHost),
+				Status:        "pending",
+				CreatedAt:     time.Now().UTC(),
+			})
+			repaired = true
+		}
+		if !hasTrack {
+			records = append(records, &domain.DNSRecord{
+				ID:            crypto.NewULID("dns_"),
+				DomainID:      domainID,
+				RecordType:    "CNAME",
+				Name:          fmt.Sprintf("track.%s", dom.Name),
+				ExpectedValue: fmt.Sprintf("track.%s", platformHost),
+				Status:        "pending",
+				CreatedAt:     time.Now().UTC(),
+			})
+			repaired = true
+		}
+		if repaired {
+			_ = a.repo.SaveDNSRecords(r.Context(), domainID, records)
+		}
+	}
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"domain":      dom,
@@ -234,8 +318,16 @@ func (a *API) VerifyDomainHandler(w http.ResponseWriter, r *http.Request, dnsEng
 		return
 	}
 
+	// Ensure ownership token exists before running DNS verification
+	if dom.OwnershipToken == "" {
+		tokenBytes := make([]byte, 16)
+		_, _ = rand.Read(tokenBytes)
+		dom.OwnershipToken = hex.EncodeToString(tokenBytes)
+		_ = a.repo.UpdateDomain(r.Context(), dom)
+	}
+
 	dkim, _ := a.repo.GetActiveDKIMKey(r.Context(), domainID)
-	platformHost := "mail.example.com"
+	platformHost := a.GetPlatformHost()
 
 	if dnsEngine == nil {
 		dnsEngine = dns.NewEngine(dns.NewSystemResolver())

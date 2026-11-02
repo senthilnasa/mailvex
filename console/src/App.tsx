@@ -3773,9 +3773,35 @@ export default function App() {
                   <div className="bg-white/75 dark:bg-slate-900/75 backdrop-blur-xl border border-white/60 dark:border-slate-800/80 p-6 rounded-2xl shadow-glass dark:shadow-glass-dark space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800/80">
                       <div>
-                        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                          {selectedDomain.status === 'verified' ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                          ) : selectedDomain.status === 'degraded' || selectedDomain.status === 'suspended' ? (
+                            <AlertTriangle className="w-5 h-5 text-rose-500" />
+                          ) : (
+                            <Shield className="w-5 h-5 text-amber-500" />
+                          )}
                           <span>DNS Verification Records for <code className="text-sky-600 dark:text-sky-400 font-mono text-sm">{selectedDomain.name}</code></span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                              selectedDomain.status === 'verified'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : selectedDomain.status === 'pending'
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                selectedDomain.status === 'verified'
+                                  ? 'bg-emerald-500'
+                                  : selectedDomain.status === 'pending'
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-500'
+                              }`}
+                            ></span>
+                            {selectedDomain.status}
+                          </span>
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           Publish these TXT &amp; CNAME records in your DNS provider (Cloudflare, Route53, etc.)
@@ -3823,36 +3849,68 @@ export default function App() {
                           key={i}
                           className="bg-slate-50/80 dark:bg-slate-950/60 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-sky-500/30"
                         >
-                          <div className="space-y-1.5 overflow-hidden">
+                          <div className="space-y-1.5 overflow-hidden flex-1">
                             <div className="flex items-center space-x-2">
                               <span className="px-2 py-0.5 bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] rounded font-semibold">
                                 {r.record_type}
                               </span>
-                              <code className="text-xs text-sky-600 dark:text-sky-400 font-mono font-bold">{r.name}</code>
+                              <code className="text-xs text-sky-600 dark:text-sky-400 font-mono font-bold select-all">{r.name}</code>
                               <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
                                   r.status === 'pass'
                                     ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                    : r.status === 'warning'
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                    : r.status === 'fail'
+                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
                                 }`}
                               >
-                                <span className={`w-1.5 h-1.5 rounded-full ${r.status === 'pass' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    r.status === 'pass'
+                                      ? 'bg-emerald-500'
+                                      : r.status === 'warning'
+                                      ? 'bg-amber-500'
+                                      : r.status === 'fail'
+                                      ? 'bg-rose-500'
+                                      : 'bg-slate-400'
+                                  }`}
+                                ></span>
                                 {r.status}
                               </span>
                             </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-400 font-mono truncate max-w-xl bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800/50">
+                            <div className="text-xs text-slate-600 dark:text-slate-300 font-mono break-all max-w-2xl bg-white/60 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800/50 select-all">
                               {r.expected_value}
                             </div>
+                            {r.error_message && r.status !== 'pass' && (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-sans">
+                                {r.error_message}
+                              </p>
+                            )}
                           </div>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(r.expected_value)
-                              alert('Copied to clipboard!')
-                            }}
-                            className="btn-secondary text-xs px-3 py-1.5 self-start md:self-auto"
-                          >
-                            Copy Value
-                          </button>
+                          <div className="flex items-center gap-2 self-start md:self-auto flex-shrink-0">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(r.name)
+                                alert('Host / Name copied to clipboard!')
+                              }}
+                              className="btn-secondary text-xs px-3 py-1.5"
+                              title="Copy record host/name"
+                            >
+                              Copy Name
+                            </button>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(r.expected_value)
+                                alert('Value copied to clipboard!')
+                              }}
+                              className="btn-secondary text-xs px-3 py-1.5"
+                              title="Copy record value"
+                            >
+                              Copy Value
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
