@@ -142,7 +142,7 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 		results = append(results, CheckResult{
 			RecordType:    "SPF",
 			Name:          dom.Name,
-			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			ExpectedValue: ExpectedSPF(SPFHost(platformHost)),
 			ObservedValue: "local-domain-bypass",
 			Status:        "pass",
 		})
@@ -259,7 +259,8 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 
 	// 3. SPF check (Optional / Health warning)
 	spfHost := dom.Name
-	expectedSPF := fmt.Sprintf("v=spf1 include:%s -all", platformHost)
+	spfInclude := SPFHost(platformHost)
+	expectedSPF := ExpectedSPF(spfInclude)
 	spfResult := CheckResult{
 		RecordType:    "TXT",
 		Name:          spfHost,
@@ -278,8 +279,11 @@ func (e *Engine) VerifyDomain(ctx context.Context, dom *domain.Domain, dkim *dom
 				break
 			}
 		}
-		if hasSPF {
+		if hasSPF && spfIncludes(spfResult.ObservedValue, spfInclude) {
 			spfResult.Status = "pass"
+		} else if hasSPF {
+			spfResult.Status = "warning"
+			spfResult.ErrorMessage = fmt.Sprintf("SPF record does not include %s; mail may fail SPF unless it lists the sending IPs directly", spfInclude)
 		} else {
 			spfResult.Status = "warning"
 			spfResult.ErrorMessage = "No SPF record starting with v=spf1 found"

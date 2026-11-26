@@ -183,7 +183,7 @@ func (a *API) GenerateDefaultDNSRecords(dom *domain.Domain, dkim *domain.DKIMKey
 			DomainID:      dom.ID,
 			RecordType:    "TXT",
 			Name:          dom.Name,
-			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			ExpectedValue: dns.ExpectedSPF(dns.SPFHost(platformHost)),
 			Status:        "pending",
 			CreatedAt:     now,
 		},
