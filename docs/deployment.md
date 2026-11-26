@@ -108,7 +108,15 @@ MVX_REDIS_PASSWORD=
 # Platform FQDN & Reverse DNS hostname
 MVX_PLATFORM_HOST=mail.yourdomain.com
 MVX_SMTP_HOSTNAME=mail.yourdomain.com
+# Optional: host customer domains `include:` in SPF (defaults to MVX_PLATFORM_HOST)
+MVX_SPF_HOST=_spf.mail.yourdomain.com
 ```
+
+> **SPF include host.** Customer domains are told to publish `v=spf1 include:<MVX_SPF_HOST> -all`.
+> That host must carry its own SPF record listing every IP the worker sends from, e.g.
+> `_spf.mail.yourdomain.com TXT "v=spf1 ip4:<SENDING_IP> -all"`. If `MVX_PLATFORM_HOST` is a CNAME
+> (to a proxy or load balancer) it cannot hold a TXT record, and including it makes receivers report
+> **SPF PERMERROR** — set `MVX_SPF_HOST` to a dedicated name like the one above instead.
 
 ---
 

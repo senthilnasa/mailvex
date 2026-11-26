@@ -15,6 +15,7 @@ import (
 	"github.com/senthilnasa/mailvex/core/audit"
 	"github.com/senthilnasa/mailvex/core/config"
 	"github.com/senthilnasa/mailvex/core/crypto"
+	"github.com/senthilnasa/mailvex/core/dns"
 	"github.com/senthilnasa/mailvex/core/domain"
 	"github.com/senthilnasa/mailvex/core/logger"
 	"github.com/senthilnasa/mailvex/core/repository"
@@ -287,7 +288,7 @@ Uj2MO4wLvHQdWEG2gcUS55xI
 			DomainID:      domainID,
 			RecordType:    "TXT",
 			Name:          "crm.krea.edu.in",
-			ExpectedValue: fmt.Sprintf("v=spf1 include:%s -all", platformHost),
+			ExpectedValue: dns.ExpectedSPF(dns.SPFHost(platformHost)),
 			Status:        "pending",
 			CreatedAt:     now,
 		},
